@@ -21,6 +21,7 @@
 #include "access/tableam.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
+#include "catalog/pg_depend.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_trigger.h"
 #include "commands/trigger.h"
@@ -445,39 +446,83 @@ createForeignKeyActionTriggers(Form_pg_constraint fk, Oid relid, Oid refRelOid, 
 
 /*
  * Return a list of foreign key pg_constraint heap tuples referencing reloid.
+ *
+ * pg_constraint has no index on confrelid, so scanning it reads the whole
+ * catalog. Instead, every foreign key has a normal dependency on the
+ * referenced table (one row per referenced column). We find those rows with
+ * the pg_depend index and then check each constraint.
  */
 static List *
 relation_get_referencing_fk(Oid reloid)
 {
 	List *result = NIL;
-	Relation conrel;
-	SysScanDesc conscan;
-	ScanKeyData skey[2];
-	HeapTuple htup;
+	List *seen = NIL;
+	Relation deprel;
+	SysScanDesc depscan;
+	ScanKeyData skey[3];
+	HeapTuple deptup;
 
-	/* Prepare to scan pg_constraint for entries having confrelid = this rel. */
 	ScanKeyInit(&skey[0],
-				Anum_pg_constraint_confrelid,
+				Anum_pg_depend_refclassid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(RelationRelationId));
+
+	ScanKeyInit(&skey[1],
+				Anum_pg_depend_refobjid,
 				BTEqualStrategyNumber,
 				F_OIDEQ,
 				ObjectIdGetDatum(reloid));
 
-	ScanKeyInit(&skey[1],
-				Anum_pg_constraint_contype,
-				BTEqualStrategyNumber,
-				F_CHAREQ,
-				CharGetDatum(CONSTRAINT_FOREIGN));
+	/*
+	 * Skip dependencies on the whole table (subid 0). Every chunk has one
+	 * from inheritance, so there can be millions. A foreign key always
+	 * depends on specific columns (subid > 0).
+	 */
+	ScanKeyInit(&skey[2],
+				Anum_pg_depend_refobjsubid,
+				BTGreaterStrategyNumber,
+				F_INT4GT,
+				Int32GetDatum(0));
 
-	conrel = table_open(ConstraintRelationId, AccessShareLock);
-	conscan = systable_beginscan(conrel, InvalidOid, false, NULL, 2, skey);
+	deprel = table_open(DependRelationId, AccessShareLock);
+	depscan = systable_beginscan(deprel, DependReferenceIndexId, true, NULL, 3, skey);
 
-	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
+	while (HeapTupleIsValid(deptup = systable_getnext(depscan)))
 	{
-		result = lappend(result, heap_copytuple(htup));
+		Form_pg_depend dep = (Form_pg_depend) GETSTRUCT(deptup);
+		HeapTuple contup;
+		Form_pg_constraint con;
+
+		if (dep->classid != ConstraintRelationId || dep->deptype != DEPENDENCY_NORMAL)
+		{
+			continue;
+		}
+
+		/* A composite key has one dependency row per column */
+		if (list_member_oid(seen, dep->objid))
+		{
+			continue;
+		}
+		seen = lappend_oid(seen, dep->objid);
+
+		/* If the constraint is already gone there is no foreign key to return */
+		contup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(dep->objid));
+		if (HeapTupleIsValid(contup))
+		{
+			con = (Form_pg_constraint) GETSTRUCT(contup);
+			if (con->contype == CONSTRAINT_FOREIGN && con->confrelid == reloid)
+			{
+				result = lappend(result, heap_copytuple(contup));
+			}
+
+			ReleaseSysCache(contup);
+		}
 	}
 
-	systable_endscan(conscan);
-	table_close(conrel, AccessShareLock);
+	systable_endscan(depscan);
+	table_close(deprel, AccessShareLock);
+	list_free(seen);
 
 	return result;
 }

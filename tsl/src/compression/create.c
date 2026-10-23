@@ -2700,7 +2700,8 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 		ExecRenameStmt(compressed_col_stmt);
 
 		List *rename_from_to = NIL;
-		CompressionSettings *settings = ts_compression_settings_get(compressed_relid);
+		CompressionSettings *settings =
+			ts_compression_settings_get_by_compress_relid(compressed_relid);
 		if (!settings || settings->fd.index == NULL)
 		{
 			/* only lookup ht settings if we haven't already */

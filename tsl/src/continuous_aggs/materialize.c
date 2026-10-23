@@ -73,6 +73,9 @@ typedef struct MaterializationContext
 	const char *tenant_coltype; /* its SQL type name, for the decode cast */
 	int32 raw_hypertable_id;
 	int32 tenant_seqnum;
+	/* What this materialization wrote and removed, filled in as the plans run */
+	uint64 rows_materialized;
+	uint64 rows_deleted;
 } MaterializationContext;
 
 typedef char *(*MaterializationCreateStatement)(MaterializationContext *context);
@@ -139,7 +142,6 @@ static void free_materialization_plan(MaterializationContext *context,
 									  MaterializationPlanType plan_type);
 static void free_materialization_plans(MaterializationContext *context);
 
-static void update_watermark(MaterializationContext *context);
 static void execute_materializations(MaterializationContext *context);
 
 /*
@@ -151,13 +153,11 @@ static void execute_materializations(MaterializationContext *context);
 
 /* API to update materializations from refresh code */
 void
-continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
-									  SchemaAndName partial_view,
-									  SchemaAndName materialization_table,
-									  const NameData *time_column_name,
-									  InternalTimeRange materialization_range,
-									  const char *tenant_column, const char *tenant_coltype,
-									  int32 raw_hypertable_id, int32 tenant_seqnum)
+continuous_agg_update_materialization(
+	Hypertable *mat_ht, const ContinuousAgg *cagg, SchemaAndName partial_view,
+	SchemaAndName materialization_table, const NameData *time_column_name,
+	InternalTimeRange materialization_range, const char *tenant_column, const char *tenant_coltype,
+	int32 raw_hypertable_id, int32 tenant_seqnum, MaterializationStats *stats)
 {
 	MaterializationContext context = {
 		.mat_ht = mat_ht,
@@ -192,6 +192,26 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	context.materialization_range = internal_time_range_to_time_range(materialization_range);
 	context.internal_materialization_range = materialization_range;
 	execute_materializations(&context);
+
+	if (stats != NULL)
+	{
+		/* Record which way this range was materialized, ignoring one that
+		 * changed nothing */
+		if (context.rows_materialized > 0 || context.rows_deleted > 0)
+		{
+			if (context.tenant_scoped)
+			{
+				stats->any_granular = true;
+			}
+			else
+			{
+				stats->any_full = true;
+			}
+		}
+
+		stats->rows_materialized += context.rows_materialized;
+		stats->rows_deleted += context.rows_deleted;
+	}
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
@@ -810,24 +830,29 @@ free_materialization_plans(MaterializationContext *context)
 	}
 }
 
-static void
-update_watermark(MaterializationContext *context)
+void
+continuous_agg_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
+								const NameData *time_column_name, InternalTimeRange range)
 {
 	int res;
 	StringInfoData command;
-	Oid types[] = { context->materialization_range.type };
-	Datum values[] = { context->materialization_range.start };
+	TimeRange time_range = internal_time_range_to_time_range(range);
+	Oid types[] = { time_range.type };
+	Datum values[] = { time_range.start };
 	char nulls[] = { false };
+	int save_nestlevel = NewGUCNestLevel();
+
+	RestrictSearchPath();
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT %s FROM %s.%s AS I "
 					 "WHERE I.%s >= $1 "
 					 "ORDER BY 1 DESC LIMIT 1;",
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->materialization_table.schema)),
-					 quote_identifier(NameStr(*context->materialization_table.name)),
-					 quote_identifier(NameStr(*context->time_column_name)));
+					 quote_identifier(NameStr(*time_column_name)),
+					 quote_identifier(NameStr(*materialization_table.schema)),
+					 quote_identifier(NameStr(*materialization_table.name)),
+					 quote_identifier(NameStr(*time_column_name)));
 
 	elog(DEBUG2, "%s: %s", __func__, command.data);
 	res = SPI_execute_with_args(command.data,
@@ -843,10 +868,10 @@ update_watermark(MaterializationContext *context)
 		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
 	}
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == context->materialization_range.type,
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == time_range.type,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-		   context->materialization_range.type);
+		   time_range.type);
 
 	if (SPI_processed > 0)
 	{
@@ -855,17 +880,17 @@ update_watermark(MaterializationContext *context)
 
 		if (!isnull)
 		{
-			int64 watermark =
-				ts_time_value_to_internal(maxdat, context->materialization_range.type);
-			ts_cagg_watermark_update(context->mat_ht, watermark, isnull, false);
+			int64 watermark = ts_time_value_to_internal(maxdat, time_range.type);
+			ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
 		}
 	}
+
+	AtEOXact_GUC(false, save_nestlevel);
 }
 
 static void
 execute_materializations(MaterializationContext *context)
 {
-	volatile uint64 rows_processed = 0;
 	bool prev_enable_direct_compress_insert = ts_guc_enable_direct_compress_insert;
 	bool prev_enable_direct_compress_insert_client_sorted =
 		ts_guc_enable_direct_compress_insert_client_sorted;
@@ -901,18 +926,21 @@ execute_materializations(MaterializationContext *context)
 					 "INSERT",
 					 NameStr(*context->materialization_table.schema),
 					 NameStr(*context->materialization_table.name));
-				rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
+				context->rows_materialized +=
+					execute_materialization_plan(context, PLAN_TYPE_INSERT);
 			}
 			else
 			{
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+				context->rows_materialized +=
+					execute_materialization_plan(context, PLAN_TYPE_MERGE);
+				context->rows_deleted +=
+					execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
 			}
 		}
 		else
 		{
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
+			context->rows_deleted += execute_materialization_plan(context, PLAN_TYPE_DELETE);
+			context->rows_materialized += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 		}
 
 		/* Free all cached plans */
@@ -925,12 +953,6 @@ execute_materializations(MaterializationContext *context)
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
-
-	/* Get the max(time_dimension) of the materialized data */
-	if (rows_processed > 0)
-	{
-		update_watermark(context);
-	}
 
 	/* Restore previous GUC values */
 	SetConfigOption("timescaledb.enable_direct_compress_insert",

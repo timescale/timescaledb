@@ -38,7 +38,6 @@ SELECT _timescaledb_functions.unfreeze_chunk(ch) FROM show_chunks('metrics') AS 
 ROLLBACK;
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 BEGIN;
@@ -64,7 +63,6 @@ SELECT _timescaledb_functions.unfreeze_chunk(ch) FROM show_chunks('metrics') AS 
 ROLLBACK;
 
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 drop table metrics cascade;

@@ -1519,7 +1519,7 @@ generic_time_bucket(const ContinuousAggBucketFunction *bf, Datum timestamp)
 }
 
 /*
- * Adds one bf->bucket_size interval to the timestamp. This is a common
+ * Adds one bf->bucket_time_width interval to the timestamp. This is a common
  * procedure used by ts_compute_* below.
  *
  * If bf->bucket_time_timezone is specified, the math happens in this timezone.
@@ -1530,6 +1530,16 @@ generic_add_interval(const ContinuousAggBucketFunction *bf, Datum timestamp)
 {
 	Datum tzname = 0;
 	bool has_timezone = (bf->bucket_time_timezone != NULL);
+	bool has_offset = (bf->bucket_time_offset != NULL);
+
+	/* Remove the offset, in UTC space for timezone buckets like ts_timestamptz_timezone_bucket */
+	if (has_offset)
+	{
+		timestamp =
+			DirectFunctionCall2(has_timezone ? timestamptz_mi_interval : timestamp_mi_interval,
+								timestamp,
+								IntervalPGetDatum(bf->bucket_time_offset));
+	}
 
 	if (has_timezone)
 	{
@@ -1549,6 +1559,14 @@ generic_add_interval(const ContinuousAggBucketFunction *bf, Datum timestamp)
 	{
 		Assert(tzname != 0);
 		timestamp = DirectFunctionCall2(timestamp_zone, tzname, timestamp);
+	}
+
+	if (has_offset)
+	{
+		timestamp =
+			DirectFunctionCall2(has_timezone ? timestamptz_pl_interval : timestamp_pl_interval,
+								timestamp,
+								IntervalPGetDatum(bf->bucket_time_offset));
 	}
 
 	return timestamp;

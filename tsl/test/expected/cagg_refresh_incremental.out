@@ -58,7 +58,6 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 LOG:  inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT count(*) FROM conditions_by_day;
@@ -82,7 +81,6 @@ GROUP BY
     1, 2
 WITH NO DATA;
 CALL refresh_continuous_aggregate('conditions_by_day_atomic_refresh', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
@@ -118,7 +116,6 @@ LOG:  statement: CALL refresh_continuous_aggregate(
     options => '{"buckets_per_batch": 0}'::jsonb);
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 145 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT count(*) FROM conditions_by_day;
@@ -166,7 +163,6 @@ LOG:  deleted 50 row(s) from materialization table "_timescaledb_internal._mater
 LOG:  inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  deleted 20 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT count(*) FROM conditions_by_day;
@@ -189,7 +185,6 @@ LOG:  inserted 25 row(s) into materialization table "_timescaledb_internal._mate
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  reached maximum number of batches per execution (2), batches not processed (2)
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 4 in window [ Wed Feb 19 00:00:00 2025 UTC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT count(*) FROM conditions_by_day;
@@ -225,7 +220,6 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 LOG:  inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT count(*) FROM conditions_by_day;
@@ -273,7 +267,6 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 LOG:  inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT count(*) FROM conditions_by_day;
@@ -287,7 +280,6 @@ SELECT count(*) FROM conditions_by_day_atomic_refresh;
    145
 
 CALL refresh_continuous_aggregate('conditions_by_day_atomic_refresh', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
@@ -339,7 +331,6 @@ LOG:  statement: CALL refresh_continuous_aggregate(
     options => '{"buckets_per_batch": 10}'::jsonb);
 LOG:  deleted 295 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Should return zero rows
@@ -369,7 +360,6 @@ LOG:  statement: CALL refresh_continuous_aggregate(
     options => '{"buckets_per_batch": 10}'::jsonb);
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Should return 10 rows because the bucket width is `1 day` and we
@@ -394,7 +384,6 @@ LOG:  statement: CALL refresh_continuous_aggregate(
     options => '{"buckets_per_batch": 10}'::jsonb);
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Should return 1 row
@@ -433,14 +422,12 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 LOG:  inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Feb 24 00:00:00 2025 UTC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 CALL refresh_continuous_aggregate(
     'conditions_by_day_atomic_refresh',
     '2025-03-11 00:00:00+00'::timestamptz - INTERVAL '15 days',
     NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Mon Feb 24 00:00:00 2025 UTC, infinity ]
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
  count 
@@ -484,7 +471,6 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 LOG:  inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Feb 24 00:00:00 2025 UTC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Both continuous aggregates should have the same data
@@ -548,7 +534,6 @@ LOG:  statement: CALL refresh_continuous_aggregate(
     options => '{"refresh_newest_first": false}'::jsonb);
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
 LOG:  inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Thu Jul 20 00:00:00 2023 UTC, Tue Mar 04 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT count(*) FROM conditions_by_month;
@@ -617,7 +602,6 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_6"
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_6"
 LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_6"
-NOTICE:  continuous aggregate refresh: processed 12 batch(es) of 12 in window [ -infinity, Sun Dec 01 00:00:00 2024 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Verify that the materialization invalidation log has no entries other than
@@ -720,10 +704,8 @@ SELECT debug_waitpoint_release('cagg_policy_batch_1_after_refresh');
 CALL refresh_continuous_aggregate(
     'conditions_by_day', NULL, '1 hour'::interval,
     options => '{"buckets_per_batch": 10}'::jsonb);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sat Mar 01 00:00:00 2025 UTC ]
 -- Verify against an atomic refresh
 CALL refresh_continuous_aggregate('conditions_by_day_atomic_refresh', NULL, '1 hour'::interval);
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Tue Mar 11 00:00:00 2025 UTC ]
 SELECT
     count(*) > 0 AS has_diff
 FROM
@@ -761,7 +743,6 @@ GROUP BY 1, 2
 WITH NO DATA;
 -- Full refresh advances the watermark to 2025-03-11
 CALL refresh_continuous_aggregate('boundary_cagg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- device 2: single row EXACTLY at a bucket start below the watermark. The
 -- hypertable invalidation entry for it is [2025-03-05, 2025-03-05] -- both
 -- bounds precisely on the bucket boundary.
@@ -771,7 +752,6 @@ INSERT INTO boundary_data VALUES ('2025-03-05 00:00:00+00', 2, 1.0);
 CALL refresh_continuous_aggregate(
     'boundary_cagg', '2025-03-01'::timestamptz, '2025-04-01'::timestamptz,
     options => '{"buckets_per_batch": 1}'::jsonb);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Wed Mar 05 00:00:00 2025 UTC, Thu Mar 13 00:00:00 2025 UTC ]
 -- The 2025-03-05 bucket must be materialized for device 2
 SELECT * FROM boundary_cagg WHERE device = 2 ORDER BY bucket;
             bucket            | device | cnt 

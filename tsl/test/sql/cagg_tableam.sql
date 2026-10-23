@@ -57,10 +57,8 @@ WHERE user_view::text IN ('tableam_view', 'notableam_view');
 -- Check that the view with the other access method actually works.
 SELECT * FROM notableam_view ORDER BY 1;
 SELECT * FROM tableam_view ORDER BY 1;
-SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('notableam_view', NULL, NULL);
 CALL refresh_continuous_aggregate('tableam_view', NULL, NULL);
-RESET client_min_messages;
 SELECT * FROM notableam_view ORDER BY 1;
 SELECT * FROM tableam_view ORDER BY 1;
 

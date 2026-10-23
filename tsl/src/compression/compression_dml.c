@@ -36,6 +36,7 @@
 #include <continuous_aggs/insert.h>
 #include <expression_utils.h>
 #include <indexing.h>
+#include <nodes/columnar_scan/compressed_batch.h>
 #include <nodes/columnar_scan/vector_dict.h>
 #include <nodes/columnar_scan/vector_predicates.h>
 #include <nodes/modify_hypertable.h>
@@ -1283,10 +1284,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			Assert(meta_count_attno != InvalidAttrNumber);
 		}
 
-		heap_deform_tuple(compressed_tuple,
-						  decompressor.in_desc,
-						  decompressor.compressed_datums,
-						  decompressor.compressed_is_nulls);
+		row_decompressor_set_compressed_tuple(&decompressor, compressed_tuple);
 
 		/* Bloom pre-filtering for UPSERT conflict detection */
 		if (insert_slot != NULL && cdst->bloom_hasher != NULL)
@@ -1326,7 +1324,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 					stats.batches_checked_by_bloom++;
 					if (!bloom1_contains_hash(bloom_datum, hash))
 					{
-						row_decompressor_reset(&decompressor);
 						stats.batches_pruned_by_bloom++;
 						continue;
 					}
@@ -1357,14 +1354,11 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 				{
 					stats.batches_bloom_false_positives++;
 				}
-				row_decompressor_reset(&decompressor);
 				stats.batches_filtered_decompressed++;
 				continue;
 			}
 		}
 		complete_batch_delete = (delete_only && summary == AllRowsPass);
-
-		row_decompressor_reset(&decompressor);
 
 		if (skip_current_tuple && *skip_current_tuple)
 		{
@@ -1410,7 +1404,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		if (result == TM_Updated && !IsolationUsesXactSnapshot())
 		{
 			write_logical_replication_msg_decompression_end();
-			row_decompressor_reset(&decompressor);
 
 			/* Avoid TM_SelfModified */
 			CommandCounterIncrement();
@@ -1530,6 +1523,11 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	return stats;
 }
 
+/*
+ * The `batch_matches` function does a non-vectorized clause check. It is a separate
+ * decision whether to use bulk decompression or not. We can still do bulk decompression
+ * even if we do not use vectorized clause checking (but the opposite is not true).
+ */
 static BatchQualSummary
 batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 			  tuple_filtering_constraints *constraints, bool check_full_match,
@@ -1541,7 +1539,22 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 		attnos[i] = scankeys[i].sk_attno;
 	}
 
-	bool next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+	row_decompressor_init_batch(decompressor, attnos, num_scankeys);
+	decompressor->batches_decompressed++;
+	const int n_rows = decompressor->current_batch_row_count;
+
+	CompressedColumnValues **key_columns =
+		palloc(sizeof(CompressedColumnValues *) * decompressor->in_desc->natts);
+	int num_key_columns = 0;
+	for (int i = 0; i < decompressor->in_desc->natts; i++)
+	{
+		if (decompressor->column_values[i].decompression_type != DT_Invalid)
+		{
+			key_columns[num_key_columns++] = &decompressor->column_values[i];
+		}
+	}
+
 	ScanKey key;
 	bool match;
 
@@ -1551,8 +1564,13 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 	bool match_any = false;
 	bool match_all = true;
 
-	while (next_tuple)
+	for (int row = 0; row < n_rows; row++)
 	{
+		for (int i = 0; i < num_key_columns; i++)
+		{
+			compressed_columns_to_postgres_data(key_columns[i], 1, row);
+		}
+
 		match = true;
 		for (int i = 0; i < num_scankeys; i++)
 		{
@@ -1609,11 +1627,14 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 			}
 			if (!check_full_match)
 			{
+				pfree(key_columns);
+				MemoryContextSwitchTo(old_ctx);
 				return SomeRowsPass;
 			}
 		}
-		next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
 	}
+	pfree(key_columns);
+	MemoryContextSwitchTo(old_ctx);
 
 	if (match_all)
 	{
@@ -1651,8 +1672,7 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 						 tuple_filtering_constraints *constraints, bool check_full_match,
 						 bool *skip_current_tuple)
 {
-	const int n_rows =
-		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	const int n_rows = decompressor->current_batch_row_count;
 	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
 	uint64 *restrict result =
 		MemoryContextAlloc(decompressor->per_compressed_row_ctx, bitmap_bytes);
@@ -1661,16 +1681,16 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 	bool single_value = false;
 	bool batch_failed = false;
 
-	/* batch_matches() calls decompress_batch_next_row() which increments
-	 * the decompressor's batched_decompressed variable. To match that
-	 * behaviour we need to bump it here.
-	 */
 	decompressor->batches_decompressed++;
 
 	for (int sk = 0; sk < num_scankeys; sk++)
 	{
 		ArrowArray *arrow =
 			decompress_single_column(decompressor, scankeys[sk].sk_attno, &single_value);
+
+		Ensure(arrow != NULL,
+			   "decompress_single_column returned NULL for attno %d",
+			   scankeys[sk].sk_attno);
 
 		/* Handle null check */
 		if (scankeys[sk].sk_flags & SK_ISNULL)

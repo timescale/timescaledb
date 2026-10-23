@@ -239,7 +239,6 @@ cagg_name|start_range|end_range
 ---------+-----------+---------
 cond_10  |          0|       50
 
-R2: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 50 ]
 step r2_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 0, 50);
 
@@ -304,7 +303,6 @@ cagg_name|start_range|end_range
 ---------+-----------+---------
 cond_10  |          0|       50
 
-R2: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 50 ]
 step r2_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 0, 50);
 
@@ -369,7 +367,6 @@ cagg_name|start_range|end_range
 ---------+-----------+---------
 cond_10  |          0|       50
 
-R2: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 50 ]
 step r2_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 0, 50);
 
@@ -434,7 +431,6 @@ cagg_name|start_range|end_range
 ---------+-----------+---------
 cond_10  |          0|       50
 
-R2: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 50 ]
 step r2_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 0, 50);
 
@@ -499,7 +495,6 @@ cagg_name|start_range|end_range
 ---------+-----------+---------
 cond_10  |          0|       50
 
-R2: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 50, 100 ]
 step r2_refresh_nonoverlap: 
     CALL refresh_continuous_aggregate('cond_10', 50, 100);
 

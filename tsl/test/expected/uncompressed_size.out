@@ -71,9 +71,9 @@ SELECT compress_relid AS "COMPRESSED_RELATION" from show_chunks('t1') chunk JOIN
 SELECT _timescaledb_functions.compressed_data_info(time), _timescaledb_functions.compressed_data_info(device), _timescaledb_functions.compressed_data_info(value) FROM :COMPRESSED_RELATION;
  compressed_data_info | compressed_data_info | compressed_data_info 
 ----------------------+----------------------+----------------------
- (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
- (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
- (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
+ (AIC,f)              | (NULL,t)             | (NULL,t)
+ (AIC,f)              | (NULL,t)             | (NULL,t)
+ (AIC,f)              | (NULL,t)             | (NULL,t)
 
 SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_RELATION');
  tuples | relation_size | index_size | total_size 

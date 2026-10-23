@@ -76,6 +76,7 @@ extern TSDLLEXPORT bool ts_guc_enable_in_memory_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
+extern TSDLLEXPORT bool ts_guc_enable_aic_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
@@ -91,6 +92,14 @@ extern TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info;
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
+
+typedef enum CaggRefreshStatsLevel
+{
+	CAGG_REFRESH_STATS_OFF,
+	CAGG_REFRESH_STATS_SUMMARY,
+	CAGG_REFRESH_STATS_VERBOSE_LOG,
+} CaggRefreshStatsLevel;
+extern TSDLLEXPORT CaggRefreshStatsLevel ts_guc_cagg_refresh_stats_level;
 
 typedef enum CompressTruncateBehaviour
 {
@@ -121,6 +130,7 @@ extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_debug_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
+extern TSDLLEXPORT bool ts_guc_enable_columnarscan_metadata_only;
 #if PG19_LT
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 #endif
