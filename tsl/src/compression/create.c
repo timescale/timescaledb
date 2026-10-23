@@ -1060,11 +1060,8 @@ create_replacement_compress_chunk(Chunk *src_chunk, Oid old_compressed_relid,
 								  CompressionSettings *settings)
 {
 	char tmp_name[NAMEDATALEN];
-	int ret = snprintf(tmp_name, NAMEDATALEN, "compress_new_%u", old_compressed_relid);
-	if (ret < 0 || ret >= NAMEDATALEN)
-	{
-		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk name too long")));
-	}
+
+	snprintf(tmp_name, sizeof(tmp_name), "compress_new_%u", old_compressed_relid);
 
 	return create_compress_chunk_named(src_chunk, InvalidOid, false, settings, tmp_name);
 }
