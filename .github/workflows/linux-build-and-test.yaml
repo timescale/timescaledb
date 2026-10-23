@@ -23,7 +23,7 @@ name: Regression
         type: string
 jobs:
   matrixbuilder:
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -45,7 +45,7 @@ jobs:
         fi
 
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -66,7 +66,7 @@ jobs:
   regress:
     if: needs.check_paths.outputs.run_ci == 'true'
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os_name }}
     needs: [matrixbuilder, check_paths]
     runs-on: ${{ matrix.os }}
     # The flaky check is advisory, so its failure must not fail the summary.
@@ -78,7 +78,7 @@ jobs:
       CXX: ${{ matrix.cxx }}
 
       FAKETIME: |
-        ${{ contains(matrix.os, 'ubuntu') && 'faketime -f +379d' || '' }}
+        ${{ matrix.faketime && 'faketime -f +379d' || '' }}
 
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
@@ -159,7 +159,7 @@ jobs:
         path: |
           install
           pg
-        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
+        key: "${{ matrix.os_name }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
       if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
@@ -198,13 +198,13 @@ jobs:
         path: |
           install
           pg
-        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
+        key: "${{ matrix.os_name }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Upload config.log
       if: always() && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: config.log for PostgreSQL ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: build-pg/config.log
 
     - name: Set up PATH
@@ -241,7 +241,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: CMake Logs ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
             build/CMakeCache.txt
             build/CMakeFiles/CMakeConfigureLog.yaml
@@ -303,7 +303,7 @@ jobs:
       if: matrix.coverage
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: LCOV coverage report ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ./build/coverage/lcov-report
 
     - name: Show regression diffs
@@ -344,7 +344,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: Regression diff ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
           regression.log
           installcheck.log
@@ -353,7 +353,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: PostgreSQL log ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: postmaster.*
 
     - name: Stack trace Linux
@@ -383,21 +383,21 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: Coredumps ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: Save stacktraces
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Stacktraces ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: Stacktraces ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: stacktrace.log
 
     - name: Save TAP test logs
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: TAP test logs ${{ matrix.os_name }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
@@ -424,7 +424,7 @@ jobs:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+        JOB_NAME: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os_name }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
@@ -447,7 +447,7 @@ jobs:
     name: Regression summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error
