@@ -129,6 +129,14 @@ typedef struct TsExtension
 
 	/* Shared object library version loaded; empty if none. */
 	char soversion[MAX_VERSION_LEN];
+
+	/*
+	 * soversion is published before the load finishes so a version change
+	 * still hits the FATAL check below. This is set only after ts_post_load_init
+	 * returns, so a cancelled first statement retries instead of skipping
+	 * TSL init (#10711).
+	 */
+	bool load_complete;
 } TsExtension;
 
 TsExtension extensions[] = {
@@ -141,6 +149,7 @@ TsExtension extensions[] = {
 		.guc_disable_load_name = MAKE_EXTOPTION("disable_load"),
 		.guc_disable_load = false,
 		.soversion = "",
+		.load_complete = false,
 	},
 	{
 		.name = "timescaledb_osm",
@@ -149,6 +158,7 @@ TsExtension extensions[] = {
 		.guc_disable_load_name = "timescaledb_osm.disable_load",
 		.guc_disable_load = false,
 		.soversion = "",
+		.load_complete = false,
 	},
 	{
 		.name = "timescaledb_lake",
@@ -157,6 +167,7 @@ TsExtension extensions[] = {
 		.guc_disable_load_name = "timescaledb_lake.disable_load",
 		.guc_disable_load = false,
 		.soversion = "",
+		.load_complete = false,
 	},
 };
 
@@ -778,26 +789,34 @@ do_load(TsExtension *const ext)
 	ProcessUtility_hook_type saved_pu_hook = NULL;
 	bool capture_pu_hook = false;
 
-	/* If the right version of the library is already loaded, we will just
-	 * skip the actual loading. If the wrong version of the library is loaded,
-	 * we need to kill the session since it will not be able to continue
-	 * operate. */
+	/*
+	 * soversion stays set across a failed attempt. A different catalog
+	 * version (ALTER EXTENSION UPDATE between statements) must still FATAL
+	 * rather than map a second .so. The same version with an unfinished
+	 * load is retried.
+	 */
 	if (extension_is_loaded(ext))
 	{
-		if (strcmp(ext->soversion, version) == 0)
+		if (strcmp(ext->soversion, version) != 0)
+		{
+			ereport(FATAL,
+					(errcode(ERRCODE_DUPLICATE_OBJECT),
+					 errmsg("\"%s\" already loaded with a different version", ext->name),
+					 errdetail("The new version is \"%s\", this session is using version \"%s\". "
+							   "The session will be restarted.",
+							   version,
+							   ext->soversion)));
+		}
+		if (ext->load_complete)
 		{
 			return;
 		}
-		ereport(FATAL,
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("\"%s\" already loaded with a different version", ext->name),
-				 errdetail("The new version is \"%s\", this session is using version \"%s\". The "
-						   "session will be restarted.",
-						   version,
-						   ext->soversion)));
+	}
+	else
+	{
+		strlcpy(ext->soversion, version, MAX_VERSION_LEN);
 	}
 
-	strlcpy(ext->soversion, version, MAX_VERSION_LEN);
 	snprintf(soname, MAX_SO_NAME_LEN, "%s%s-%s", TS_LIBDIR, ext->name, version);
 
 	/*
@@ -807,6 +826,7 @@ do_load(TsExtension *const ext)
 	 */
 	if (CalledInParallelWorker())
 	{
+		ext->load_complete = true;
 		return;
 	}
 
@@ -851,14 +871,15 @@ do_load(TsExtension *const ext)
 	}
 	PG_CATCH();
 	{
+		/* soversion stays set; load_complete remains false so the next statement retries. */
 		post_parse_analyze_hook = old_hook;
 		if (capture_pu_hook)
 		{
 			/*
-			 * A handler installed before a failed load won't be reinstalled
-			 * (library already marked loaded), so capture it to keep it
-			 * reachable via the shim. Skip if TRY already captured; never
-			 * capture anything installed later.
+			 * Keep a handler installed before the failure reachable via the
+			 * shim. A retry does not call _PG_init again once Postgres has
+			 * the library on its loader list. Skip if TRY already captured;
+			 * never capture anything installed later.
 			 */
 			if (versioned_ProcessUtility_hook == NULL &&
 				ProcessUtility_hook != prev_ProcessUtility_hook)
@@ -880,6 +901,8 @@ do_load(TsExtension *const ext)
 	{
 		ProcessUtility_hook = saved_pu_hook;
 	}
+
+	ext->load_complete = true;
 }
 
 inline static void
