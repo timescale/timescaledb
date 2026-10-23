@@ -1,0 +1,17 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\pset tuples_only on
+
+CREATE TABLE integer_retention_created_before(time bigint NOT NULL, value int);
+SELECT create_hypertable('integer_retention_created_before', 'time', chunk_time_interval => 100) AS hypertable \gset
+CREATE FUNCTION integer_retention_now() RETURNS bigint LANGUAGE SQL STABLE AS $$ SELECT extract(epoch from now())::bigint $$;
+SELECT set_integer_now_func('integer_retention_created_before', 'integer_retention_now') AS now_func \gset
+INSERT INTO integer_retention_created_before SELECT g, 1 FROM generate_series(1, 500) AS g;
+SELECT add_retention_policy('integer_retention_created_before', drop_created_before => interval '1 second') AS job_id \gset
+DO $$ BEGIN PERFORM pg_sleep(2); END $$;
+CALL run_job(:job_id);
+SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'integer_retention_created_before';
+DROP TABLE integer_retention_created_before;
+DROP FUNCTION integer_retention_now();
