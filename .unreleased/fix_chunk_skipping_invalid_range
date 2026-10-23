@@ -1,0 +1,1 @@
+Fixes: #10431 Do not exclude chunks with invalidated column ranges at execution time
