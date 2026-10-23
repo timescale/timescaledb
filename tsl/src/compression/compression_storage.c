@@ -56,7 +56,7 @@ static void set_statistics_on_compressed_chunk(Oid compressed_table_id);
 
 Oid
 compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid,
-						 CompressionSettings *settings)
+						 CompressionSettings *settings, const char *relname)
 {
 	ObjectAddress tbladdress;
 	CatalogSecurityContext sec_ctx;
@@ -87,9 +87,11 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 
 	/* create the compression table */
 	/* NewRelationCreateToastTable calls CommandCounterIncrement */
-	NameData relname = build_compressed_relation_name(src_chunk);
+	NameData default_relname = build_compressed_relation_name(src_chunk);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_rel = makeRangeVar(ts_chunk_get_schema_name(src_chunk), NameStr(relname), -1);
+	compress_rel = makeRangeVar(ts_chunk_get_schema_name(src_chunk),
+								relname ? pstrdup(relname) : NameStr(default_relname),
+								-1);
 
 	create->relation = compress_rel;
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
