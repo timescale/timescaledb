@@ -107,3 +107,4 @@ order by ts;
  ts | id | filter | t 
 ----+----+--------+---
 
+-- Trigger the valgrind CI run for this test.

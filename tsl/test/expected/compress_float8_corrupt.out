@@ -241,3 +241,4 @@ SELECT extract(day from time) AS day, avg(value) FROM corrupt_float8 GROUP BY 1 
   21 | 11806.9564139942
 
 DROP TABLE corrupt_float8;
+-- Trigger the valgrind CI run for this test.

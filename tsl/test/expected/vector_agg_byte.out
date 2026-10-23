@@ -174,3 +174,4 @@ select x, b, sum(i) from groupbyte group by x, b order by sum(i), x, b limit 10;
  tag3 | t | 39342
 
 reset timescaledb.debug_require_vector_agg;
+-- Trigger the valgrind CI run for this test.

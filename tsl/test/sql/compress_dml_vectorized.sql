@@ -144,3 +144,4 @@ ROLLBACK;
 RESET timescaledb.enable_bulk_decompression;
 
 DROP TABLE mixed_dml;
+-- Trigger the valgrind CI run for this test.
