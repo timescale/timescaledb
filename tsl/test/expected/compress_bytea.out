@@ -1,0 +1,131 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- helper function: float -> pseudorandom float [-0.5..0.5]
+CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
+    SELECT hashfloat8(x::float8) / pow(2, 32)
+$$ LANGUAGE SQL;
+create table bytea_test(ts int, s int, value float) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.chunk_interval = 1000,
+    tsdb.compress, tsdb.compress_orderby = 'ts');
+insert into bytea_test select ts, 1, mix(ts) from generate_series(1, 999) ts;
+select count(compress_chunk(x)) from show_chunks('bytea_test') x;
+ count 
+-------
+     1
+
+-- bytea with default value in previous chunk
+alter table bytea_test add column tag bytea default '\x1234';
+-- bytea with array compression
+insert into bytea_test select ts, 2, mix(ts), ts::text::bytea from generate_series(1001, 1999) ts;
+-- bytea with dictionary compression
+insert into bytea_test select ts, 3, mix(ts), (ts % 10)::text::bytea from generate_series(2001, 2999) ts;
+-- some values for testing zero byte in the middle (not possible for text)
+insert into bytea_test select 4000, 5, 0.5, '\x310031'::bytea;
+insert into bytea_test select 4001, 6, 0.6, '\x31'::bytea;
+select count(compress_chunk(x)) from show_chunks('bytea_test') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+ count 
+-------
+     4
+
+-- bytea segmentby
+insert into bytea_test select ts, 4, mix(ts), (ts % 10)::text::bytea from generate_series(5001, 5999) ts;
+alter table bytea_test set (tsdb.compress_segmentby = 'tag');
+NOTICE:  updated compression settings will only apply to future compressions
+select count(compress_chunk(x)) from show_chunks('bytea_test') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
+ count 
+-------
+     5
+
+vacuum analyze bytea_test;
+explain (costs off, verbose, analyze, buffers off, timing off, summary off)
+select * from bytea_test;
+--- QUERY PLAN ---
+ Append (actual rows=3998.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=999.00 loops=1)
+         Output: _hyper_1_1_chunk.ts, _hyper_1_1_chunk.s, _hyper_1_1_chunk.value, _hyper_1_1_chunk.tag
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+               Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts, _hyper_1_1_chunk_compressed.ts, _hyper_1_1_chunk_compressed.s, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.tag
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=999.00 loops=1)
+         Output: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.s, _hyper_1_2_chunk.value, _hyper_1_2_chunk.tag
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed (actual rows=1.00 loops=1)
+               Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_2_chunk_compressed._ts_meta_v2_last_ts, _hyper_1_2_chunk_compressed.ts, _hyper_1_2_chunk_compressed.s, _hyper_1_2_chunk_compressed.value, _hyper_1_2_chunk_compressed.tag
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=999.00 loops=1)
+         Output: _hyper_1_3_chunk.ts, _hyper_1_3_chunk.s, _hyper_1_3_chunk.value, _hyper_1_3_chunk.tag
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed (actual rows=1.00 loops=1)
+               Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_3_chunk_compressed._ts_meta_v2_last_ts, _hyper_1_3_chunk_compressed.ts, _hyper_1_3_chunk_compressed.s, _hyper_1_3_chunk_compressed.value, _hyper_1_3_chunk_compressed.tag
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk (actual rows=2.00 loops=1)
+         Output: _hyper_1_4_chunk.ts, _hyper_1_4_chunk.s, _hyper_1_4_chunk.value, _hyper_1_4_chunk.tag
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed (actual rows=1.00 loops=1)
+               Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_4_chunk_compressed._ts_meta_v2_last_ts, _hyper_1_4_chunk_compressed.ts, _hyper_1_4_chunk_compressed.s, _hyper_1_4_chunk_compressed.value, _hyper_1_4_chunk_compressed.tag
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_5_chunk (actual rows=999.00 loops=1)
+         Output: _hyper_1_5_chunk.ts, _hyper_1_5_chunk.s, _hyper_1_5_chunk.value, _hyper_1_5_chunk.tag
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk_compressed (actual rows=10.00 loops=1)
+               Output: _hyper_1_5_chunk_compressed._ts_meta_count, _hyper_1_5_chunk_compressed.tag, _hyper_1_5_chunk_compressed._ts_meta_min_1, _hyper_1_5_chunk_compressed._ts_meta_max_1, _hyper_1_5_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_5_chunk_compressed._ts_meta_v2_last_ts, _hyper_1_5_chunk_compressed.ts, _hyper_1_5_chunk_compressed.s, _hyper_1_5_chunk_compressed.value
+
+select s, count(distinct tag), min(tag::text), max(tag::text) from bytea_test
+group by s order by s;
+ s | count |    min     |    max     
+---+-------+------------+------------
+ 1 |     1 | \x1234     | \x1234
+ 2 |   999 | \x31303031 | \x31393939
+ 3 |    10 | \x30       | \x39
+ 4 |    10 | \x30       | \x39
+ 5 |     1 | \x310031   | \x310031
+ 6 |     1 | \x31       | \x31
+
+-- Filters must be vectorized.
+set timescaledb.debug_require_vector_qual to 'require';
+--/* uncomment to generate reference */ set timescaledb.enable_bulk_decompression to off; set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from bytea_test where ts < 5000 and tag = '\x31'::bytea;
+ count 
+-------
+   101
+
+select count(*) from bytea_test where ts < 5000 and tag != '\x31'::bytea;
+ count 
+-------
+  2898
+
+select count(*) from bytea_test where ts < 5000 and tag = '\x310031'::bytea;
+ count 
+-------
+     1
+
+select count(*) from bytea_test where ts < 5000 and tag != '\x310031'::bytea;
+ count 
+-------
+  2998
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_qual;
+-- Grouping must be vectorized.
+set timescaledb.debug_require_vector_agg = 'require';
+--/* uncomment to generate reference */ set timescaledb.enable_bulk_decompression to off; set timescaledb.debug_require_vector_agg to 'forbid';
+select tag, min(value) from bytea_test group by tag order by min(value) limit 10;
+    tag     |        min         
+------------+--------------------
+ \x1234     | -0.499694682424888
+ \x34       | -0.499631919199601
+ \x33       | -0.499498116318136
+ \x39       |  -0.49924149364233
+ \x37       | -0.499115410260856
+ \x31313438 | -0.497002002550289
+ \x36       | -0.496185038238764
+ \x35       | -0.496127981692553
+ \x31393630 | -0.495526578277349
+ \x31303638 | -0.494831068208441
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_agg;
