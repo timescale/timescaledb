@@ -583,14 +583,16 @@ SELECT * FROM varchar WHERE device_id = '1' ORDER BY text, time LIMIT 5;
 -- index scan
 SET enable_seqscan TO OFF;
 :EXPLAIN SELECT device_id, text FROM varchar
-GROUP BY device_id, text;
+GROUP BY device_id, text
+ORDER BY device_id, text
+;
 --- QUERY PLAN ---
- Finalize GroupAggregate
+ Sort
    Output: "varchar".device_id, "varchar".text
-   Group Key: "varchar".device_id, "varchar".text
-   ->  Sort
+   Sort Key: "varchar".device_id, "varchar".text
+   ->  Finalize HashAggregate
          Output: "varchar".device_id, "varchar".text
-         Sort Key: "varchar".device_id, "varchar".text
+         Group Key: "varchar".device_id, "varchar".text
          ->  Append
                ->  Partial GroupAggregate
                      Output: _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text
@@ -608,7 +610,9 @@ GROUP BY device_id, text;
                                  Output: _hyper_2_16_chunk_compressed._ts_meta_count, _hyper_2_16_chunk_compressed.device_id, _hyper_2_16_chunk_compressed._ts_meta_min_2, _hyper_2_16_chunk_compressed._ts_meta_max_2, _hyper_2_16_chunk_compressed._ts_meta_v2_first_time, _hyper_2_16_chunk_compressed._ts_meta_v2_last_time, _hyper_2_16_chunk_compressed."time", _hyper_2_16_chunk_compressed._ts_meta_min_1, _hyper_2_16_chunk_compressed._ts_meta_max_1, _hyper_2_16_chunk_compressed._ts_meta_v2_first_text, _hyper_2_16_chunk_compressed._ts_meta_v2_last_text, _hyper_2_16_chunk_compressed.text, _hyper_2_16_chunk_compressed.val
 
 SELECT device_id, text FROM varchar
-GROUP BY device_id, text;
+GROUP BY device_id, text
+ORDER BY device_id, text
+;
  device_id | text 
 -----------+------
  1         | 1
