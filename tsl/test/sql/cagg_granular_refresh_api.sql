@@ -209,6 +209,29 @@ ALTER TABLE metrics ALTER COLUMN value TYPE numeric;
 ALTER TABLE metrics RENAME COLUMN value TO reading;
 ALTER TABLE metrics DROP COLUMN reading;
 
+-- Granular refresh column can be a DOMAIN type, so block it from being dropped via DROP DOMAIN...CASCADE
+CREATE DOMAIN device_dom AS integer;
+CREATE TABLE metrics_dom (time timestamptz NOT NULL, device_id device_dom, value float8);
+SELECT create_hypertable('metrics_dom', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE metrics_dom SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = '30 days',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+
+\set ON_ERROR_STOP 0
+-- Blocked
+DROP DOMAIN device_dom CASCADE;
+\set ON_ERROR_STOP 1
+:GRC 'metrics_dom';
+
+-- Once granular refresh is turned off, the domain can be dropped.
+ALTER TABLE metrics_dom SET (timescaledb.cagg_enable_granular_refresh = false);
+DROP DOMAIN device_dom CASCADE;
+:GRC 'metrics_dom';
+DROP TABLE metrics_dom;
+
 -- Integer-time hypertable: offsets are interpreted as integers.
 CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
 SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
