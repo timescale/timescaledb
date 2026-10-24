@@ -1,0 +1,1 @@
+Fixes: #8960 Remove the columnstore policy when columnstore is disabled on a hypertable

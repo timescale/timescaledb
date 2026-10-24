@@ -1249,6 +1249,13 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 	{
 		disable_direct_compress_policies(ht);
 	}
+	else if (ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
+													   FUNCTIONS_SCHEMA_NAME,
+													   ht->fd.id) != NIL)
+	{
+		/* columnstore policy cannot run without columnstore so remove it */
+		policy_compression_remove_internal(ht->main_table_relid, false /* if_exists */);
+	}
 
 	ts_hypertable_unset_compression(ht);
 	ts_hypertable_unset_direct_compress(ht);

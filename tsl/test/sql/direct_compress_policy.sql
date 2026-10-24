@@ -94,6 +94,16 @@ ALTER TABLE metrics2 SET (timescaledb.compress = false);
 SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics2';
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics2');
 
+-- disabling columnstore without direct_compress also removes a manually
+-- added columnstore policy
+ALTER TABLE metrics2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT add_compression_policy('metrics2', INTERVAL '1 day') AS job_id \gset
+ALTER TABLE metrics2 SET (timescaledb.compress = false);
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+-- disabling columnstore without a policy is fine
+ALTER TABLE metrics2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+ALTER TABLE metrics2 SET (timescaledb.compress = false);
+
 ----------------------------------------------------------------------
 -- ALTER TABLE: per-table flag turns on direct compress even with the
 -- instance GUC off
