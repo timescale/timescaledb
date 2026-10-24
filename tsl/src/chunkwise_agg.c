@@ -5,6 +5,8 @@
  */
 #include <postgres.h>
 
+#include <catalog/pg_type.h>
+#include <nodes/nodeFuncs.h>
 #include <optimizer/appendinfo.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
@@ -13,6 +15,7 @@
 #include <optimizer/prep.h>
 #include <optimizer/tlist.h>
 #include <utils/selfuncs.h>
+#include <utils/syscache.h>
 
 #include "chunkwise_agg.h"
 
@@ -54,6 +57,59 @@ get_existing_agg_path(const RelOptInfo *relation)
 {
 	Node *node = find_node(relation, T_AggPath);
 	return node ? castNode(AggPath, node) : NULL;
+}
+
+/*
+ * Check if the partial states of all aggregates can be serialized.
+ *
+ * The serialization functions of aggregates with an internal transition state
+ * (e.g., first/last) may use the send/receive functions of the argument types.
+ * This does not work for anonymous records, since record_recv needs the typmod
+ * to identify the record type, or for types without send/receive functions.
+ * This mirrors the check PostgreSQL does for array_agg() in preprocess_aggref().
+ */
+static bool
+aggs_support_serialization(PlannerInfo *root)
+{
+	ListCell *lc;
+	foreach (lc, root->aggtransinfos)
+	{
+		AggTransInfo *transinfo = lfirst_node(AggTransInfo, lc);
+
+		if (transinfo->aggtranstype != INTERNALOID)
+		{
+			continue;
+		}
+
+		ListCell *lc2;
+		foreach (lc2, transinfo->args)
+		{
+			Oid type = exprType((Node *) lfirst_node(TargetEntry, lc2)->expr);
+
+			if (type == RECORDOID)
+			{
+				return false;
+			}
+
+			HeapTuple tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type));
+			if (!HeapTupleIsValid(tuple))
+			{
+				elog(ERROR, "cache lookup failed for type %u", type);
+			}
+
+			Form_pg_type typeform = (Form_pg_type) GETSTRUCT(tuple);
+			bool supported = typeform->typbyval ||
+							 (OidIsValid(typeform->typsend) && OidIsValid(typeform->typreceive));
+			ReleaseSysCache(tuple);
+
+			if (!supported)
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 /*
@@ -671,7 +727,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	}
 
 	/* Don't replan aggregation if it contains already partials or non-serializable aggregates */
-	if (root->hasNonPartialAggs || root->hasNonSerialAggs)
+	if (root->hasNonPartialAggs || root->hasNonSerialAggs || !aggs_support_serialization(root))
 	{
 		return;
 	}

@@ -249,3 +249,21 @@ RESET parallel_tuple_cost;
 RESET min_parallel_table_scan_size;
 SET max_parallel_workers_per_gather = 1;
 SET parallel_leader_participation = off;
+
+-- Partial aggregation must not be pushed down when the partial state of an
+-- aggregate cannot be serialized, e.g. first/last on an anonymous record (#9919)
+RESET parallel_leader_participation;
+SET max_parallel_workers_per_gather = 0;
+CREATE TABLE anon_record(ts timestamptz NOT NULL, v int);
+SELECT create_hypertable('anon_record', 'ts', chunk_time_interval => interval '1 day');
+INSERT INTO anon_record VALUES ('2024-01-01', 1), ('2024-01-02', 2);
+
+EXPLAIN (costs off) SELECT first(v, ROW(ts)), last(v, ROW(ts)) FROM anon_record;
+SELECT first(v, ROW(ts)), last(v, ROW(ts)) FROM anon_record;
+
+-- Serializable arguments still get the partial aggregation pushed down
+EXPLAIN (costs off) SELECT first(v, ts), last(v, ts), count(*) FROM anon_record;
+SELECT first(v, ts), last(v, ts), count(*) FROM anon_record;
+
+DROP TABLE anon_record;
+RESET max_parallel_workers_per_gather;

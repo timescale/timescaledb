@@ -1,0 +1,1 @@
+Fixes: #9919 Fix "input of anonymous composite types is not implemented" error with chunkwise partial aggregation
