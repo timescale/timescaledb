@@ -736,7 +736,11 @@ simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compre
 	 * allocation to avoid palloc overhead, since this is only used for size calculation.
 	 */
 #define TEMP_DATA_SIZE TARGET_COMPRESSED_BATCH_SIZE
-#define TEMP_SELECTORS_SIZE (TEMP_DATA_SIZE / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT)
+/* Round up: every data block needs a selector, so TEMP_DATA_SIZE blocks
+ * need this many selector slots. */
+#define TEMP_SELECTORS_SIZE                                                                        \
+	((TEMP_DATA_SIZE + SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT - 1) /                                 \
+	 SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT)
 
 	uint64 temp_data_static[TEMP_DATA_SIZE];
 	uint64 temp_selectors_static[TEMP_SELECTORS_SIZE];
@@ -748,15 +752,6 @@ simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compre
 	bool use_static = true;
 
 	Simple8bRleCompressor temp_compressor = *compressor;
-
-	/* Replace the data and selectors with the temp space.*/
-	temp_compressor.compressed_data.data = temp_data;
-	temp_compressor.compressed_data.num_elements = 0;
-	temp_compressor.compressed_data.max_elements = TEMP_DATA_SIZE;
-	temp_compressor.selectors.buckets.data = temp_selectors;
-	temp_compressor.selectors.buckets.num_elements = 0;
-	temp_compressor.selectors.buckets.max_elements = TEMP_SELECTORS_SIZE;
-	temp_compressor.selectors.bits_used_in_last_bucket = 0;
 
 	/* If the compressor is empty, we can return 0, similar to finish. */
 	if (temp_compressor.num_elements == 0)
@@ -799,6 +794,17 @@ simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compre
 
 		use_static = false;
 	}
+
+	/* Replace the data and selectors with the temp space. This must come after the
+	 * dynamic allocation above, so the flush writes into the buffers sized for it.
+	 */
+	temp_compressor.compressed_data.data = temp_data;
+	temp_compressor.compressed_data.num_elements = 0;
+	temp_compressor.compressed_data.max_elements = temp_data_count;
+	temp_compressor.selectors.buckets.data = temp_selectors;
+	temp_compressor.selectors.buckets.num_elements = 0;
+	temp_compressor.selectors.buckets.max_elements = temp_selectors_count;
+	temp_compressor.selectors.bits_used_in_last_bucket = 0;
 
 	/* Flush the compressor to ensure all uncompressed data is compressed into the temp_compressor.
 	 */
