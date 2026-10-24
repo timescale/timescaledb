@@ -599,6 +599,23 @@ ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 	}
 }
 
+/*
+ * Mark a compressed chunk as partial before rowstore tuples are written to it,
+ * so that queries run later in the same statement (e.g., in AFTER triggers)
+ * also scan the uncompressed part of the chunk.
+ */
+void
+ts_chunk_insert_state_set_partial(ChunkInsertState *state)
+{
+	if (state->chunk_compressed && !state->chunk_partial)
+	{
+		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
+		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+		ts_chunk_set_partial(chunk);
+		state->chunk_partial = true;
+	}
+}
+
 extern void
 ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert)
 {
@@ -609,12 +626,9 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert)
 	 * - columnstore insert into uncompressed chunk that is not a new chunk (flagged as
 	 * needs_partial in chunk_tuple_routing.c)
 	 */
-	if (state->chunk_compressed && !state->chunk_partial &&
-		(!state->columnstore_insert || state->needs_partial))
+	if (!state->columnstore_insert || state->needs_partial)
 	{
-		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
-		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-		ts_chunk_set_partial(chunk);
+		ts_chunk_insert_state_set_partial(state);
 	}
 
 	table_close(state->rel, NoLock);

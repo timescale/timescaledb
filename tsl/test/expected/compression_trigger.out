@@ -180,3 +180,54 @@ alter table test2 set (
 	  timescaledb.compress_orderby = 'created_at',
 	  timescaledb.compress_segmentby = 'location_id'
 );
+-- AFTER INSERT triggers must see the rows that their own statement
+-- inserted into a fully compressed chunk (#10845)
+create table trg_visible(t timestamptz not null, v int);
+select create_hypertable('trg_visible', 't', chunk_time_interval => interval '1 day');
+    create_hypertable     
+--------------------------
+ (3,public,trg_visible,t)
+
+alter table trg_visible set (timescaledb.compress);
+insert into trg_visible values ('2025-01-01 00:00+00', 1);
+create table trg_visible_log(kind text, visible bigint);
+create function trg_visible_count() returns trigger language plpgsql as $$
+begin
+    insert into trg_visible_log select tg_level, count(*) from trg_visible;
+    return null;
+end $$;
+create trigger trg_visible_stmt after insert on trg_visible
+for each statement execute function trg_visible_count();
+select count(compress_chunk(ch)) from show_chunks('trg_visible') ch;
+ count 
+-------
+     1
+
+insert into trg_visible values ('2025-01-01 01:00+00', 2);
+select count(compress_chunk(ch)) from show_chunks('trg_visible') ch;
+ count 
+-------
+     1
+
+copy trg_visible from stdin;
+drop trigger trg_visible_stmt on trg_visible;
+create trigger trg_visible_row after insert on trg_visible
+for each row execute function trg_visible_count();
+select count(compress_chunk(ch)) from show_chunks('trg_visible') ch;
+ count 
+-------
+     1
+
+insert into trg_visible values ('2025-01-01 03:00+00', 4);
+select * from trg_visible_log;
+   kind    | visible 
+-----------+---------
+ STATEMENT |       2
+ STATEMENT |       3
+ ROW       |       4
+
+select count(*) from trg_visible;
+ count 
+-------
+     4
+

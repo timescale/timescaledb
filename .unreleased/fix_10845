@@ -1,0 +1,1 @@
+Fixes: #10845 Fix AFTER INSERT triggers not seeing rows inserted into a compressed chunk

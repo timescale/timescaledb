@@ -1155,6 +1155,11 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
 		}
 
+		if (buffer->method != TS_CIM_COMPRESSION)
+		{
+			ts_chunk_insert_state_set_partial(cis);
+		}
+
 		/*
 		 * If we're capturing transition tuples, save the original tuple in
 		 * hypertable format before converting to chunk format. Chunks created

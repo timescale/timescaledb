@@ -145,3 +145,4 @@ ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation
 												 EState *estate);
 
 void ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk);
+void ts_chunk_insert_state_set_partial(ChunkInsertState *state);

@@ -2878,6 +2878,8 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				continue;
 			}
 
+			ts_chunk_insert_state_set_partial(ctr->cis);
+
 			if (operation == CMD_MERGE)
 #if PG17_GE
 				ctr->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
