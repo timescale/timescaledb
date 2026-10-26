@@ -10,6 +10,9 @@ CREATE OR REPLACE FUNCTION test.setup_tss_hook_v0() RETURNS VOID
 CREATE OR REPLACE FUNCTION test.setup_tss_hook_v1() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_setup_tss_hook_v1' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION test.setup_tss_hook_version(BIGINT) RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_setup_tss_hook_version' LANGUAGE C VOLATILE STRICT;
+
 CREATE OR REPLACE FUNCTION test.teardown_tss_hook_v1() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_teardown_tss_hook_v1' LANGUAGE C VOLATILE;
 
@@ -44,3 +47,14 @@ COPY copy_test FROM STDIN DELIMITER ',';
 2020-01-01 01:10:00+01,1
 2021-01-01 01:10:00+01,1
 \.
+
+-- Check all 64 version bits, not just the low 32 bits that match version 1.
+SELECT test.setup_tss_hook_version(4294967297);
+\set VERBOSITY default
+COPY copy_test FROM STDIN DELIMITER ',';
+2020-01-01 01:10:00+01,1
+2021-01-01 01:10:00+01,1
+\.
+\set VERBOSITY terse
+
+SELECT test.teardown_tss_hook_v1();

@@ -1,1 +1,0 @@
-Fixes: #10763 Potential segfault when ChunkAppend plan node tries to apply a parameterized clause that could be removed from every chunk but not from hypertable itself.

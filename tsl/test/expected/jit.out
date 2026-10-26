@@ -180,11 +180,9 @@ SELECT * FROM jit_device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC
                      ->  Sort
                            Output: (time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time)), _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
                            Sort Key: (time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time)), _hyper_3_5_chunk.device_id
-                           ->  Result
+                           ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
                                  Output: time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time), _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
-                                 ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
-                                       Output: _hyper_3_5_chunk.observation_time, _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
-                                       Index Cond: (_hyper_3_5_chunk.observation_time >= 'Mon Dec 31 01:00:00 2018 PST'::timestamp with time zone)
+                                 Index Cond: (_hyper_3_5_chunk.observation_time >= 'Mon Dec 31 01:00:00 2018 PST'::timestamp with time zone)
 
 -- generate the results into two different files
 \set ECHO errors

@@ -6,6 +6,8 @@ CREATE OR REPLACE FUNCTION test.setup_tss_hook_v0() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_setup_tss_hook_v0' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION test.setup_tss_hook_v1() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_setup_tss_hook_v1' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.setup_tss_hook_version(BIGINT) RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_setup_tss_hook_version' LANGUAGE C VOLATILE STRICT;
 CREATE OR REPLACE FUNCTION test.teardown_tss_hook_v1() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_teardown_tss_hook_v1' LANGUAGE C VOLATILE;
 SELECT test.setup_tss_hook_v1();
@@ -40,5 +42,23 @@ SELECT test.setup_tss_hook_v0();
 
 -- Warning because the mismatch versions
 COPY copy_test FROM STDIN DELIMITER ',';
-WARNING:  version mismatch between timescaledb and ts_stat_statements callbacks
-WARNING:  version mismatch between timescaledb and ts_stat_statements callbacks
+WARNING:  statement-tracking callback version mismatch
+WARNING:  statement-tracking callback version mismatch
+-- Check all 64 version bits, not just the low 32 bits that match version 1.
+SELECT test.setup_tss_hook_version(4294967297);
+ setup_tss_hook_version 
+------------------------
+ 
+
+\set VERBOSITY default
+COPY copy_test FROM STDIN DELIMITER ',';
+WARNING:  statement-tracking callback version mismatch
+DETAIL:  Expected callback version 1; provider version 4294967297.
+WARNING:  statement-tracking callback version mismatch
+DETAIL:  Expected callback version 1; provider version 4294967297.
+\set VERBOSITY terse
+SELECT test.teardown_tss_hook_v1();
+ teardown_tss_hook_v1 
+----------------------
+ 
+
