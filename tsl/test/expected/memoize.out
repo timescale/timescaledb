@@ -260,8 +260,10 @@ LIMIT 10000
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
                                  ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk m2_3 (never executed)
-                                       ->  Index Scan using _hyper_3_13_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_13_chunk_compressed _hyper_3_13_chunk_compressed_1 (never executed)
-                                             Index Cond: (device_id = m1.device_id)
+                                       ->  Sort (never executed)
+                                             Sort Key: _hyper_3_13_chunk_compressed_1._ts_meta_v2_first_time DESC, _hyper_3_13_chunk_compressed_1._ts_meta_v2_last_time DESC
+                                             ->  Seq Scan on _hyper_3_13_chunk_compressed _hyper_3_13_chunk_compressed_1 (never executed)
+                                                   Filter: (m1.device_id = device_id)
                                  ->  Index Scan using _hyper_3_13_chunk_metrics_compressed_time_idx on _hyper_3_13_chunk m2_3 (never executed)
                                        Filter: (m1.device_id = device_id)
 

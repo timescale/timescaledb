@@ -1,2 +1,0 @@
-Fixes: #10591 Compressed index not used for join on segmentby column with explicit cast
-Thanks: @igor2x For reporting a performance regression with joins on segmentby columns with explicit casts

@@ -381,9 +381,8 @@ SHOW timescaledb.enable_vectorized_aggregation;
 --- QUERY PLAN ---
  HashAggregate
    Group Key: (_hyper_1_1_chunk.value + (((random() * '0'::double precision))::integer)::double precision)
-   ->  Result
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Seq Scan on _hyper_1_1_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Seq Scan on _hyper_1_1_chunk_compressed
 
 -- Volatile aggregate argument is not vectorized.
 :EXPLAIN SELECT sum(value + (random() * 0)::int) FROM metrics GROUP BY value;

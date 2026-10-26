@@ -3687,10 +3687,9 @@ ORDER BY 1,2;
                      Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
                      ->  Sort
                            Sort Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
-                           ->  Result
-                                 ->  Custom Scan (ChunkAppend) on metrics_tstz m1
-                                       ->  Seq Scan on _hyper_X_X_chunk m1_1
-                                             Filter: (("time" >= (InitPlan 2).col1) AND ("time" < (InitPlan 4).col1) AND (device_id = "*VALUES*".column1))
+                           ->  Custom Scan (ChunkAppend) on metrics_tstz m1
+                                 ->  Seq Scan on _hyper_X_X_chunk m1_1
+                                       Filter: (("time" >= (InitPlan 2).col1) AND ("time" < (InitPlan 4).col1) AND (device_id = "*VALUES*".column1))
 
 -- Same as above with correlated subquery in locf
 SELECT sq.device_id, bucket, value
@@ -3767,10 +3766,9 @@ ORDER BY 1,2;
                      Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
                      ->  Sort
                            Sort Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
-                           ->  Result
-                                 ->  Custom Scan (ChunkAppend) on metrics_tstz m1
-                                       ->  Seq Scan on _hyper_X_X_chunk m1_1
-                                             Filter: (("time" >= (InitPlan 3).col1) AND ("time" < (InitPlan 5).col1) AND (device_id = "*VALUES*".column1))
+                           ->  Custom Scan (ChunkAppend) on metrics_tstz m1
+                                 ->  Seq Scan on _hyper_X_X_chunk m1_1
+                                       Filter: (("time" >= (InitPlan 3).col1) AND ("time" < (InitPlan 5).col1) AND (device_id = "*VALUES*".column1))
                      SubPlan 1
                        ->  Aggregate
                              ->  Custom Scan (ChunkAppend) on metrics_tstz m2
@@ -3798,15 +3796,14 @@ GROUP BY 1,2 ORDER BY 2,1;
          Group Key: m1.device_id, (time_bucket_gapfill('@ 20 mins'::interval, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
          ->  Sort
                Sort Key: m1.device_id, (time_bucket_gapfill('@ 20 mins'::interval, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
-               ->  Result
-                     ->  Custom Scan (ChunkAppend) on metrics_tstz m1
-                           ->  Seq Scan on _hyper_X_X_chunk m1_1
-                                 Filter: (("time" < (InitPlan 3).col1) AND ("time" >= (SubPlan 1)))
-                                 SubPlan 1
-                                   ->  Aggregate
-                                         ->  Custom Scan (ChunkAppend) on metrics_tstz m2
-                                               ->  Seq Scan on _hyper_X_X_chunk m2_1
-                                                     Filter: (device_id = m1_1.device_id)
+               ->  Custom Scan (ChunkAppend) on metrics_tstz m1
+                     ->  Seq Scan on _hyper_X_X_chunk m1_1
+                           Filter: (("time" < (InitPlan 3).col1) AND ("time" >= (SubPlan 1)))
+                           SubPlan 1
+                             ->  Aggregate
+                                   ->  Custom Scan (ChunkAppend) on metrics_tstz m2
+                                         ->  Seq Scan on _hyper_X_X_chunk m2_1
+                                               Filter: (device_id = m1_1.device_id)
 
 \set ON_ERROR_STOP 0
 SELECT

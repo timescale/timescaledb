@@ -1986,8 +1986,14 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					 * - INSERT actions need chunk tuple routing
 					 * - Compressed chunks need decompression for correct
 					 *   join evaluation of matched vs not-matched rows
+					 * - Continuous aggregates need invalidation for
+					 *   UPDATE/DELETE actions
 					 */
 					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+					if (!need_modify && ht != NULL)
+					{
+						need_modify = ts_hypertable_has_continuous_aggregates(ht->fd.id);
+					}
 					if (!need_modify)
 					{
 						List *firstMergeActionList = linitial(mt->mergeActionLists);
@@ -2017,6 +2023,89 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 	}
 
 	return new_pathlist;
+}
+
+/*
+ * Move a projection below a single-chunk Append, MergeAppend or ChunkAppend, so
+ * the chunk scan computes it and no Result node is needed.
+ */
+static void
+push_projection_below_single_child_append(PlannerInfo *root, List *pathlist)
+{
+	ListCell *lc;
+	foreach (lc, pathlist)
+	{
+		ProjectionPath *projection = lfirst(lc);
+		if (!IsA(projection, ProjectionPath))
+		{
+			continue;
+		}
+
+		Path *append = projection->subpath;
+		List *subpaths;
+		if (IsA(append, AppendPath))
+		{
+			subpaths = castNode(AppendPath, append)->subpaths;
+		}
+		else if (IsA(append, MergeAppendPath))
+		{
+			subpaths = castNode(MergeAppendPath, append)->subpaths;
+		}
+		else if (ts_is_chunk_append_path(append))
+		{
+			subpaths = castNode(CustomPath, append)->custom_paths;
+		}
+		else
+		{
+			continue;
+		}
+
+		/* Skip appends with several chunks and projections already pushed down. */
+		if (list_length(subpaths) != 1 || append->pathtarget == projection->path.pathtarget)
+		{
+			continue;
+		}
+
+		/* ChunkAppend can have a MergeAppend over the whole hypertable as child. */
+		Path *child = linitial(subpaths);
+		if (child->parent->reloptkind != RELOPT_OTHER_MEMBER_REL)
+		{
+			continue;
+		}
+
+		AppendRelInfo *appinfo = ts_get_appendrelinfo(root, child->parent->relid, false);
+
+		PathTarget *child_target = copy_pathtarget(projection->path.pathtarget);
+		child_target->exprs =
+			castNode(List, adjust_appendrel_attrs(root, (Node *) child_target->exprs, 1, &appinfo));
+		List *new_subpaths =
+			list_make1(create_projection_path(root, child->parent, child, child_target));
+
+		Path *new_append;
+		if (IsA(append, AppendPath))
+		{
+			AppendPath *copy = makeNode(AppendPath);
+			memcpy(copy, append, sizeof(AppendPath));
+			copy->subpaths = new_subpaths;
+			new_append = &copy->path;
+		}
+		else if (IsA(append, MergeAppendPath))
+		{
+			MergeAppendPath *copy = makeNode(MergeAppendPath);
+			memcpy(copy, append, sizeof(MergeAppendPath));
+			copy->subpaths = new_subpaths;
+			new_append = &copy->path;
+		}
+		else
+		{
+			ChunkAppendPath *copy = ts_chunk_append_path_copy((ChunkAppendPath *) append,
+															  new_subpaths,
+															  projection->path.pathtarget);
+			new_append = &copy->cpath.path;
+		}
+		new_append->pathtarget = projection->path.pathtarget;
+		projection->subpath = new_append;
+	}
 }
 
 static void
@@ -2059,6 +2148,18 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		{
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
 		}
+	}
+
+	/*
+	 * Skip ORDERED and FINAL: they add input_rel paths to output_rel as they
+	 * are, and add_path frees the ones that lose to a cheaper path while
+	 * they are still in input_rel->pathlist.
+	 */
+	if (reltype == TS_REL_HYPERTABLE && ts_guc_enable_optimizations && !IS_DUMMY_REL(input_rel) &&
+		stage != UPPERREL_ORDERED && stage != UPPERREL_FINAL)
+	{
+		push_projection_below_single_child_append(root, input_rel->pathlist);
+		push_projection_below_single_child_append(root, input_rel->partial_pathlist);
 	}
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
