@@ -11,3 +11,4 @@
 /constify_timestamptz_op_interval-*.sql
 /constraint_exclusion_prepared-*.sql
 /space_constraint-*.sql
+/bulk_decompression_limit-*.sql
