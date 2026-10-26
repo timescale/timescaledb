@@ -1079,13 +1079,11 @@ DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1719792000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg" in window [ Fri Mar 01 00:00:00 2024 UTC, Mon Apr 01 00:00:00 2024 UTC ] (batch 2 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_8"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_8"
-DEBUG:  hypertable 8 existing watermark >= new watermark 1719792000000000 1719792000000000
 DEBUG:  refreshing continuous aggregate "sparse_cagg" from Wed May 01 00:00:00 2024 UTC to Sat Jun 01 00:00:00 2024 UTC
 DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1719792000000000 1717200000000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg" in window [ Wed May 01 00:00:00 2024 UTC, Sat Jun 01 00:00:00 2024 UTC ] (batch 3 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_8"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_8"
-DEBUG:  hypertable 8 existing watermark >= new watermark 1719792000000000 1719792000000000
 DEBUG:  refreshing continuous aggregate "sparse_cagg" from Tue Oct 01 00:00:00 2024 UTC to Fri Nov 01 00:00:00 2024 UTC
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] (batch 4 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_8"
@@ -1187,7 +1185,6 @@ DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730419200
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_fixed" in window [ Thu Mar 07 00:00:00 2024 UTC, Sun Mar 17 00:00:00 2024 UTC ] (batch 3 of 11)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_9"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_9"
-DEBUG:  hypertable 9 existing watermark >= new watermark 1718409600000000 1718409600000000
 DEBUG:  refreshing continuous aggregate "sparse_cagg_fixed" from Sun Mar 17 00:00:00 2024 UTC to Wed Mar 27 00:00:00 2024 UTC
 DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730419200000000 1711497600000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_fixed" in window [ Sun Mar 17 00:00:00 2024 UTC, Wed Mar 27 00:00:00 2024 UTC ] (batch 4 of 11)
@@ -1198,7 +1195,6 @@ DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730419200
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_fixed" in window [ Mon May 06 00:00:00 2024 UTC, Thu May 16 00:00:00 2024 UTC ] (batch 5 of 11)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_9"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_9"
-DEBUG:  hypertable 9 existing watermark >= new watermark 1718409600000000 1718409600000000
 DEBUG:  refreshing continuous aggregate "sparse_cagg_fixed" from Thu May 16 00:00:00 2024 UTC to Sun May 26 00:00:00 2024 UTC
 DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730419200000000 1716681600000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_fixed" in window [ Thu May 16 00:00:00 2024 UTC, Sun May 26 00:00:00 2024 UTC ] (batch 6 of 11)
@@ -1294,16 +1290,15 @@ DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730505600
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_bp3" in window [ Thu Feb 01 00:00:00 2024 UTC, Wed May 01 00:00:00 2024 UTC ] (batch 1 of 3)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_10"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_10"
-DEBUG:  hypertable 10 existing watermark >= new watermark 1719792000000000 1719792000000000
 DEBUG:  refreshing continuous aggregate "sparse_cagg_bp3" from Wed May 01 00:00:00 2024 UTC to Thu Aug 01 00:00:00 2024 UTC
 DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730505600000000 1722470400000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_bp3" in window [ Wed May 01 00:00:00 2024 UTC, Sat Jun 01 00:00:00 2024 UTC ] (batch 2 of 3)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_10"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_10"
-DEBUG:  hypertable 10 existing watermark >= new watermark 1719792000000000 1719792000000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_bp3" in window [ Mon Jul 01 00:00:00 2024 UTC, Thu Aug 01 00:00:00 2024 UTC ] (batch 2 of 3)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_10"
 LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_10"
+DEBUG:  hypertable 10 existing watermark >= new watermark 1719792000000000 1719792000000000
 DEBUG:  refreshing continuous aggregate "sparse_cagg_bp3" from Tue Oct 01 00:00:00 2024 UTC to Wed Jan 01 00:00:00 2025 UTC
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_bp3" in window [ Tue Oct 01 00:00:00 2024 UTC, Wed Jan 01 00:00:00 2025 UTC ] (batch 3 of 3)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_10"
@@ -1408,19 +1403,16 @@ DEBUG:  hypertable 11 existing watermark >= new invalidation threshold 171979200
 LOG:  continuous aggregate refresh (individual invalidation) on "end_null_cagg" in window [ -infinity, Fri Mar 01 00:00:00 2024 UTC ] (batch 1 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_12"
-DEBUG:  hypertable 12 existing watermark >= new watermark 1719792000000000 1719792000000000
 DEBUG:  refreshing continuous aggregate "end_null_cagg" from Fri Mar 01 00:00:00 2024 UTC to Mon Apr 01 00:00:00 2024 UTC
 DEBUG:  hypertable 11 existing watermark >= new invalidation threshold 1719792000000000 1711929600000000
 LOG:  continuous aggregate refresh (individual invalidation) on "end_null_cagg" in window [ Fri Mar 01 00:00:00 2024 UTC, Mon Apr 01 00:00:00 2024 UTC ] (batch 2 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_12"
-DEBUG:  hypertable 12 existing watermark >= new watermark 1719792000000000 1719792000000000
 DEBUG:  refreshing continuous aggregate "end_null_cagg" from Wed May 01 00:00:00 2024 UTC to Sat Jun 01 00:00:00 2024 UTC
 DEBUG:  hypertable 11 existing watermark >= new invalidation threshold 1719792000000000 1717200000000000
 LOG:  continuous aggregate refresh (individual invalidation) on "end_null_cagg" in window [ Wed May 01 00:00:00 2024 UTC, Sat Jun 01 00:00:00 2024 UTC ] (batch 3 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_12"
-DEBUG:  hypertable 12 existing watermark >= new watermark 1719792000000000 1719792000000000
 DEBUG:  refreshing continuous aggregate "end_null_cagg" from Tue Oct 01 00:00:00 2024 UTC to infinity
 LOG:  continuous aggregate refresh (individual invalidation) on "end_null_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] (batch 4 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"

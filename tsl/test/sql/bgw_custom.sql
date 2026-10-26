@@ -826,3 +826,16 @@ SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
 SELECT job_id FROM alter_job(:job_no_config, config_merge => '{"fresh":"config"}');
 SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
 SELECT delete_job(:job_no_config);
+
+-- Changing the hypertable owner moves policy jobs but not user-defined jobs
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE owner_ht(time timestamptz NOT NULL, value int) WITH (tsdb.hypertable);
+SELECT add_retention_policy('owner_ht', INTERVAL '1 month') AS job_owner_policy \gset
+SELECT add_job('custom_func', '1h') AS job_owner_custom \gset
+SELECT _timescaledb_functions.alter_job_set_hypertable_id(:job_owner_custom, 'owner_ht');
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER TABLE owner_ht OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+SELECT proc_name, owner::regrole FROM _timescaledb_config.bgw_job
+WHERE id IN (:job_owner_policy, :job_owner_custom) ORDER BY id;
+SELECT delete_job(:job_owner_custom);
+DROP TABLE owner_ht;
