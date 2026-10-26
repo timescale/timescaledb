@@ -142,8 +142,10 @@ fl_input_bytes(uint32 n, fl_elem_width_t t)
  *   fl_input_count() elements from `values` and writes fl_required_bytes
  *   to `packed`.
  *
- *   fl_unpack reverses the operation. The caller MUST pre-zero
- *   packed[truncated_bytes..alloc_bytes) before calling unpack.
+ *   fl_unpack reverses the operation. The data at
+ *   packed[truncated_bytes..alloc_bytes) may impact the output values
+ *   beyond N, when fl_input_count() > N. If these extra values matter
+ *   to the caller, the tail must be zeroed before calling fl_unpack.
  *
  *   W = 0 (constant block) is a special case: fl_pack returns 0 and
  *   writes nothing; fl_unpack fills outputs [0..N) with 0.

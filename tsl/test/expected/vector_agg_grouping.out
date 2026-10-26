@@ -2044,3 +2044,244 @@ select count(*) from (select b, count(*) from groupnotinto group by a, b) g;
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
+-- Grouping by a computed expression on a single chunk.
+create table onechunkbucket(ts timestamptz not null, host text, v float8)
+    with (tsdb.hypertable, tsdb.segmentby = 'host', tsdb.orderby = 'ts desc',
+        tsdb.chunk_interval = '1 day');
+NOTICE:  using column "ts" as partitioning column
+insert into onechunkbucket
+select '2026-01-01 00:00:00+00'::timestamptz + g * interval '1 min', 'h' || (g % 4), g
+from generate_series(0, 1439) g;
+select count(compress_chunk(x)) from show_chunks('onechunkbucket') x;
+ count 
+-------
+     1
+
+vacuum analyze onechunkbucket;
+set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: (time_bucket('@ 1 hour'::interval, _hyper_7_11_chunk.ts))
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
+               ->  Seq Scan on _hyper_7_11_chunk_compressed
+
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket group by b order by b;
+              b               |  sum   
+------------------------------+--------
+ Wed Dec 31 16:00:00 2025 PST |  28680
+ Wed Dec 31 20:00:00 2025 PST |  86280
+ Thu Jan 01 00:00:00 2026 PST | 143880
+ Thu Jan 01 04:00:00 2026 PST | 201480
+ Thu Jan 01 08:00:00 2026 PST | 259080
+ Thu Jan 01 12:00:00 2026 PST | 316680
+
+select time_bucket('1 hour', ts) b, host, max(v) from onechunkbucket
+group by b, host order by b, host limit 3;
+              b               | host | max 
+------------------------------+------+-----
+ Wed Dec 31 16:00:00 2025 PST | h0   |  56
+ Wed Dec 31 16:00:00 2025 PST | h1   |  57
+ Wed Dec 31 16:00:00 2025 PST | h2   |  58
+
+select date_bin('6 hours', ts, '2000-01-01 00:00:00+00') b, count(*), min(v)
+from onechunkbucket group by b order by b;
+              b               | count | min  
+------------------------------+-------+------
+ Wed Dec 31 16:00:00 2025 PST |   360 |    0
+ Wed Dec 31 22:00:00 2025 PST |   360 |  360
+ Thu Jan 01 04:00:00 2026 PST |   360 |  720
+ Thu Jan 01 10:00:00 2026 PST |   360 | 1080
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
+-- Sorted grouping by a computed expression on a single chunk.
+set enable_hashagg to off;
+set timescaledb.debug_require_vector_agg = 'require';
+explain (costs off)
+select time_bucket('1 hour', ts) b, host, sum(v) from onechunkbucket
+group by host, b order by host, b desc;
+--- QUERY PLAN ---
+ Finalize GroupAggregate
+   Group Key: _hyper_7_11_chunk.host, (time_bucket('@ 1 hour'::interval, _hyper_7_11_chunk.ts))
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
+               ->  Sort
+                     Sort Key: _hyper_7_11_chunk_compressed.host, _hyper_7_11_chunk_compressed._ts_meta_v2_first_ts DESC, _hyper_7_11_chunk_compressed._ts_meta_v2_last_ts DESC
+                     ->  Seq Scan on _hyper_7_11_chunk_compressed
+
+select time_bucket('1 hour', ts) b, host, sum(v) from onechunkbucket
+where host = 'h0' group by host, b order by host, b desc;
+              b               | host |  sum  
+------------------------------+------+-------
+ Thu Jan 01 15:00:00 2026 PST | h0   | 21120
+ Thu Jan 01 14:00:00 2026 PST | h0   | 20220
+ Thu Jan 01 13:00:00 2026 PST | h0   | 19320
+ Thu Jan 01 12:00:00 2026 PST | h0   | 18420
+ Thu Jan 01 11:00:00 2026 PST | h0   | 17520
+ Thu Jan 01 10:00:00 2026 PST | h0   | 16620
+ Thu Jan 01 09:00:00 2026 PST | h0   | 15720
+ Thu Jan 01 08:00:00 2026 PST | h0   | 14820
+ Thu Jan 01 07:00:00 2026 PST | h0   | 13920
+ Thu Jan 01 06:00:00 2026 PST | h0   | 13020
+ Thu Jan 01 05:00:00 2026 PST | h0   | 12120
+ Thu Jan 01 04:00:00 2026 PST | h0   | 11220
+ Thu Jan 01 03:00:00 2026 PST | h0   | 10320
+ Thu Jan 01 02:00:00 2026 PST | h0   |  9420
+ Thu Jan 01 01:00:00 2026 PST | h0   |  8520
+ Thu Jan 01 00:00:00 2026 PST | h0   |  7620
+ Wed Dec 31 23:00:00 2025 PST | h0   |  6720
+ Wed Dec 31 22:00:00 2025 PST | h0   |  5820
+ Wed Dec 31 21:00:00 2025 PST | h0   |  4920
+ Wed Dec 31 20:00:00 2025 PST | h0   |  4020
+ Wed Dec 31 19:00:00 2025 PST | h0   |  3120
+ Wed Dec 31 18:00:00 2025 PST | h0   |  2220
+ Wed Dec 31 17:00:00 2025 PST | h0   |  1320
+ Wed Dec 31 16:00:00 2025 PST | h0   |   420
+
+-- Reverse order and sorted merge are not vectorized, but need no Result node.
+set timescaledb.debug_require_vector_agg = 'allow';
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b order by b;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_11_chunk.ts)
+   ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
+         ->  Sort
+               Sort Key: _hyper_7_11_chunk_compressed._ts_meta_v2_last_ts
+               ->  Seq Scan on _hyper_7_11_chunk_compressed
+
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b order by b desc;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_11_chunk.ts)
+   ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
+         ->  Sort
+               Sort Key: _hyper_7_11_chunk_compressed._ts_meta_v2_first_ts DESC
+               ->  Seq Scan on _hyper_7_11_chunk_compressed
+
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b order by b desc limit 3;
+              b               |  sum  
+------------------------------+-------
+ Thu Jan 01 15:00:00 2026 PST | 84570
+ Thu Jan 01 14:00:00 2026 PST | 80970
+ Thu Jan 01 13:00:00 2026 PST | 77370
+
+reset enable_hashagg;
+reset timescaledb.debug_require_vector_agg;
+-- Single chunk under ChunkAppend with a one-time filter.
+explain (costs off)
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket
+where current_setting('datestyle') <> '' group by b;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: (time_bucket('@ 4 hours'::interval, onechunkbucket.ts))
+   ->  Result
+         One-Time Filter: (current_setting('datestyle'::text) <> ''::text)
+         ->  Custom Scan (ChunkAppend) on onechunkbucket
+               Chunks excluded during startup: 0
+               ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
+                     ->  Seq Scan on _hyper_7_11_chunk_compressed
+                           Filter: (current_setting('datestyle'::text) <> ''::text)
+
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket
+where current_setting('datestyle') <> '' group by b order by b;
+              b               |  sum   
+------------------------------+--------
+ Wed Dec 31 16:00:00 2025 PST |  28680
+ Wed Dec 31 20:00:00 2025 PST |  86280
+ Thu Jan 01 00:00:00 2026 PST | 143880
+ Thu Jan 01 04:00:00 2026 PST | 201480
+ Thu Jan 01 08:00:00 2026 PST | 259080
+ Thu Jan 01 12:00:00 2026 PST | 316680
+
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket
+where current_setting('datestyle') = '' group by b order by b;
+ b | sum 
+---+-----
+
+prepare onechunk_param(int) as
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket where $1 > 0 group by b order by b;
+set plan_cache_mode to force_generic_plan;
+explain (costs off) execute onechunk_param(1);
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: (time_bucket('@ 4 hours'::interval, onechunkbucket.ts))
+   ->  Result
+         One-Time Filter: ($1 > 0)
+         ->  Custom Scan (ChunkAppend) on onechunkbucket
+               Order: time_bucket('@ 4 hours'::interval, onechunkbucket.ts)
+               Chunks excluded during startup: 0
+               ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
+                     ->  Sort
+                           Sort Key: _hyper_7_11_chunk_compressed._ts_meta_v2_last_ts
+                           ->  Seq Scan on _hyper_7_11_chunk_compressed
+                                 Filter: ($1 > 0)
+
+execute onechunk_param(1);
+              b               |  sum   
+------------------------------+--------
+ Wed Dec 31 16:00:00 2025 PST |  28680
+ Wed Dec 31 20:00:00 2025 PST |  86280
+ Thu Jan 01 00:00:00 2026 PST | 143880
+ Thu Jan 01 04:00:00 2026 PST | 201480
+ Thu Jan 01 08:00:00 2026 PST | 259080
+ Thu Jan 01 12:00:00 2026 PST | 316680
+
+execute onechunk_param(0);
+ b | sum 
+---+-----
+
+reset plan_cache_mode;
+deallocate onechunk_param;
+-- Sorted single chunk under ChunkAppend grouped by an expression.
+create table bucketsort(ts timestamptz not null, dev int, v float8);
+select create_hypertable('bucketsort', by_range('ts'));
+ create_hypertable 
+-------------------
+ (8,t)
+
+alter table bucketsort set (timescaledb.compress, timescaledb.compress_orderby = 'dev, ts');
+insert into bucketsort select '2026-01-01 00:00:00+00'::timestamptz + i * interval '10 sec', i % 10, i
+from generate_series(1, 1000) i;
+select count(compress_chunk(x)) from show_chunks('bucketsort') x;
+ count 
+-------
+     1
+
+vacuum analyze bucketsort;
+set enable_hashagg to off;
+explain (costs off)
+select time_bucket('1 minute', ts) b, count(*) from bucketsort
+where ts > now() - interval '10 years' group by b order by b limit 5;
+--- QUERY PLAN ---
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket('@ 1 min'::interval, bucketsort.ts))
+         ->  Custom Scan (ChunkAppend) on bucketsort
+               Order: time_bucket('@ 1 min'::interval, bucketsort.ts)
+               Chunks excluded during startup: 0
+               ->  Result
+                     ->  Sort
+                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_8_12_chunk.ts))
+                           ->  Custom Scan (ColumnarScan) on _hyper_8_12_chunk
+                                 Vectorized Filter: (ts > (now() - '@ 10 years'::interval))
+                                 ->  Seq Scan on _hyper_8_12_chunk_compressed
+                                       Filter: (_ts_meta_max_2 > (now() - '@ 10 years'::interval))
+
+select time_bucket('1 minute', ts) b, count(*) from bucketsort
+where ts > now() - interval '10 years' group by b order by b limit 5;
+              b               | count 
+------------------------------+-------
+ Wed Dec 31 16:00:00 2025 PST |     5
+ Wed Dec 31 16:01:00 2025 PST |     6
+ Wed Dec 31 16:02:00 2025 PST |     6
+ Wed Dec 31 16:03:00 2025 PST |     6
+ Wed Dec 31 16:04:00 2025 PST |     6
+
+reset enable_hashagg;
