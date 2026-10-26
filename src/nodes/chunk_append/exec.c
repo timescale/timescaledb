@@ -592,9 +592,13 @@ init_subplans(ChunkAppendState *state, EState *estate, int eflags)
 	{
 		state->params = state->subplan_states[0]->plan->allParam;
 		/*
-		 * make sure all params are initialized for runtime exclusion
+		 * make sure all params are initialized for runtime exclusion. Only
+		 * params from outside this node can change: an initplan without
+		 * external params must not be marked as changed or the parent rescan
+		 * fails with "extParam set of initplan is empty".
 		 */
-		state->csstate.ss.ps.chgParam = bms_copy(state->subplan_states[0]->plan->allParam);
+		state->csstate.ss.ps.chgParam = bms_intersect(state->subplan_states[0]->plan->allParam,
+													  state->csstate.ss.ps.plan->extParam);
 	}
 }
 

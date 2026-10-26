@@ -1,0 +1,1 @@
+Fixes: #10752 Fix "extParam set of initplan is empty" error for ChunkAppend in a nested initplan

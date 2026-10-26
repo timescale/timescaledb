@@ -1947,3 +1947,14 @@ RESET timescaledb.enable_constraint_aware_append;
 RESET timescaledb.enable_chunk_append;
 RESET enable_material;
 DROP TABLE caa_rescan;
+-- initplan with its own initplan below ChunkAppend must not be rescanned (#10752)
+CREATE TABLE initplan_rescan(ts timestamptz NOT NULL, k text) WITH (tsdb.hypertable, tsdb.chunk_interval='1 day');
+INSERT INTO initplan_rescan SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, 'k' || (i % 3) FROM generate_series(1, 3) i;
+SELECT s.ts FROM initplan_rescan s WHERE EXISTS (SELECT 1 FROM initplan_rescan b WHERE b.k = (SELECT max(k) FROM initplan_rescan)) OR s.k IS NULL ORDER BY s.ts;
+              ts              
+------------------------------
+ Mon Jan 01 00:01:00 2024 PST
+ Mon Jan 01 00:02:00 2024 PST
+ Mon Jan 01 00:03:00 2024 PST
+
+DROP TABLE initplan_rescan;
