@@ -31,6 +31,7 @@
 #include <utils/elog.h>
 #include <utils/fmgrprotos.h>
 #include <utils/inval.h>
+#include <utils/snapmgr.h>
 
 #include "compat/compat.h"
 #include "annotations.h"
@@ -399,8 +400,12 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	return false;
 }
 
+/*
+ * Compress a chunk. When settings are given, they are used for a new
+ * compressed chunk instead of the hypertable settings.
+ */
 static Oid
-compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
+compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid, CompressionSettings *settings)
 {
 	Oid result_chunk_id = chunk_relid;
 	CompressChunkCxt cxt = { 0 };
@@ -459,7 +464,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_COMPRESS, true);
 
 	/* get compression properties for hypertable */
-	mergable_chunk = find_chunk_to_merge_into(cxt.srcht, cxt.srcht_chunk);
+	mergable_chunk = settings ? NULL : find_chunk_to_merge_into(cxt.srcht, cxt.srcht_chunk);
 	if (!mergable_chunk)
 	{
 		/*
@@ -471,7 +476,11 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		 */
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
-		compress_chunk_relid = create_compress_chunk(cxt.srcht_chunk, InvalidOid, false, NULL);
+		if (settings)
+		{
+			settings = ts_compression_settings_materialize(settings, chunk_relid, InvalidOid);
+		}
+		compress_chunk_relid = create_compress_chunk(cxt.srcht_chunk, InvalidOid, false, settings);
 		new_compressed_chunk = true;
 		ereport(DEBUG1,
 				(errmsg("new columnstore chunk \"%s.%s\" created",
@@ -807,7 +816,7 @@ recompress_chunk_impl(Chunk *chunk, bool recompress)
 			return false;
 		}
 
-		recompressed = recompress_chunk_in_memory_impl(chunk);
+		recompressed = recompress_chunk_in_memory_impl(chunk, false);
 	}
 
 	return recompressed;
@@ -930,7 +939,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 
 	if (ts_chunk_needs_compression(chunk))
 	{
-		uncompressed_relid = compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid);
+		uncompressed_relid = compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid, NULL);
 	}
 	else if (recompress || ts_chunk_needs_recompression(chunk))
 	{
@@ -945,7 +954,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 				 ts_chunk_get_schema_name(chunk),
 				 ts_chunk_get_table_name(chunk));
 			decompress_chunk_impl(chunk, false);
-			compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid);
+			compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid, NULL);
 		}
 	}
 	else
@@ -1064,7 +1073,7 @@ tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
 	}
 
 	/* Try rebuild with in-memory recompression, fall back to decompress/compress if needed */
-	if (!can_use_in_memory_rebuild(chunk) || !recompress_chunk_in_memory_impl(chunk))
+	if (!can_use_in_memory_rebuild(chunk) || !recompress_chunk_in_memory_impl(chunk, false))
 	{
 		elog(DEBUG1,
 			 "falling back to decompress/compress, performing full "
@@ -1072,10 +1081,74 @@ tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
 			 ts_chunk_get_schema_name(chunk),
 			 ts_chunk_get_table_name(chunk));
 		decompress_chunk_impl(chunk, false);
-		compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid);
+		compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid, NULL);
 	}
 
 	PG_RETURN_VOID();
+}
+
+/*
+ * Check if the compressed data of a chunk relies on stored column defaults,
+ * i.e., has batches without data for a column with a stored default.
+ */
+bool
+compressed_chunk_uses_missing_values(Relation rel)
+{
+	TupleDesc tupdesc = RelationGetDescr(rel);
+	Oid compressed_relid = ts_relation_get_compressed_relid(RelationGetRelid(rel));
+	AttrNumber *attnos = palloc(sizeof(AttrNumber) * tupdesc->natts);
+	int nattnos = 0;
+	bool uses_missing = false;
+
+	for (int i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+
+		if (attr->atthasmissing && !attr->attisdropped)
+		{
+			attnos[nattnos++] = get_attnum(compressed_relid, NameStr(attr->attname));
+		}
+	}
+
+	if (nattnos > 0)
+	{
+		Relation compressed_rel = table_open(compressed_relid, AccessShareLock);
+		Snapshot snapshot = RegisterSnapshot(GetLatestSnapshot());
+		TableScanDesc scan = table_beginscan_compat(compressed_rel, snapshot, 0, NULL, 0);
+		TupleTableSlot *slot = table_slot_create(compressed_rel, NULL);
+
+		while (!uses_missing && table_scan_getnextslot(scan, ForwardScanDirection, slot))
+		{
+			for (int i = 0; i < nattnos && !uses_missing; i++)
+			{
+				uses_missing = slot_attisnull(slot, attnos[i]);
+			}
+		}
+
+		ExecDropSingleTupleTableSlot(slot);
+		table_endscan(scan);
+		UnregisterSnapshot(snapshot);
+		table_close(compressed_rel, AccessShareLock);
+	}
+
+	pfree(attnos);
+	return uses_missing;
+}
+
+/*
+ * Rebuild the compressed data of a chunk with its current compression settings.
+ */
+void
+rebuild_compressed_chunk(Chunk *chunk)
+{
+	if (can_use_in_memory_rebuild(chunk) && recompress_chunk_in_memory_impl(chunk, true))
+	{
+		return;
+	}
+
+	CompressionSettings *settings = ts_compression_settings_get(chunk->fd.relid);
+	decompress_chunk_impl(chunk, false);
+	compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid, settings);
 }
 
 static bool
