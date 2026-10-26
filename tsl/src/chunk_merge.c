@@ -40,6 +40,7 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "compression/api.h"
 #include "debug_point.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
@@ -61,6 +62,7 @@ typedef struct RelationMergeInfo
 	bool isresult;
 	bool iscompressed_rel;
 	bool isunordered;
+	bool rebuild_compressed;
 	ItemPointerData chunk_rewrite_tid;
 	List *ind_oids_old;
 	List *ind_oids_new;
@@ -1247,10 +1249,19 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 */
 		if (ts_chunk_is_compressed(chunk))
 		{
-			Oid crelid = ts_relation_get_compressed_relid(chunk->fd.relid);
-			Relation crel = table_open(crelid, lockmode);
-			rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
-			table_close(crel, NoLock);
+			/*
+			 * The merge clears stored column defaults, so compressed data
+			 * that relies on them is rebuilt once the merge is validated.
+			 */
+			relinfo->rebuild_compressed = compressed_chunk_uses_missing_values(rel);
+
+			if (!relinfo->rebuild_compressed)
+			{
+				Oid crelid = ts_relation_get_compressed_relid(chunk->fd.relid);
+				Relation crel = table_open(crelid, lockmode);
+				rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
+				table_close(crel, NoLock);
+			}
 
 			if (mergeindex == -1)
 			{
@@ -1362,6 +1373,37 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		prev_cube = chunk->cube;
 		compute_rel_vacuum_cutoffs(relinfos[i].rel, &relinfos[i].cutoffs);
 
+		/* Need to update the index of the result (merged) relation after
+		 * resort */
+		if (relinfos[i].isresult)
+		{
+			mergeindex = i;
+		}
+	}
+
+	/* Rebuild compressed data that relies on stored column defaults */
+	for (int i = 0; i < nrelids; i++)
+	{
+		RelationMergeInfo *relinfo = &relinfos[i];
+
+		if (!relinfo->rebuild_compressed)
+		{
+			continue;
+		}
+
+		rebuild_compressed_chunk(relinfo->chunk);
+
+		MemoryContext old_mcxt = MemoryContextSwitchTo(merge_cxt);
+		relinfo->chunk = ts_chunk_get_by_relid(relinfo->relid, true);
+		MemoryContextSwitchTo(old_mcxt);
+
+		compute_rel_vacuum_cutoffs(relinfo->rel, &relinfo->cutoffs);
+	}
+
+	for (int i = 0; i < nrelids; i++)
+	{
+		const Chunk *chunk = relinfos[i].chunk;
+
 		/*
 		 * Fill in the compressed mergerelinfo array here after final sort of
 		 * rels so that the two arrays have the same order.
@@ -1378,13 +1420,6 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			crelinfo->relpersistence = crelinfo->rel->rd_rel->relpersistence;
 			compute_rel_vacuum_cutoffs(crelinfos[i].rel, &crelinfos[i].cutoffs);
 			rellocks = append_rellock(rellocks, crelinfo->rel, lockmode, merge_cxt);
-		}
-
-		/* Need to update the index of the result (merged) relation after
-		 * resort */
-		if (relinfos[i].isresult)
-		{
-			mergeindex = i;
 		}
 	}
 

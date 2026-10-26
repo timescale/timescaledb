@@ -44,7 +44,7 @@ extern Datum tsl_compact_chunk(PG_FUNCTION_ARGS);
 
 void recompress_chunk_segmentwise_impl(Chunk *chunk, bool fullrecompress);
 Oid compact_chunk_impl(Chunk *chunk, int max_batches);
-bool recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk);
+bool recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk, bool keep_settings);
 void rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force);
 void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel);
 

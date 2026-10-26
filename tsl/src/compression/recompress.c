@@ -1775,7 +1775,7 @@ resolve_recompression_settings(Chunk *uncompressed_chunk)
  * Perform per segment in-memory recompression of a compressed chunk.
  */
 bool
-recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
+recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk, bool keep_settings)
 {
 	if (uncompressed_chunk == NULL)
 	{
@@ -1802,7 +1802,9 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->fd.relid, lockmode);
 	Relation compressed_chunk_rel = table_open(compressed_relid, lockmode);
 
-	CompressionSettings *new_settings = resolve_recompression_settings(uncompressed_chunk);
+	CompressionSettings *new_settings =
+		keep_settings ? ts_compression_settings_get(uncompressed_chunk->fd.relid) :
+						resolve_recompression_settings(uncompressed_chunk);
 
 	/* if segmentby settings have changed, we need to fallback to full recompression */
 	if (!ts_array_equal(settings->fd.segmentby, new_settings->fd.segmentby))

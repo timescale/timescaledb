@@ -40,6 +40,9 @@ echo "Building CHANGELOG"
     echo "**Highlighted features in TimescaleDB v${RELEASE_NEXT}**"
     echo "* "
     echo ""
+    if [[ "${RELEASE_NEXT}" == *.0 ]]; then
+        echo_changelog '**Loader Changes**' '^Loader:'
+    fi
     echo_changelog '**Backward-Incompatible Changes**' '^Backward-Incompatible Change:'
     echo_changelog '**Features**' '^Implements:'
     echo_changelog '**Bugfixes**' '^Fixes:'
