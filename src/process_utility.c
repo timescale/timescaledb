@@ -1700,12 +1700,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 							 "instead.")));
 		}
 
-		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
-														 relation->relname,
-														 AccessExclusiveLock,
-														 &slice_lock,
-														 CurrentMemoryContext,
-														 false);
+		chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, false);
 
 		if (chunk)
 		{
@@ -2879,7 +2874,14 @@ process_altertable_change_owner_bgw_jobs(int32 hypertable_id, Oid newrole_oid)
 		bool should_free, isnull;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		Datum htid = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
-		if (!isnull && DatumGetInt32(htid) == hypertable_id)
+		if (isnull || DatumGetInt32(htid) != hypertable_id)
+		{
+			continue;
+		}
+
+		/* Only policy jobs follow the hypertable owner, user-defined jobs keep theirs */
+		Datum proc_schema = slot_getattr(ti->slot, Anum_bgw_job_proc_schema, &isnull);
+		if (!isnull && namestrcmp(DatumGetName(proc_schema), FUNCTIONS_SCHEMA_NAME) == 0)
 		{
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
@@ -2887,6 +2889,17 @@ process_altertable_change_owner_bgw_jobs(int32 hypertable_id, Oid newrole_oid)
 			{
 				heap_freetuple(tuple);
 			}
+			continue;
+		}
+
+		Datum owner = slot_getattr(ti->slot, Anum_bgw_job_owner, &isnull);
+		if (!isnull && DatumGetObjectId(owner) != newrole_oid)
+		{
+			Datum job_id = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull);
+			ereport(WARNING,
+					(errmsg("owner of job %d not changed", DatumGetInt32(job_id)),
+					 errdetail("Only policy jobs follow the hypertable owner."),
+					 errhint("Use REASSIGN OWNED or recreate the job to change its owner.")));
 		}
 	}
 }

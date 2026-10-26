@@ -998,6 +998,16 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 				 errhint("Untier the chunk before splitting it.")));
 	}
 
+	/*
+	 * The split clears stored column defaults, so rebuild compressed data
+	 * that relies on them.
+	 */
+	if (ts_chunk_is_compressed(chunk) && compressed_chunk_uses_missing_values(srcrel))
+	{
+		rebuild_compressed_chunk(ts_chunk_get_by_relid(relid, true));
+		chunk = ts_chunk_get_by_relid(relid, true);
+	}
+
 	Cache *hcache;
 	const Hypertable *ht =
 		ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
@@ -1172,7 +1182,10 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	if (compress_settings != NULL)
 	{
-		new_compressed_relid = create_compress_chunk(new_chunk, InvalidOid, false, NULL);
+		/* Use the compression settings of the chunk being split */
+		CompressionSettings *new_settings =
+			ts_compression_settings_materialize(compress_settings, new_chunk->fd.relid, InvalidOid);
+		new_compressed_relid = create_compress_chunk(new_chunk, InvalidOid, false, new_settings);
 	}
 
 	CommandCounterIncrement();
@@ -1206,18 +1219,14 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			   NameStr(splitdim_name));
 
 		/*
-		 * Get the attribute numbers for the primary dimension's lower- and
-		 * upper-bound metadata columns in the compressed relation. We'll use
-		 * these to get the time range of compressed segments in order to
-		 * route segments to the right result chunk.
+		 * Use the min/max metadata to get the time range of compressed
+		 * segments. First/last metadata is not a range for non-leading
+		 * orderby columns.
 		 */
-		AttrNumber lower_attno;
-		AttrNumber upper_attno;
-		orderby_sparse_metadata_attnos(compress_settings,
-									   compress_settings->fd.compress_relid,
-									   orderby_pos,
-									   &lower_attno,
-									   &upper_attno);
+		AttrNumber lower_attno =
+			get_attnum(compress_settings->fd.compress_relid, column_segment_min_name(orderby_pos));
+		AttrNumber upper_attno =
+			get_attnum(compress_settings->fd.compress_relid, column_segment_max_name(orderby_pos));
 
 		CompressedSplitPoint csp = {
 			.base = {
@@ -1228,7 +1237,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			.attnum_min = lower_attno,
 			.attnum_max = upper_attno,
 			.attnum_count = get_attnum(compress_settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME),
-			.noncompressed_tupdesc = CreateTupleDescCopy(RelationGetDescr(srcrel)),
+			.noncompressed_tupdesc = CreateTupleDescCopyConstr(RelationGetDescr(srcrel)),
 		};
 
 		csplit_relations[0] =

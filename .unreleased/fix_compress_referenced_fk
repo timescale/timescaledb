@@ -1,1 +1,0 @@
-Fixes: #10718 Fix compress_chunk failing on hypertables referenced by a foreign key
