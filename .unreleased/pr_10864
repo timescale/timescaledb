@@ -1,0 +1,1 @@
+Implements: #10864 Improve continuous aggregate refresh performance by updating the watermark once per batch

@@ -99,14 +99,14 @@ SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics') c
 SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
 FROM :CHUNK_FULL_NAME
 ORDER BY _ts_meta_min_1;
-  ctid  | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        |    _ts_meta_v2_first_time    |    _ts_meta_v2_last_time     
---------+----------------+------------------------------+------------------------------+------------------------------+------------------------------
- (0,7)  |           1000 | Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 04:20:00 2025 PST | Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 04:20:00 2025 PST
- (0,8)  |           1000 | Thu Jan 02 04:20:00 2025 PST | Thu Jan 02 12:40:00 2025 PST | Thu Jan 02 04:20:00 2025 PST | Thu Jan 02 12:40:00 2025 PST
- (0,9)  |           1000 | Thu Jan 02 12:40:00 2025 PST | Thu Jan 02 21:00:00 2025 PST | Thu Jan 02 12:40:00 2025 PST | Thu Jan 02 21:00:00 2025 PST
- (0,10) |           1000 | Thu Jan 02 21:00:00 2025 PST | Fri Jan 03 08:39:00 2025 PST | Thu Jan 02 21:00:00 2025 PST | Fri Jan 03 08:39:00 2025 PST
- (1,1)  |             41 | Fri Jan 03 08:40:00 2025 PST | Fri Jan 03 09:20:00 2025 PST | Fri Jan 03 08:40:00 2025 PST | Fri Jan 03 09:20:00 2025 PST
- (0,3)  |           1000 | Fri Jan 03 09:21:00 2025 PST | Sat Jan 04 02:00:00 2025 PST | Fri Jan 03 09:21:00 2025 PST | Sat Jan 04 02:00:00 2025 PST
+ ctid  | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        |    _ts_meta_v2_first_time    |    _ts_meta_v2_last_time     
+-------+----------------+------------------------------+------------------------------+------------------------------+------------------------------
+ (1,1) |           1000 | Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 04:20:00 2025 PST | Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 04:20:00 2025 PST
+ (1,2) |           1000 | Thu Jan 02 04:20:00 2025 PST | Thu Jan 02 12:40:00 2025 PST | Thu Jan 02 04:20:00 2025 PST | Thu Jan 02 12:40:00 2025 PST
+ (1,3) |           1000 | Thu Jan 02 12:40:00 2025 PST | Thu Jan 02 21:00:00 2025 PST | Thu Jan 02 12:40:00 2025 PST | Thu Jan 02 21:00:00 2025 PST
+ (1,4) |           1000 | Thu Jan 02 21:00:00 2025 PST | Fri Jan 03 08:39:00 2025 PST | Thu Jan 02 21:00:00 2025 PST | Fri Jan 03 08:39:00 2025 PST
+ (1,5) |             41 | Fri Jan 03 08:40:00 2025 PST | Fri Jan 03 09:20:00 2025 PST | Fri Jan 03 08:40:00 2025 PST | Fri Jan 03 09:20:00 2025 PST
+ (0,3) |           1000 | Fri Jan 03 09:21:00 2025 PST | Sat Jan 04 02:00:00 2025 PST | Fri Jan 03 09:21:00 2025 PST | Sat Jan 04 02:00:00 2025 PST
 
 -- Status should not contain UNORDERED flag
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
@@ -289,16 +289,16 @@ SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_seg
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
 FROM :SEG_CHUNK_FULL_NAME
 ORDER BY device, _ts_meta_min_1;
-  ctid  | device | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        |    _ts_meta_v2_first_time    |    _ts_meta_v2_last_time     
---------+--------+----------------+------------------------------+------------------------------+------------------------------+------------------------------
- (1,3)  | d1     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST
- (1,4)  | d1     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST
- (1,5)  | d1     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST
- (1,6)  | d1     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST
- (1,7)  | d2     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST
- (1,8)  | d2     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST
- (1,9)  | d2     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST
- (1,10) | d2     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST
+ ctid  | device | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        |    _ts_meta_v2_first_time    |    _ts_meta_v2_last_time     
+-------+--------+----------------+------------------------------+------------------------------+------------------------------+------------------------------
+ (1,3) | d1     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST
+ (1,4) | d1     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST
+ (1,5) | d1     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST
+ (1,6) | d1     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST
+ (1,7) | d2     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST
+ (2,1) | d2     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST
+ (2,2) | d2     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST
+ (2,3) | d2     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST
 
 -- status should be COMPRESSED only (UNORDERED cleared after compaction)
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_seg') chunk;
@@ -494,16 +494,16 @@ SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_des
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
 FROM :DESC_CHUNK_FULL_NAME
 ORDER BY device, _ts_meta_max_1 DESC;
-  ctid  | device | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        |    _ts_meta_v2_first_time    |    _ts_meta_v2_last_time     
---------+--------+----------------+------------------------------+------------------------------+------------------------------+------------------------------
- (1,4)  | d1     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST
- (1,5)  | d1     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST
- (1,6)  | d1     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST
- (1,7)  | d1     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST
- (1,8)  | d2     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST
- (1,9)  | d2     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST
- (1,10) | d2     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST
- (1,11) | d2     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST
+ ctid  | device | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        |    _ts_meta_v2_first_time    |    _ts_meta_v2_last_time     
+-------+--------+----------------+------------------------------+------------------------------+------------------------------+------------------------------
+ (1,4) | d1     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST
+ (1,5) | d1     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST
+ (1,6) | d1     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST
+ (2,1) | d1     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST
+ (2,2) | d2     |           1000 | Sat Jan 04 01:00:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 09:19:00 2025 PST | Sat Jan 04 01:00:00 2025 PST
+ (2,3) | d2     |           1000 | Fri Jan 03 16:40:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Sat Jan 04 00:59:00 2025 PST | Fri Jan 03 16:40:00 2025 PST
+ (2,4) | d2     |           1000 | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 16:39:00 2025 PST | Fri Jan 03 08:20:00 2025 PST
+ (2,5) | d2     |           1000 | Fri Jan 03 00:00:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 08:19:00 2025 PST | Fri Jan 03 00:00:00 2025 PST
 
 -- Status should be COMPRESSED only
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_desc') chunk;
@@ -807,8 +807,8 @@ ORDER BY device, _ts_meta_min_1;
 -------+--------+----------------+------------------------------+------------------------------+------------------------------+------------------------------+----------------+----------------+-------------------------+------------------------
  (0,5) | d1     |           1000 | Fri Jan 03 00:01:00 2025 PST | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 00:01:00 2025 PST | Fri Jan 03 08:20:00 2025 PST |              1 |           2499 |                       1 |                       
  (0,6) | d1     |           1000 | Fri Jan 03 08:21:00 2025 PST | Fri Jan 03 16:40:00 2025 PST | Fri Jan 03 08:21:00 2025 PST | Fri Jan 03 16:40:00 2025 PST |            501 |           2999 |                     501 |                       
- (0,7) | d2     |           1000 | Fri Jan 03 00:01:00 2025 PST | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 00:01:00 2025 PST | Fri Jan 03 08:20:00 2025 PST |           1001 |           3499 |                    1001 |                       
- (0,8) | d2     |           1000 | Fri Jan 03 08:21:00 2025 PST | Fri Jan 03 16:40:00 2025 PST | Fri Jan 03 08:21:00 2025 PST | Fri Jan 03 16:40:00 2025 PST |           1501 |           3999 |                    1501 |                       
+ (1,1) | d2     |           1000 | Fri Jan 03 00:01:00 2025 PST | Fri Jan 03 08:20:00 2025 PST | Fri Jan 03 00:01:00 2025 PST | Fri Jan 03 08:20:00 2025 PST |           1001 |           3499 |                    1001 |                       
+ (1,2) | d2     |           1000 | Fri Jan 03 08:21:00 2025 PST | Fri Jan 03 16:40:00 2025 PST | Fri Jan 03 08:21:00 2025 PST | Fri Jan 03 16:40:00 2025 PST |           1501 |           3999 |                    1501 |                       
 
 -- Status should be COMPRESSED only (UNORDERED cleared).
 -- NULLs in the secondary orderby column (value) just sort within the batch per
@@ -1069,9 +1069,9 @@ ORDER BY device, _ts_meta_min_1;
  ctid  | device | _ts_meta_count | _ts_meta_min_1 | _ts_meta_max_1 | _ts_meta_v2_first_value | _ts_meta_v2_last_value 
 -------+--------+----------------+----------------+----------------+-------------------------+------------------------
  (0,5) | d1     |           1000 |              1 |            800 |                         |                    800
- (0,6) | d1     |           1000 |            801 |           2999 |                     801 |                   2999
- (0,7) | d2     |           1000 |           1001 |           1800 |                         |                   1800
- (0,8) | d2     |           1000 |           1801 |           3999 |                    1801 |                   3999
+ (1,1) | d1     |           1000 |            801 |           2999 |                     801 |                   2999
+ (1,2) | d2     |           1000 |           1001 |           1800 |                         |                   1800
+ (1,3) | d2     |           1000 |           1801 |           3999 |                    1801 |                   3999
 
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_nulls_first') chunk;
  chunk_status_text 
@@ -1110,8 +1110,8 @@ ORDER BY _ts_meta_min_1 NULLS FIRST;
  ctid  | device | _ts_meta_count | _ts_meta_min_1 | _ts_meta_max_1 | _ts_meta_v2_first_value | _ts_meta_v2_last_value 
 -------+--------+----------------+----------------+----------------+-------------------------+------------------------
  (0,5) | d1     |           1000 |              1 |            800 |                         |                    800
- (0,9) | d1     |            500 |            501 |            999 |                         |                    999
- (0,6) | d1     |           1000 |            801 |           2999 |                     801 |                   2999
+ (1,4) | d1     |            500 |            501 |            999 |                         |                    999
+ (1,1) | d1     |           1000 |            801 |           2999 |                     801 |                   2999
 
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nulls_first') chunk;
               compact_chunk              
@@ -1123,11 +1123,11 @@ SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2
 FROM :NULLS_FIRST_CHUNK
 WHERE device = 'd1'
 ORDER BY _ts_meta_min_1 NULLS FIRST;
-  ctid  | device | _ts_meta_count | _ts_meta_min_1 | _ts_meta_max_1 | _ts_meta_v2_first_value | _ts_meta_v2_last_value 
---------+--------+----------------+----------------+----------------+-------------------------+------------------------
- (0,10) | d1     |           1000 |              1 |            611 |                         |                    611
- (0,11) | d1     |           1000 |            612 |           2374 |                     612 |                   2374
- (0,12) | d1     |            500 |           2376 |           2999 |                    2376 |                   2999
+ ctid  | device | _ts_meta_count | _ts_meta_min_1 | _ts_meta_max_1 | _ts_meta_v2_first_value | _ts_meta_v2_last_value 
+-------+--------+----------------+----------------+----------------+-------------------------+------------------------
+ (1,5) | d1     |           1000 |              1 |            611 |                         |                    611
+ (1,6) | d1     |           1000 |            612 |           2374 |                     612 |                   2374
+ (0,6) | d1     |            500 |           2376 |           2999 |                    2376 |                   2999
 
 -- Data integrity: NULLs from overlap merge must survive
 SELECT count(*) FROM metrics_nulls_first WHERE device = 'd1';

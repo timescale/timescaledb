@@ -1064,9 +1064,11 @@ open_next_chunk(DeferredChunkAppendState *state)
 	RawStmt *raw = linitial_node(RawStmt, parsetree);
 	List *querytree = pg_analyze_and_rewrite_fixedparams(raw, sql, NULL, 0, NULL);
 	Query *query = linitial_node(Query, querytree);
+	AtEOXact_GUC(false, save_nestlevel);
+
+	/* Plan under the caller's search_path so function bodies resolve as usual. */
 	PlannedStmt *plan =
 		pg_plan_query_compat(query, sql, CURSOR_OPT_FAST_PLAN | CURSOR_OPT_NO_SCROLL, NULL, NULL);
-	AtEOXact_GUC(false, save_nestlevel);
 
 	/* Use QueryDesc directly so we can control es_instrument. Allocate it in the
 	 * query context so it outlives the chunk. */

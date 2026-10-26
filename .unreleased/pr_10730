@@ -1,1 +1,0 @@
-Implements: #10730 Add timescaledb.cagg_refresh_stats_level to control reporting of continuous aggregate refresh statistics

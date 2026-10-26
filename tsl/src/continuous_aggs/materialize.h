@@ -56,3 +56,5 @@ void continuous_agg_update_materialization(
 	SchemaAndName materialization_table, const NameData *time_column_name,
 	InternalTimeRange materialization_range, const char *tenant_column, const char *tenant_coltype,
 	int32 raw_hypertable_id, int32 tenant_seqnum, MaterializationStats *stats);
+void continuous_agg_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
+									 const NameData *time_column_name, InternalTimeRange range);

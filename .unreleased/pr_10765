@@ -1,1 +1,0 @@
-Fixes: #10765 Allow negative day offsets for Date type in time_bucket()

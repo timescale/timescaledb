@@ -270,12 +270,14 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 		{
 			/*
-			 * If the planner injected a Result node to do projection
-			 * we can safely remove the Result node if it does not have
-			 * a one-time filter because ChunkAppend can do projection.
+			 * Replacing the child targetlist above can turn a Result node into a
+			 * no-op, remove it then. A Result that still computes expressions
+			 * must stay, since ChunkAppend reads the child output by position.
 			 */
 			if (IsA(lfirst(lc_plan), Result) &&
-				castNode(Result, lfirst(lc_plan))->resconstantqual == NULL)
+				castNode(Result, lfirst(lc_plan))->resconstantqual == NULL &&
+				tlist_same_exprs(((Plan *) lfirst(lc_plan))->targetlist,
+								 ((Plan *) lfirst(lc_plan))->lefttree->targetlist))
 			{
 				lfirst(lc_plan) = ((Plan *) lfirst(lc_plan))->lefttree;
 			}
