@@ -986,11 +986,10 @@ SET enable_partitionwise_aggregate = off;
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: (_hyper_1_1_chunk.device)::text
-   ->  Result
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Sort
-                     Sort Key: _hyper_1_1_chunk_compressed.device COLLATE "C"
-                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk_compressed.device COLLATE "C"
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
 
 -- self-join on the same hypertable
 :PREFIX SELECT m1.device, min(m1.time) FROM metrics m1 JOIN metrics m2 ON m1.device = m2.device GROUP BY m1.device ORDER BY m1.device;

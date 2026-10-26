@@ -1344,3 +1344,50 @@ SELECT count(compress_chunk(c)) FROM show_chunks('add_col_orderby') c;
 SELECT ts, v FROM add_col_orderby ORDER BY v, ts;
 SELECT count(DISTINCT v) FROM add_col_orderby;
 DROP TABLE add_col_orderby;
+
+-- plain DROP TABLE removes the compressed relations
+CREATE TABLE drop_plain (time timestamptz NOT NULL, d int, v float)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.segmentby = 'd');
+INSERT INTO drop_plain SELECT t, 1, 1
+  FROM generate_series('2024-01-01'::timestamptz, '2024-01-20', '1h') t;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_plain') c;
+CREATE TEMP TABLE drop_plain_compressed AS
+  SELECT compress_relid::oid AS relid
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid IN (SELECT show_chunks('drop_plain'));
+SELECT count(*) AS compressed_relations FROM drop_plain_compressed;
+DROP TABLE drop_plain;
+SELECT count(*) AS leftover_compressed_relations FROM pg_class
+  WHERE oid IN (SELECT relid FROM drop_plain_compressed);
+DROP TABLE drop_plain_compressed;
+
+-- drop_chunk removes the compressed relation
+CREATE TABLE drop_one (time timestamptz NOT NULL, d int, v float)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.segmentby = 'd');
+INSERT INTO drop_one SELECT t, 1, 1
+  FROM generate_series('2024-01-01'::timestamptz, '2024-01-20', '1h') t;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_one') c;
+SELECT show_chunks('drop_one') AS "DROP_ONE_CHUNK" LIMIT 1 \gset
+SELECT compress_relid::oid AS "DROP_ONE_COMPRESSED"
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid = :'DROP_ONE_CHUNK'::regclass \gset
+SELECT _timescaledb_functions.drop_chunk(:'DROP_ONE_CHUNK');
+SELECT EXISTS (SELECT FROM pg_class WHERE oid = :DROP_ONE_COMPRESSED) AS leftover_compressed_relation;
+DROP TABLE drop_one;
+
+-- drop_chunks removes the compressed relations
+CREATE TABLE drop_many (time timestamptz NOT NULL, d int, v float)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.segmentby = 'd');
+INSERT INTO drop_many SELECT t, 1, 1
+  FROM generate_series('2024-01-01'::timestamptz, '2024-01-20', '1h') t;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_many') c;
+CREATE TEMP TABLE drop_many_compressed AS
+  SELECT compress_relid::oid AS relid
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid IN (SELECT show_chunks('drop_many', older_than => '2024-01-15'::timestamptz));
+SELECT count(*) AS compressed_relations FROM drop_many_compressed;
+SELECT count(*) FROM drop_chunks('drop_many', older_than => '2024-01-15'::timestamptz);
+SELECT count(*) AS leftover_compressed_relations FROM pg_class
+  WHERE oid IN (SELECT relid FROM drop_many_compressed);
+DROP TABLE drop_many_compressed;
+DROP TABLE drop_many;

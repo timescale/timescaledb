@@ -142,7 +142,6 @@ static void free_materialization_plan(MaterializationContext *context,
 									  MaterializationPlanType plan_type);
 static void free_materialization_plans(MaterializationContext *context);
 
-static void update_watermark(MaterializationContext *context);
 static void execute_materializations(MaterializationContext *context);
 
 /*
@@ -831,24 +830,29 @@ free_materialization_plans(MaterializationContext *context)
 	}
 }
 
-static void
-update_watermark(MaterializationContext *context)
+void
+continuous_agg_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
+								const NameData *time_column_name, InternalTimeRange range)
 {
 	int res;
 	StringInfoData command;
-	Oid types[] = { context->materialization_range.type };
-	Datum values[] = { context->materialization_range.start };
+	TimeRange time_range = internal_time_range_to_time_range(range);
+	Oid types[] = { time_range.type };
+	Datum values[] = { time_range.start };
 	char nulls[] = { false };
+	int save_nestlevel = NewGUCNestLevel();
+
+	RestrictSearchPath();
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT %s FROM %s.%s AS I "
 					 "WHERE I.%s >= $1 "
 					 "ORDER BY 1 DESC LIMIT 1;",
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->materialization_table.schema)),
-					 quote_identifier(NameStr(*context->materialization_table.name)),
-					 quote_identifier(NameStr(*context->time_column_name)));
+					 quote_identifier(NameStr(*time_column_name)),
+					 quote_identifier(NameStr(*materialization_table.schema)),
+					 quote_identifier(NameStr(*materialization_table.name)),
+					 quote_identifier(NameStr(*time_column_name)));
 
 	elog(DEBUG2, "%s: %s", __func__, command.data);
 	res = SPI_execute_with_args(command.data,
@@ -864,10 +868,10 @@ update_watermark(MaterializationContext *context)
 		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
 	}
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == context->materialization_range.type,
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == time_range.type,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-		   context->materialization_range.type);
+		   time_range.type);
 
 	if (SPI_processed > 0)
 	{
@@ -876,11 +880,12 @@ update_watermark(MaterializationContext *context)
 
 		if (!isnull)
 		{
-			int64 watermark =
-				ts_time_value_to_internal(maxdat, context->materialization_range.type);
-			ts_cagg_watermark_update(context->mat_ht, watermark, isnull, false);
+			int64 watermark = ts_time_value_to_internal(maxdat, time_range.type);
+			ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
 		}
 	}
+
+	AtEOXact_GUC(false, save_nestlevel);
 }
 
 static void
@@ -948,12 +953,6 @@ execute_materializations(MaterializationContext *context)
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
-
-	/* Get the max(time_dimension) of the materialized data */
-	if (context->rows_materialized > 0 || context->rows_deleted > 0)
-	{
-		update_watermark(context);
-	}
 
 	/* Restore previous GUC values */
 	SetConfigOption("timescaledb.enable_direct_compress_insert",

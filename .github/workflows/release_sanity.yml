@@ -26,6 +26,7 @@ jobs:
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     steps:
       - name: Checkout TimescaleDB
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,6 +34,7 @@ jobs:
           repository: timescale/timescaledb
           ref: ${{ inputs.timescaledb-ref }}
           token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          fetch-depth: 0
 
       # The release branch must have the exact version the release manager
       # specified.
@@ -120,6 +122,57 @@ jobs:
               --jq '.[] | "- #\(.number) \(.title) (\(.html_url))"'
             exit 1
           fi
+
+      # Every merged PR in the release milestone must be in the release branch,
+      # either directly or as a backport (cherry-pick, backport PR or same
+      # commit title).
+      - name: Release milestone PRs are in the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          milestone_title="v${{ inputs.version }}"
+
+          milestone_number="$(
+            gh api "repos/timescale/timescaledb/milestones?state=all&per_page=100" \
+              --paginate \
+              --jq ".[] | select(.title == \"$milestone_title\") | .number" \
+              | head -n 1
+          )"
+
+          prs="$(
+            gh api "repos/timescale/timescaledb/issues?milestone=${milestone_number}&state=closed&per_page=100" \
+              --paginate \
+              --jq '.[] | select(.pull_request.merged_at != null) | .number'
+          )"
+
+          branch_titles="$(git log --format=%s HEAD)"
+          missing=0
+
+          for pr in $prs; do
+            sha="$(gh api "repos/timescale/timescaledb/pulls/${pr}" --jq '.merge_commit_sha')"
+
+            if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+              continue
+            fi
+
+            if [ -n "$(git log --format=%H -F --grep="cherry picked from commit $sha" HEAD)" ]; then
+              continue
+            fi
+
+            if grep -qE "^Backport to [^ ]+: #$pr: " <<< "$branch_titles"; then
+              continue
+            fi
+
+            title="$(gh api "repos/timescale/timescaledb/commits/${sha}" --jq '.commit.message | split("\n")[0]')"
+            if grep -qxF -- "$title" <<< "$branch_titles"; then
+              continue
+            fi
+
+            echo "::error::PR #$pr '$title' ($sha) is in milestone '$milestone_title' but not in the release branch"
+            missing=1
+          done
+
+          exit $missing
 
   regression:
     name: Regression
