@@ -58,7 +58,6 @@ teardown {
 }
 
 session "S1"
-setup { SET client_min_messages TO warning; }
 step "s1_run_update" {
    CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
 }

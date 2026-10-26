@@ -156,6 +156,14 @@ SELECT time_bucket('25 hour', DATE '2012-01-01');
 -- sub-day offset not supported for time_bucket of type Date
 SELECT time_bucket('1 day', DATE '2012-01-01', '1 hour'::interval);
 SELECT time_bucket('1 week', DATE '2012-01-01', '30 minutes'::interval);
+SELECT time_bucket('1 day', DATE '2012-01-01', '-1 hour'::interval);
+SELECT time_bucket('1 day', DATE '2012-01-01', '-12 hours'::interval);
+SELECT time_bucket('1 day', DATE '2012-01-01', '-25 hours'::interval);
+
+-- negative whole-day offsets are supported for time_bucket of type Date
+SELECT time_bucket('1 day', DATE '2012-01-05', '-1 day'::interval);
+SELECT time_bucket('1 week', DATE '2012-01-05', '-7 days'::interval);
+SELECT time_bucket('1 week', DATE '2012-01-05', '-24 hours'::interval);
 
 \set ON_ERROR_STOP 1
 

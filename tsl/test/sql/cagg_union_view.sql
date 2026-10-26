@@ -7,7 +7,7 @@
 SELECT _timescaledb_functions.stop_background_workers();
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 \set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 

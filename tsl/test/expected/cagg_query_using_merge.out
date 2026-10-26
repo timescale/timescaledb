@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Connect as superuser to use SET ROLE later
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 -- Run tests with default role
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Enable MERGE statements for continuous aggregate refresh
@@ -65,7 +65,6 @@ FROM ( select max(timec)as timeval from conditions ) as q;
  Sat Nov 03 17:00:00 2018 PDT
 
 CALL refresh_continuous_aggregate('mat_m1', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:57: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 --test first/last
 create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -81,7 +80,6 @@ FROM ( select max(timec)as timeval from conditions ) as q;
  Sat Nov 03 17:00:00 2018 PDT
 
 CALL refresh_continuous_aggregate('mat_m2', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:69: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
 as
@@ -111,11 +109,9 @@ select * from mat_m1 order by sumh, sumt, minl, timec ;
                ->  Sort
                      Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                      Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                     ->  Result
+                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                                 Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
+                           Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
 
 :EXPLAIN
 select * from regview order by timec desc;
@@ -170,11 +166,9 @@ select * from mat_m1 order by timec desc, location;
                ->  Sort
                      Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                      Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                     ->  Result
+                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                                 Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
+                           Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
 
 :EXPLAIN
 select * from mat_m1 order by location, timec desc;
@@ -195,11 +189,9 @@ select * from mat_m1 order by location, timec desc;
                ->  Sort
                      Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                      Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                     ->  Result
+                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                                 Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
+                           Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
 
 :EXPLAIN
 select * from mat_m1 order by location, timec asc;
@@ -220,11 +212,9 @@ select * from mat_m1 order by location, timec asc;
                ->  Sort
                      Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                      Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                     ->  Result
+                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                                 Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
+                           Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
 
 :EXPLAIN
 select * from mat_m1 where timec > '2018-10-01' order by timec desc;
@@ -236,12 +226,10 @@ select * from mat_m1 where timec > '2018-10-01' order by timec desc;
          ->  Sort
                Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)) DESC, _hyper_1_2_chunk.location
-               ->  Result
+               ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                      Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                           Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                           Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                           Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                     Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
    ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
          Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
          Index Cond: ((_hyper_2_4_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
@@ -270,12 +258,10 @@ select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01'
                            ->  Sort
                                  Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                  Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                                 ->  Result
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                        Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                             Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                                             Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                                       Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
 
 :EXPLAIN
 select * from mat_m2 where timec > '2018-10-01' order by timec desc;
@@ -287,12 +273,10 @@ select * from mat_m2 where timec > '2018-10-01' order by timec desc;
          ->  Sort
                Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)) DESC, _hyper_1_2_chunk.location
-               ->  Result
+               ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                      Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
-                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                           Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
-                           Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                           Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                     Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
    ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
          Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
          Index Cond: ((_hyper_3_6_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
@@ -315,12 +299,10 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
                      ->  Sort
                            Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
                            Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                           ->  Result
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
-                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
-                                       Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                                 Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                 Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
 
 :EXPLAIN
 select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc , location asc nulls first) as q limit 1;
@@ -340,12 +322,10 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
                      ->  Sort
                            Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
                            Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                           ->  Result
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
-                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
-                                       Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                                 Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                 Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
 
 --plans with CTE
 :EXPLAIN
@@ -366,12 +346,10 @@ select * from m1;
                ->  Sort
                      Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
                      Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                     ->  Result
+                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
-                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
-                                 Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                                 Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                           Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                           Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
 
 -- should reorder mat_m1 group by only based on mat_m1 order-by
 :EXPLAIN
@@ -396,11 +374,9 @@ select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec 
                      ->  Sort
                            Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
                            Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                           ->  Result
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature
-                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
-                                       Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
+                                 Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
          ->  Hash
                Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
                ->  Append
@@ -413,12 +389,10 @@ select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec 
                            ->  Sort
                                  Output: _hyper_1_2_chunk_1.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec)), _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
                                  Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec)), _hyper_1_2_chunk_1.location
-                                 ->  Result
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
                                        Output: _hyper_1_2_chunk_1.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec), _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
-                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
-                                             Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
-                                             Index Cond: ((_hyper_1_2_chunk_1.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                                       Index Cond: ((_hyper_1_2_chunk_1.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
 
 --should reorder only for mat_m1.
 :EXPLAIN
@@ -465,12 +439,10 @@ select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec
                            ->  Sort
                                  Output: _hyper_1_2_chunk_1.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec)), _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
                                  Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec)), _hyper_1_2_chunk_1.location
-                                 ->  Result
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
                                        Output: _hyper_1_2_chunk_1.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec), _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
-                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
-                                             Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
-                                             Index Cond: ((_hyper_1_2_chunk_1.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
-                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+                                       Index Cond: ((_hyper_1_2_chunk_1.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
 
 select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
  locid | location |            timec             | minl | sumt | sumh 
@@ -511,11 +483,9 @@ select * from mat_m1 order by timec desc, location;
                ->  Sort
                      Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                      Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.location
-                     ->  Result
+                     ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
-                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-                                 Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
+                           Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
 
 -----------------------------------------------------------------------
 -- Test the cagg_watermark function. The watermark gives the point
@@ -1113,9 +1083,9 @@ psql:include/cagg_query_common.sql:587: ERROR:  using offset and origin in a tim
 ---
 -- Check used timezone
 SHOW timezone;
- TimeZone 
-----------
- PST8PDT
+      TimeZone       
+---------------------
+ America/Los_Angeles
 
 -- Populate it
 INSERT INTO temperature
@@ -1303,11 +1273,8 @@ SELECT * FROM cagg_4_hours_origin;
 -- Update the last bucket and re-materialize
 INSERT INTO temperature values('2020-01-01 23:55:00 PST', 10);
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:647: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:648: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:649: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM cagg_4_hours;
          time_bucket          | max 
 ------------------------------+-----
@@ -1448,24 +1415,21 @@ psql:include/cagg_query_common.sql:686: LOG:  statement: CALL refresh_continuous
 psql:include/cagg_query_common.sql:686: DEBUG:  refreshing continuous aggregate "cagg_4_hours" from Mon Nov 24 00:00:00 4714 UTC BC to infinity
 psql:include/cagg_query_common.sql:686: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Thu Jan 02 08:00:00 2020 UTC, Thu Jan 02 20:00:00 2020 UTC ]
 psql:include/cagg_query_common.sql:686: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:686: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:687: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:687: DEBUG:  refreshing continuous aggregate "cagg_4_hours_offset" from Mon Nov 24 00:00:00 4714 UTC BC to infinity
 psql:include/cagg_query_common.sql:687: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Thu Jan 02 04:30:00 2020 UTC, Thu Jan 02 20:30:00 2020 UTC ]
 psql:include/cagg_query_common.sql:687: LOG:  merged 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:687: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:687: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:688: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:688: DEBUG:  refreshing continuous aggregate "cagg_4_hours_origin" from Mon Nov 24 00:00:00 4714 UTC BC to infinity
 psql:include/cagg_query_common.sql:688: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Thu Jan 02 05:00:00 2020 UTC, Thu Jan 02 21:00:00 2020 UTC ]
 psql:include/cagg_query_common.sql:688: LOG:  merged 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
 psql:include/cagg_query_common.sql:688: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:688: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 psql:include/cagg_query_common.sql:689: LOG:  statement: RESET client_min_messages;
-SET timezone TO 'PST8PDT';
+SET timezone TO 'America/Los_Angeles';
 -- Query the CAggs and check that all buckets are materialized
 SELECT * FROM cagg_4_hours;
          time_bucket          | max  
@@ -1644,11 +1608,8 @@ SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(
 -- Test invalidations
 TRUNCATE temperature;
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:710: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:711: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:712: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 INSERT INTO temperature
   SELECT time, 5
     FROM generate_series('2000-01-01 01:00:00 PST'::timestamptz,
@@ -1670,36 +1631,27 @@ psql:include/cagg_query_common.sql:732: DEBUG:  refreshing continuous aggregate 
 psql:include/cagg_query_common.sql:732: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577952000000000
 psql:include/cagg_query_common.sql:732: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Sat Jan 01 08:00:00 2000 UTC, Sun Jan 02 08:00:00 2000 UTC ]
 psql:include/cagg_query_common.sql:732: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:732: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 946800000000000
 psql:include/cagg_query_common.sql:732: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Wed Jan 01 08:00:00 2020 UTC, Thu Jan 02 08:00:00 2020 UTC ]
 psql:include/cagg_query_common.sql:732: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:732: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 1577952000000000
-psql:include/cagg_query_common.sql:732: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:733: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:733: DEBUG:  refreshing continuous aggregate "cagg_4_hours_offset" from Mon Nov 24 00:00:00 4714 UTC BC to infinity
 psql:include/cagg_query_common.sql:733: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577953800000000
 psql:include/cagg_query_common.sql:733: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Sat Jan 01 08:30:00 2000 UTC, Sun Jan 02 08:30:00 2000 UTC ]
 psql:include/cagg_query_common.sql:733: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:733: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 946801800000000
 psql:include/cagg_query_common.sql:733: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Wed Jan 01 04:30:00 2020 UTC, Thu Jan 02 08:30:00 2020 UTC ]
 psql:include/cagg_query_common.sql:733: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:733: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 1577953800000000
-psql:include/cagg_query_common.sql:733: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:734: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:734: DEBUG:  refreshing continuous aggregate "cagg_4_hours_origin" from Mon Nov 24 00:00:00 4714 UTC BC to infinity
 psql:include/cagg_query_common.sql:734: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577955600000000
 psql:include/cagg_query_common.sql:734: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Sat Jan 01 09:00:00 2000 UTC, Sun Jan 02 09:00:00 2000 UTC ]
 psql:include/cagg_query_common.sql:734: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:734: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 946803600000000
 psql:include/cagg_query_common.sql:734: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Wed Jan 01 05:00:00 2020 UTC, Thu Jan 02 09:00:00 2020 UTC ]
 psql:include/cagg_query_common.sql:734: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:734: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 1577955600000000
-psql:include/cagg_query_common.sql:734: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 psql:include/cagg_query_common.sql:735: LOG:  statement: RESET client_min_messages;
-SET timezone TO 'PST8PDT';
+SET timezone TO 'America/Los_Angeles';
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours;
          time_bucket          | max  
@@ -1935,7 +1887,6 @@ ORDER BY 1, 2, 3;
                  33 |      1577995200000000 |     9223372036854775807
 
 CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:791: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Jan 01 00:00:00 2000 PST, Thu Dec 31 23:59:59 2020 PST ]
 SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
@@ -2064,7 +2015,6 @@ SELECT * FROM cagg_int;
          100 |   555
 
 CALL refresh_continuous_aggregate('cagg_int', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:834: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 SELECT * FROM cagg_int;
  time_bucket | value 
 -------------+-------
@@ -2114,7 +2064,6 @@ SELECT * FROM cagg_int_offset;  -- the value 100 is part of the already serializ
           95 |   555
 
 CALL refresh_continuous_aggregate('cagg_int_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:839: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 SELECT * FROM cagg_int_offset;
  time_bucket | value 
 -------------+-------
@@ -2176,7 +2125,6 @@ psql:include/cagg_query_common.sql:853: DEBUG:  continuous aggregate refresh (in
 psql:include/cagg_query_common.sql:853: DEBUG:  building index "_hyper_38_68_chunk__materialized_hypertable_38_time_bucket_idx" on table "_hyper_38_68_chunk" serially
 psql:include/cagg_query_common.sql:853: DEBUG:  index "_hyper_38_68_chunk__materialized_hypertable_38_time_bucket_idx" can safely use deduplication
 psql:include/cagg_query_common.sql:853: LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_38"
-psql:include/cagg_query_common.sql:853: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 100, 130 ]
 RESET client_min_messages;
 psql:include/cagg_query_common.sql:854: LOG:  statement: RESET client_min_messages;
 SELECT * FROM cagg_int_offset;
@@ -2391,9 +2339,7 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestampt
 
 -- Test refresh
 CALL refresh_continuous_aggregate('cagg_1_hour_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:993: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_1_week_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-psql:include/cagg_query_common.sql:994: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- Everything should be now materailized
 ALTER MATERIALIZED VIEW cagg_1_hour_offset SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW cagg_1_week_offset SET (timescaledb.materialized_only=false);

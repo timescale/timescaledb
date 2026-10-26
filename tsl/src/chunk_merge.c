@@ -40,10 +40,12 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "compression/api.h"
 #include "debug_point.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
 #include "import/commands/cluster.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_rewrite.h"
 #include "ts_catalog/compression_chunk_size.h"
@@ -59,6 +61,8 @@ typedef struct RelationMergeInfo
 	char relpersistence;
 	bool isresult;
 	bool iscompressed_rel;
+	bool isunordered;
+	bool rebuild_compressed;
 	ItemPointerData chunk_rewrite_tid;
 	List *ind_oids_old;
 	List *ind_oids_new;
@@ -191,6 +195,12 @@ merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
 	if (ItemPointerIsValid(&result_minfo->chunk_rewrite_tid))
 	{
 		ts_chunk_rewrite_delete_by_tid(&result_minfo->chunk_rewrite_tid);
+	}
+
+	/* Batches from merged chunks may overlap, set result as UNORDERED */
+	if (result_minfo->isunordered)
+	{
+		ts_chunk_set_unordered(result_minfo->chunk);
 	}
 
 	/* Don't need to drop objects for internal compressed relations, they are
@@ -1239,10 +1249,19 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 */
 		if (ts_chunk_is_compressed(chunk))
 		{
-			Oid crelid = ts_relation_get_compressed_relid(chunk->fd.relid);
-			Relation crel = table_open(crelid, lockmode);
-			rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
-			table_close(crel, NoLock);
+			/*
+			 * The merge clears stored column defaults, so compressed data
+			 * that relies on them is rebuilt once the merge is validated.
+			 */
+			relinfo->rebuild_compressed = compressed_chunk_uses_missing_values(rel);
+
+			if (!relinfo->rebuild_compressed)
+			{
+				Oid crelid = ts_relation_get_compressed_relid(chunk->fd.relid);
+				Relation crel = table_open(crelid, lockmode);
+				rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
+				table_close(crel, NoLock);
+			}
 
 			if (mergeindex == -1)
 			{
@@ -1354,6 +1373,37 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		prev_cube = chunk->cube;
 		compute_rel_vacuum_cutoffs(relinfos[i].rel, &relinfos[i].cutoffs);
 
+		/* Need to update the index of the result (merged) relation after
+		 * resort */
+		if (relinfos[i].isresult)
+		{
+			mergeindex = i;
+		}
+	}
+
+	/* Rebuild compressed data that relies on stored column defaults */
+	for (int i = 0; i < nrelids; i++)
+	{
+		RelationMergeInfo *relinfo = &relinfos[i];
+
+		if (!relinfo->rebuild_compressed)
+		{
+			continue;
+		}
+
+		rebuild_compressed_chunk(relinfo->chunk);
+
+		MemoryContext old_mcxt = MemoryContextSwitchTo(merge_cxt);
+		relinfo->chunk = ts_chunk_get_by_relid(relinfo->relid, true);
+		MemoryContextSwitchTo(old_mcxt);
+
+		compute_rel_vacuum_cutoffs(relinfo->rel, &relinfo->cutoffs);
+	}
+
+	for (int i = 0; i < nrelids; i++)
+	{
+		const Chunk *chunk = relinfos[i].chunk;
+
 		/*
 		 * Fill in the compressed mergerelinfo array here after final sort of
 		 * rels so that the two arrays have the same order.
@@ -1371,13 +1421,6 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			compute_rel_vacuum_cutoffs(crelinfos[i].rel, &crelinfos[i].cutoffs);
 			rellocks = append_rellock(rellocks, crelinfo->rel, lockmode, merge_cxt);
 		}
-
-		/* Need to update the index of the result (merged) relation after
-		 * resort */
-		if (relinfos[i].isresult)
-		{
-			mergeindex = i;
-		}
 	}
 
 	/*
@@ -1391,9 +1434,11 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		const CompressionSettings *result_settings = NULL;
 		const Chunk *result_chunk = relinfos[mergeindex].chunk;
 
+		int nrelids_compressed = 0;
 		if (ts_chunk_is_compressed(result_chunk))
 		{
 			result_settings = ts_compression_settings_get(result_chunk->fd.relid);
+			nrelids_compressed++;
 		}
 
 		for (int i = 0; i < nrelids; i++)
@@ -1422,6 +1467,45 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 						 errhint("Decompress the affected chunks and recompress them "
 								 "with the current compression settings before merging.")));
 			}
+			nrelids_compressed++;
+			/* If we merge unordered chunks into the result chunk, set result as UNORDERED */
+			if (ts_chunk_is_unordered(chunk))
+			{
+				relinfos[mergeindex].isunordered = true;
+			}
+		}
+
+		/* Do we need to set compressed chunk result as UNORDERED because of possibly overlapping
+		 * batches in merged chunks? */
+		if (!relinfos[mergeindex].isunordered && nrelids_compressed > 1 &&
+			result_settings->fd.orderby)
+		{
+			Cache *hcache;
+			Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(result_chunk->hypertable_relid,
+																	 CACHE_FLAG_NONE,
+																	 &hcache);
+			/* If multidimensional merge is allowed and we have multiple dimensions, need to set
+			 * result as UNORDERED */
+			if (ht->fd.num_dimensions > 1)
+			{
+				relinfos[mergeindex].isunordered = true;
+			}
+			/* If 1st orderby column in compression settings is a non-time-partition column, need to
+			 * set result as UNORDERED */
+			else
+			{
+				/* We have only 1 dimension and it is time dimension */
+				const Dimension *time_dim =
+					ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+				/* Is the 1st orderby column a time dimension column? */
+				const int16 orderby_pos = ts_array_position(result_settings->fd.orderby,
+															NameStr(time_dim->fd.column_name));
+				if (orderby_pos != 1)
+				{
+					relinfos[mergeindex].isunordered = true;
+				}
+			}
+			ts_cache_release(&hcache);
 		}
 	}
 

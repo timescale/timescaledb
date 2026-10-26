@@ -716,3 +716,289 @@ COMMIT;
 SELECT * FROM merge_layout_dead ORDER BY time;
 
 DROP TABLE merge_layout_dead;
+
+-- Issue #10691: after merging compressed chunks with non-partition orderby columns
+-- the resulting chunk should be marked "unordered" as input chunks' batches may overlap
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, c1 int8 NOT NULL, c2 int8 NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '',
+                   timescaledb.compress_orderby = 'c1 DESC NULLS FIRST, ts ASC, c2 DESC');
+INSERT INTO t_10691 SELECT '2024-01-01'::timestamptz + i * interval '1 minute', (i * 7919) % 300, i
+              FROM generate_series(1, 2500) i;
+INSERT INTO t_10691 SELECT '2024-01-10'::timestamptz + i * interval '1 minute', (i * 104729) % 300, i
+              FROM generate_series(1, 2500) i;
+SET timescaledb.compression_batch_size_limit = 1000;
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+
+-- 300
+SELECT count(DISTINCT c1) FROM t_10691;
+
+-- merge the two oldest chunks by range, whatever their names
+SELECT array_agg(format('%I.%I', chunk_schema, chunk_name)::regclass) as cs
+FROM (SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 't_10691' ORDER BY range_start LIMIT 2) c \gset
+
+CALL merge_chunks(:'cs');
+
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+
+-- decompress both chunks, then compress one chunk only, then merge both chunks:
+-- result should be ordered as only one compressed chunk participates in the merge
+SELECT count(decompress_chunk(c)) FROM show_chunks('t_10691') c;
+SELECT chunk FROM show_chunks('t_10691') chunk ORDER BY 1 LIMIT 1 \gset
+SELECT FROM compress_chunk(:'chunk');
+
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+
+-- Merged chunk should be ordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+
+drop table t_10691 cascade;
+
+-- When 1st orderby column is time partition column we do not mark merged chunk UNORDERED for one-dimension merge
+-------------------------------------------------------------------------------------------------------------
+
+-- Orderby on time partition column only
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, c1 int8 NOT NULL, c2 int8 NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '',
+                   timescaledb.compress_orderby = 'ts ASC');
+INSERT INTO t_10691 SELECT '2024-01-01'::timestamptz + i * interval '1 minute', (i * 7919) % 300, i
+              FROM generate_series(1, 2500) i;
+INSERT INTO t_10691 SELECT '2024-01-10'::timestamptz + i * interval '1 minute', (i * 104729) % 300, i
+              FROM generate_series(1, 2500) i;
+SET timescaledb.compression_batch_size_limit = 1000;
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+
+-- 300
+SELECT count(DISTINCT c1) FROM t_10691;
+
+-- merge the two oldest chunks by range, whatever their names
+SELECT array_agg(format('%I.%I', chunk_schema, chunk_name)::regclass) as cs
+FROM (SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 't_10691' ORDER BY range_start LIMIT 2) c \gset
+
+CALL merge_chunks(:'cs');
+
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+
+-- Merged chunk should be ordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+
+drop table t_10691 cascade;
+
+-- 1st orderby column is time partition column, plus more orderby columns
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, c1 int8 NOT NULL, c2 int8 NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '',
+                   timescaledb.compress_orderby = 'ts, c1');
+INSERT INTO t_10691 SELECT '2024-01-01'::timestamptz + i * interval '1 minute', (i * 7919) % 300, i
+              FROM generate_series(1, 2500) i;
+INSERT INTO t_10691 SELECT '2024-01-10'::timestamptz + i * interval '1 minute', (i * 104729) % 300, i
+              FROM generate_series(1, 2500) i;
+SET timescaledb.compression_batch_size_limit = 1000;
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+
+-- 300
+SELECT count(DISTINCT c1) FROM t_10691;
+
+-- merge the two oldest chunks by range, whatever their names
+SELECT array_agg(format('%I.%I', chunk_schema, chunk_name)::regclass) as cs
+FROM (SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 't_10691' ORDER BY range_start LIMIT 2) c \gset
+
+CALL merge_chunks(:'cs');
+
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+
+-- Merged chunk should be ordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+
+drop table t_10691 cascade;
+
+-- When all orderby columns in multidimension merge are time partition or space partition columns,
+-- batches in different chunks can still overlap on space partition columns, mark the result UNORDERED
+
+-- Multi-dimension merge on batches ordered on time and space partitions
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, device int NOT NULL, temp int NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+
+DO $$ BEGIN PERFORM add_dimension('t_10691', by_hash('device', 2)); EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+INSERT INTO t_10691 VALUES
+  ('2024-01-01 01:00+00', 5, 50),
+  ('2024-01-01 02:00+00', 6, 60),
+  ('2024-01-10 01:00+00', 1, 10),
+  ('2024-01-10 02:00+00', 8, 80);
+
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'device ASC, ts DESC');
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+
+SET timescaledb.enable_merge_multidim_chunks = true;
+-- Merge every chunk into one
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+RESET timescaledb.enable_merge_multidim_chunks;
+
+SELECT device, temp FROM t_10691 ORDER BY device;
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+
+drop table t_10691 cascade;
+
+-- Multi-dimension merge on batches ordered on time partition only
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, device int NOT NULL, val int NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+
+DO $$ BEGIN PERFORM add_dimension('t_10691', by_hash('device', 2)); EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+INSERT INTO t_10691
+  SELECT '2024-01-01'::timestamptz + make_interval(mins => 2*i - 1), 1, 2*i - 1
+  FROM generate_series(1, 500) i;
+INSERT INTO t_10691
+  SELECT '2024-01-01'::timestamptz + make_interval(mins => 2*i), 2, 2*i
+  FROM generate_series(1, 500) i;
+
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'ts');
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+
+SET timescaledb.enable_merge_multidim_chunks = true;
+-- Merge every chunk into one
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+RESET timescaledb.enable_merge_multidim_chunks;
+
+SELECT val FROM t_10691 ORDER BY ts ASC LIMIT 10;
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+
+drop table t_10691 cascade;
+
+-- Flagged by LLM: When unordered and ordered chunks are merged, mark the result UNORDERED
+---------------------------------------------------------------------------------------
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, val int NOT NULL);
+
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+
+ALTER TABLE t_10691 SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = '',
+  timescaledb.compress_orderby = 'ts ASC'
+);
+
+-- Chunk A: insert and compress normally (ordered batches)
+INSERT INTO t_10691
+  SELECT '2024-01-01'::timestamptz + make_interval(hours => i), i
+  FROM generate_series(1, 50) i;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+
+-- Chunk B: use direct-compress INSERT in two separate statements
+-- to create overlapping compressed batches inside one chunk.
+SET timescaledb.enable_direct_compress_insert = true;
+
+INSERT INTO t_10691
+  SELECT '2024-01-08'::timestamptz + make_interval(hours => i), 100 + i
+  FROM generate_series(1, 50) i;
+
+INSERT INTO t_10691
+  SELECT '2024-01-08 00:30:00'::timestamptz + make_interval(hours => i), 200 + i
+  FROM generate_series(1, 50) i;
+
+-- Merge every chunk into one
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+
+-- Read the overlapping-batch region. Correct result interleaves
+-- whole-hour (val 101..150) and half-hour (val 201..250) rows.
+SELECT ts, val
+  FROM t_10691
+ WHERE ts >= '2024-01-08'
+ ORDER BY ts ASC;
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+
+drop table t_10691 cascade;
+RESET timescaledb.enable_direct_compress_insert;
+
+-- A column added with a default after compression keeps its default value
+-- when compressed chunks are merged.
+create table merge_add_col(time timestamptz not null, device int);
+select create_hypertable('merge_add_col', 'time', chunk_time_interval => interval '1 day');
+insert into merge_add_col
+select t, d from generate_series('2024-01-01'::timestamptz, '2024-01-02 23:00', '1 hour') t, generate_series(1, 3) d;
+alter table merge_add_col set (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+select count(compress_chunk(c)) from show_chunks('merge_add_col') c;
+alter table merge_add_col add column v float8 default 7;
+select count(*), min(v), max(v), count(v) from merge_add_col;
+select array_agg(c order by c) as cs from show_chunks('merge_add_col') c \gset
+call merge_chunks(:'cs');
+select count(*) from show_chunks('merge_add_col');
+select count(*), min(v), max(v), count(v) from merge_add_col;
+select count(*) from merge_add_col where v = 7;
+drop table merge_add_col;
+
+-- Compressed data that stores the values of a column added with a default
+-- is not rebuilt by a merge.
+create table merge_add_col2(time timestamptz not null, device int);
+select create_hypertable('merge_add_col2', 'time', chunk_time_interval => interval '1 day');
+insert into merge_add_col2
+select t, d from generate_series('2024-01-01'::timestamptz, '2024-01-02 23:00', '1 hour') t, generate_series(1, 3) d;
+alter table merge_add_col2 add column v float8 default 7;
+alter table merge_add_col2 set (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+select count(compress_chunk(c)) from show_chunks('merge_add_col2') c;
+select array_agg(c order by c) as cs from show_chunks('merge_add_col2') c \gset
+select array_agg(compress_relid::oid) as compress_relids_before from _timescaledb_catalog.compression_settings where relid = any(:'cs'::regclass[]) \gset
+call merge_chunks(:'cs');
+select compress_relid::oid = any(:'compress_relids_before'::oid[]) as kept_compressed_chunk from _timescaledb_catalog.compression_settings s join show_chunks('merge_add_col2') c on s.relid = c;
+select count(*), min(v), max(v), count(v) from merge_add_col2;
+drop table merge_add_col2;
+
+-- Compressed data relying on a column default is rebuilt without in-memory
+-- recompression, also in a concurrent merge.
+create table merge_add_col3(time timestamptz not null, device int);
+select create_hypertable('merge_add_col3', 'time', chunk_time_interval => interval '1 day');
+insert into merge_add_col3
+select t, d from generate_series('2024-01-01'::timestamptz, '2024-01-04 23:00', '1 hour') t, generate_series(1, 3) d;
+alter table merge_add_col3 set (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+select count(compress_chunk(c)) from show_chunks('merge_add_col3') c;
+alter table merge_add_col3 add column v float8 default 7;
+select array_agg(c order by c) as cs from show_chunks('merge_add_col3') c \gset
+set timescaledb.enable_in_memory_recompression = false;
+call merge_chunks((:'cs'::regclass[])[1:2]);
+reset timescaledb.enable_in_memory_recompression;
+select array_agg(c order by c) as cs from show_chunks('merge_add_col3') c \gset
+call merge_chunks_concurrently((:'cs'::regclass[])[2:3]);
+select count(*) from show_chunks('merge_add_col3');
+select count(*), min(v), max(v), count(v) from merge_add_col3;
+drop table merge_add_col3;
+
+-- Rebuilding compressed data that relies on a column default keeps the
+-- chunk compression settings when the hypertable settings have changed.
+create table merge_add_col4(time timestamptz not null, device int, temp float8);
+select create_hypertable('merge_add_col4', 'time', chunk_time_interval => interval '1 day');
+insert into merge_add_col4
+select t, d, d from generate_series('2024-01-01'::timestamptz, '2024-01-04 23:00', '1 hour') t, generate_series(1, 3) d;
+alter table merge_add_col4 set (timescaledb.compress, timescaledb.compress_segmentby = 'device', timescaledb.compress_orderby = 'time');
+select count(compress_chunk(c)) from show_chunks('merge_add_col4') c;
+alter table merge_add_col4 set (timescaledb.compress_orderby = 'temp, time');
+alter table merge_add_col4 add column v float8 default 7;
+select array_agg(c order by c) as cs from show_chunks('merge_add_col4') c \gset
+call merge_chunks((:'cs'::regclass[])[1:2]);
+select array_agg(c order by c) as cs from show_chunks('merge_add_col4') c \gset
+set timescaledb.enable_in_memory_recompression = false;
+call merge_chunks((:'cs'::regclass[])[2:3]);
+reset timescaledb.enable_in_memory_recompression;
+select s.orderby from _timescaledb_catalog.compression_settings s join show_chunks('merge_add_col4') c on s.relid = c order by c;
+select count(*), min(v), max(v), count(v) from merge_add_col4;
+drop table merge_add_col4;

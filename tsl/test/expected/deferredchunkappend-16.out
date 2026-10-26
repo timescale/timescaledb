@@ -1376,3 +1376,18 @@ SELECT tags FROM array_metrics WHERE tags = ARRAY['hello', 'NULL']::text[] ORDER
 
 RESET timescaledb.debug_require_deferred_chunk_append;
 RESET array_nulls;
+-- SQL function using an unqualified operator from a non-catalog schema
+CREATE FUNCTION dca_ge(int, int) RETURNS bool LANGUAGE sql IMMUTABLE AS $$ SELECT $1 >= $2 $$;
+CREATE OPERATOR public.>>>= (LEFTARG = int, RIGHTARG = int, FUNCTION = dca_ge);
+CREATE FUNCTION dca_has_access(_grant int, _val int) RETURNS bool
+  LANGUAGE sql IMMUTABLE STRICT AS $$ SELECT EXISTS (SELECT 1 WHERE _grant >>>= _val) $$;
+CREATE TABLE func_metrics (time timestamptz NOT NULL, val int NOT NULL)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO func_metrics VALUES ('2020-01-01', 1), ('2020-01-02', 5);
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+SELECT val FROM func_metrics WHERE dca_has_access(3, val) ORDER BY time DESC LIMIT 1;
+ val 
+-----
+   1
+
+RESET timescaledb.debug_require_deferred_chunk_append;

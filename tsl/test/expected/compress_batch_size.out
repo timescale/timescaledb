@@ -241,3 +241,89 @@ SELECT segment, count(*), sum(value) FROM recompress_batch_test GROUP BY segment
 
 DROP TABLE recompress_batch_test;
 RESET timescaledb.compression_batch_size_limit;
+-- Test the simple8b size estimate used by deltadelta (#10887). The
+-- zigzag-encoded delta-of-delta of v is a constant that exceeds the 36-bit
+-- RLE value field, so every row becomes its own simple8b block with its own
+-- selector. Batches of 993 to 1000 rows overflowed the temporary selector
+-- buffer, and batches of more than 1000 rows did not use the larger buffers
+-- allocated for them.
+SET timescaledb.enable_aic_compression = false;
+CREATE TABLE wide_delta(ts int, v int8)
+    WITH (tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.chunk_interval = 1000000);
+ALTER TABLE wide_delta SET (tsdb.compress, tsdb.compress_orderby = 'ts');
+NOTICE:  updated compression settings will only apply to future compressions
+INSERT INTO wide_delta SELECT x, (x::int8 * x) << 36 FROM generate_series(0, 1999) x;
+CREATE TABLE wide_delta_expected AS SELECT * FROM wide_delta;
+SET timescaledb.compression_batch_size_limit = 993;
+SELECT count(compress_chunk(x)) FROM show_chunks('wide_delta') x;
+ count 
+-------
+     1
+
+SELECT count(*) FROM ((TABLE wide_delta EXCEPT ALL TABLE wide_delta_expected)
+    UNION ALL (TABLE wide_delta_expected EXCEPT ALL TABLE wide_delta)) diff;
+ count 
+-------
+     0
+
+SELECT count(decompress_chunk(x)) FROM show_chunks('wide_delta') x;
+ count 
+-------
+     1
+
+SELECT count(*) FROM ((TABLE wide_delta EXCEPT ALL TABLE wide_delta_expected)
+    UNION ALL (TABLE wide_delta_expected EXCEPT ALL TABLE wide_delta)) diff;
+ count 
+-------
+     0
+
+SET timescaledb.compression_batch_size_limit = 1000;
+SELECT count(compress_chunk(x)) FROM show_chunks('wide_delta') x;
+ count 
+-------
+     1
+
+SELECT count(*) FROM ((TABLE wide_delta EXCEPT ALL TABLE wide_delta_expected)
+    UNION ALL (TABLE wide_delta_expected EXCEPT ALL TABLE wide_delta)) diff;
+ count 
+-------
+     0
+
+SELECT count(decompress_chunk(x)) FROM show_chunks('wide_delta') x;
+ count 
+-------
+     1
+
+SELECT count(*) FROM ((TABLE wide_delta EXCEPT ALL TABLE wide_delta_expected)
+    UNION ALL (TABLE wide_delta_expected EXCEPT ALL TABLE wide_delta)) diff;
+ count 
+-------
+     0
+
+SET timescaledb.compression_batch_size_limit = 2000;
+SELECT count(compress_chunk(x)) FROM show_chunks('wide_delta') x;
+ count 
+-------
+     1
+
+SELECT count(*) FROM ((TABLE wide_delta EXCEPT ALL TABLE wide_delta_expected)
+    UNION ALL (TABLE wide_delta_expected EXCEPT ALL TABLE wide_delta)) diff;
+ count 
+-------
+     0
+
+SELECT count(decompress_chunk(x)) FROM show_chunks('wide_delta') x;
+ count 
+-------
+     1
+
+SELECT count(*) FROM ((TABLE wide_delta EXCEPT ALL TABLE wide_delta_expected)
+    UNION ALL (TABLE wide_delta_expected EXCEPT ALL TABLE wide_delta)) diff;
+ count 
+-------
+     0
+
+DROP TABLE wide_delta;
+DROP TABLE wide_delta_expected;
+RESET timescaledb.compression_batch_size_limit;
+RESET timescaledb.enable_aic_compression;

@@ -11,7 +11,7 @@
 -- view reproduces the refresh scan. Before the fix the real-time branch was
 -- pruned only up to two levels; at three or more it re-scanned the whole
 -- un-materialized tail of the base hypertable and discarded every row.
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 SET max_parallel_workers_per_gather TO 0;
 SET client_min_messages TO WARNING;
 CREATE TABLE conditions (ts timestamptz NOT NULL, value double precision NOT NULL);

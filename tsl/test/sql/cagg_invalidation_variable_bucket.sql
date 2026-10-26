@@ -375,6 +375,26 @@ CALL refresh_continuous_aggregate('cagg_month_offset', '2024-06-01 00:00:00', '2
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_month_offset';
 
 -----------------------------------------------------------------------
+-- Test 5c: Negative offset moving bucket starts to the end of a month
+-- (#10746). Adding a month to such a bucket start falls short of the next
+-- one ('2024-02-29 21:00' + '1 month' is '2024-03-29 21:00', not
+-- '2024-03-31 21:00'), which made the batched refresh loop forever.
+-----------------------------------------------------------------------
+
+CREATE MATERIALIZED VIEW cagg_month_neg_offset
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 month'::interval, time, "offset" := INTERVAL '-3 hours') AS bucket,
+       count(*) AS cnt
+FROM offset_data
+GROUP BY 1
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('cagg_month_neg_offset', '2023-12-31 21:00:00', '2024-12-31 21:00:00');
+
+-- Buckets should start at 21:00 on the last day of each month:
+SELECT bucket, cnt FROM cagg_month_neg_offset ORDER BY bucket;
+
+-----------------------------------------------------------------------
 -- Test 5d: Offset with timezone and variable-width bucket
 -----------------------------------------------------------------------
 
@@ -612,6 +632,41 @@ ORDER BY bucket;
 
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_hier_quarterly';
 
+CREATE TABLE boundary_data (
+    time TIMESTAMPTZ NOT NULL,
+    value FLOAT
+);
+SELECT create_hypertable('boundary_data', 'time', chunk_time_interval => INTERVAL '1 year');
+
+CREATE MATERIALIZED VIEW cagg_boundary
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 day'::interval, time, 'Europe/Berlin') AS bucket,
+       count(*) AS cnt
+FROM boundary_data
+GROUP BY 1
+WITH NO DATA;
+
+INSERT INTO boundary_data
+SELECT ts, 1.0
+FROM generate_series('2024-06-01 00:00:00+02'::timestamptz,
+                     '2024-06-10 12:00:00+02'::timestamptz,
+                     '12 hours'::interval) ts;
+
+CALL refresh_continuous_aggregate('cagg_boundary', NULL, NULL);
+SELECT bucket, cnt FROM cagg_boundary
+WHERE bucket >= '2024-06-04 00:00:00+02' AND bucket < '2024-06-09 00:00:00+02'
+ORDER BY bucket;
+
+INSERT INTO boundary_data VALUES ('2024-06-05 09:00:00+02', 111.0),
+                                 ('2024-06-08 00:00:00+02', 222.0);
+
+SELECT * FROM hyper_inval_log WHERE hypertable = 'boundary_data';
+
+CALL refresh_continuous_aggregate('cagg_boundary', NULL, NULL);
+SELECT bucket, cnt FROM cagg_boundary
+WHERE bucket >= '2024-06-04 00:00:00+02' AND bucket < '2024-06-09 00:00:00+02'
+ORDER BY bucket;
+
 DROP MATERIALIZED VIEW cagg_hier_quarterly;
 DROP TABLE monthly_data CASCADE;
 DROP TABLE yearly_data CASCADE;
@@ -622,6 +677,7 @@ DROP TABLE offset_tz_data CASCADE;
 DROP TABLE origin_data CASCADE;
 DROP TABLE origin_tz_data CASCADE;
 DROP TABLE hier_data CASCADE;
+DROP TABLE boundary_data CASCADE;
 
 DROP VIEW hyper_inval_log;
 DROP VIEW cagg_inval_log;

@@ -407,6 +407,12 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 
 	Assert(top_append != NULL);
 
+	/* Can't push the aggregation below Gather if it is not parallel safe */
+	if (top_gather != NULL && !partially_grouped_rel->consider_parallel)
+	{
+		return;
+	}
+
 	if (list_length(subpaths) < 2)
 	{
 		/*
@@ -673,7 +679,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	/* Construct partial group agg upper relation */
 	RelOptInfo *partially_grouped_rel =
 		fetch_upper_rel(root, UPPERREL_PARTIAL_GROUP_AGG, input_rel->relids);
-	partially_grouped_rel->consider_parallel = input_rel->consider_parallel;
+	partially_grouped_rel->consider_parallel = output_rel->consider_parallel;
 	partially_grouped_rel->consider_startup = input_rel->consider_startup;
 	partially_grouped_rel->reloptkind = input_rel->reloptkind;
 	partially_grouped_rel->serverid = input_rel->serverid;
