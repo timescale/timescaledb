@@ -1,1 +1,0 @@
-Fixes: #10747 Fix wrong query results from ColumnarIndexScan on rescan with changed parameters

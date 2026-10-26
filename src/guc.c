@@ -84,7 +84,7 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
-TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit = 30000;
+TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit = 0;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
@@ -140,6 +140,7 @@ TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
+TSDLLEXPORT bool ts_guc_enable_aic_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = TARGET_COMPRESSED_BATCH_SIZE;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
@@ -596,7 +597,7 @@ _guc_init(void)
 							"large amounts of uncompressed data in a single transaction. "
 							"Setting this to 0 would make it unlimited.",
 							&ts_guc_move_to_columnstore_tuple_sort_limit,
-							30000,
+							0,
 							0,
 							2147483647,
 							PGC_USERSET,
@@ -1235,6 +1236,17 @@ _guc_init(void)
 							 "Enable uuid compression functionality",
 							 "Enable uuid compression",
 							 &ts_guc_enable_uuid_compression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_aic_compression"),
+							 "Enable adaptive integer compression (AIC) functionality",
+							 "Enable adaptive integer compression (AIC)",
+							 &ts_guc_enable_aic_compression,
 							 true,
 							 PGC_USERSET,
 							 0,
