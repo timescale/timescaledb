@@ -530,16 +530,18 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 
 	if (bucket_function->bucket_fixed_interval == false)
 	{
-		ts_compute_circumscribed_bucketed_refresh_window_variable(&inv->lowest_modified_value,
-																  &inv->greatest_modified_value,
-																  bucket_function);
-		/* ts_compute_circumscribed_bucketed_refresh_window_variable returns the start of the
-		 * next bucket as the end (exclusive). Since invalidations are inclusive at both ends,
+		inv->lowest_modified_value =
+			ts_cagg_variable_current_bucket_start(inv->lowest_modified_value, bucket_function);
+
+		/* ts_cagg_variable_next_bucket_start returns the start of the
+		 * next bucket. Since invalidations are inclusive at both ends,
 		 * subtract 1 to get the last value of the current bucket (inclusive).
 		 * Don't adjust infinity values. */
 		if (inv->greatest_modified_value != INVAL_POS_INFINITY &&
 			inv->greatest_modified_value != INVAL_NEG_INFINITY)
 		{
+			inv->greatest_modified_value =
+				ts_cagg_variable_next_bucket_start(inv->greatest_modified_value, bucket_function);
 			inv->greatest_modified_value = int64_saturating_sub(inv->greatest_modified_value, 1);
 		}
 		return;

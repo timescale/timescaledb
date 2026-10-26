@@ -5,18 +5,12 @@
  */
 
 /*
- * Currently we finish the execution of some process utility statements
- * and don't execute other hooks in the chain.
+ * Optional callbacks let a provider explicitly record operations executed by
+ * TimescaleDB, including hypertable COPY FROM and background job executions.
+ * Utility hooks may also observe COPY FROM, depending on the loader version and
+ * hook order; callback reporting is independent of that path.
  *
- * Because that reason neither ts_stat_statements and pg_stat_statements
- * are able to track some utility statements, for example COPY ... FROM.
- *
- * To be able to track it on ts_stat_statements here we introduce some
- * callbacks in order to hook pgss_store from TimescaleDB and store
- * information about the execution of those statements.
- *
- * Hooking ts_stat_statements from TimescaleDB is controlled by a new GUC
- * named `enable_tss_callbacks`.
+ * Callback use is controlled by the enable_tss_callbacks GUC.
  */
 
 #include <postgres.h>
@@ -66,16 +60,15 @@ ts_is_tss_enabled(void)
 			{
 				ereport(WARNING,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("version mismatch between timescaledb and ts_stat_statements "
-								"callbacks"),
-						 errdetail("Callbacks versions: TimescaleDB (%d) and ts_stat_statements "
-								   "(%d)",
-								   TSS_CALLBACKS_VERSION,
-								   ptr->version_num)));
+						 errmsg("statement-tracking callback version mismatch"),
+						 errdetail("Expected callback version " INT64_FORMAT
+								   "; provider version " INT64_FORMAT ".",
+								   (int64) TSS_CALLBACKS_VERSION,
+								   (int64) ptr->version_num)));
 				return false;
 			}
 
-			return ptr->tss_enabled_hook_type(0); /* consider top level statement */
+			return ptr->tss_enabled(0); /* consider top level statement */
 		}
 	}
 
