@@ -111,7 +111,7 @@ mkdir -p "${OUTPUT_DIR}"
 rm -rf "${OUTPUT_DIR}/data"
 mkdir -p "${OUTPUT_DIR}/data"
 
-UNIX_SOCKET_DIR=$(readlink -f "${OUTPUT_DIR}")
+UNIX_SOCKET_DIR=/tmp
 
 initdb > "${OUTPUT_DIR}/initdb.log" 2>&1
 

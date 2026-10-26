@@ -30,8 +30,8 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
-        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -41,16 +41,16 @@ jobs:
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
-          || github.event_name == 'workflow_call'
+          || inputs['timescaledb-ref'] != ''
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
-          ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
+          repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+          ref: ${{ inputs['timescaledb-ref'] || github.ref }}
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        if: github.event_name != 'workflow_call'
+        if: inputs['timescaledb-ref'] == ''
         id: filter
         with:
           filters: .github/filters.yaml
@@ -148,8 +148,8 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
-        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.

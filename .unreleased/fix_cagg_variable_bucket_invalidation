@@ -1,0 +1,4 @@
+Fixes: #10296, #10745 Fix continuous aggregate refresh skipping the last invalidated bucket for variable-sized buckets
+Thanks: @JoongHyuk-Shin for fixing continuous aggregate refresh skipping the last invalidated bucket for variable-width buckets
+Thanks: @martin-omacht for reporting missing and stale buckets in a continuous aggregate with a timezone
+Thanks: @salmanazmat666 for reporting the continuous aggregate refresh skipping the last bucket on a variable-width bucket boundary
