@@ -51,8 +51,7 @@ simple8brle_bitarray_decompress(Simple8bRleSerialized *compressed, bool inverted
 
 	const uint32 num_elements = compressed->num_elements;
 
-	const uint32 num_selector_slots =
-		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
+	const uint32 num_selector_slots = SIMPLE8B_NUM_SELECTORS_FOR_NBLOCKS(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
 	const uint32 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
