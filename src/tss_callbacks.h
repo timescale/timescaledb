@@ -5,22 +5,27 @@
  */
 #pragma once
 
-#define TSS_CALLBACKS_VAR_NAME "tss_callbacks"
-#define TSS_CALLBACKS_VERSION 1
+#include <stdbool.h>
+#include <stdint.h>
 
-/* ts_stat_statements -> pgss_store */
+/* Keep the legacy declarations below aligned with the external provider. */
+#define TSS_CALLBACKS_VAR_NAME "tss_callbacks"
+#define TSS_CALLBACKS_VERSION INT64_C(1)
+
+struct BufferUsage;
+struct WalUsage;
+
 typedef void (*tss_store_hook_type)(const char *query, int query_location, int query_len,
-									uint64 query_id, uint64 total_time, uint64 rows,
-									const BufferUsage *bufusage, const WalUsage *walusage);
-/* ts_stat_statements -> pgss_enabled */
+									uint64_t query_id, uint64_t total_time, uint64_t rows,
+									const struct BufferUsage *bufusage,
+									const struct WalUsage *walusage);
 typedef bool (*tss_enabled_hook_type)(int level);
 
-/* ts_stat_statements callbacks */
 typedef struct TSSCallbacks
 {
-	uint32_t version_num;
+	int64_t version_num;
 	tss_store_hook_type tss_store_hook;
-	tss_enabled_hook_type tss_enabled_hook_type;
+	tss_enabled_hook_type tss_enabled;
 } TSSCallbacks;
 
 extern bool ts_is_tss_enabled(void);

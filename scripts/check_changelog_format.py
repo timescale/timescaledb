@@ -70,6 +70,7 @@ def is_valid_line(line):
         r"^Implements:\s#[0-9]+.*$",
         r"^Thanks:\s.*$",
         r"^Backward-Incompatible Change:\s#[0-9]+.*$",
+        r"^Loader:\s#[0-9]+.*$",
         r"^Setting:\s.*$",
     ]
     for pattern in patterns:

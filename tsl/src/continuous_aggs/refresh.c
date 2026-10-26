@@ -40,6 +40,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
 #include "ts_catalog/continuous_aggs_tenant_tracking.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include "ts_catalog/hypertable_cagg_settings.h"
 
 #define CAGG_REFRESH_LOG_LEVEL (context->options.callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1)
@@ -58,6 +59,7 @@ typedef struct ContinuousAggMaterializationState
 	int32 raw_hypertable_id;
 	/*materialization stats, accumulated through the whole refresh, across batches*/
 	MaterializationStats *mat_stats;
+	int64 saved_watermark;
 } ContinuousAggMaterializationState;
 
 typedef struct CaggRefreshSpiContext
@@ -484,6 +486,7 @@ continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh, const Co
 	refresh->partial_view.schema = &refresh->cagg.data.partial_view_schema;
 	refresh->partial_view.name = &refresh->cagg.data.partial_view_name;
 	refresh->raw_hypertable_id = cagg->data.raw_hypertable_id;
+	refresh->saved_watermark = ts_cagg_watermark_get(cagg->data.mat_hypertable_id);
 
 	/*
 	 * When the cagg has granular refresh enabled, resolve its tenant-tracking
@@ -643,6 +646,10 @@ continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh
 		(const ContinuousAggMaterializationState *) arg1_refresh;
 	(void) iteration;
 
+	/* The watermark update after the batch relies on this */
+	Assert(bucketed_refresh_window->start >= refresh->refresh_window.start &&
+		   bucketed_refresh_window->end <= refresh->refresh_window.end);
+
 	log_refresh_window(CAGG_REFRESH_LOG_LEVEL, &refresh->cagg, bucketed_refresh_window, context);
 	continuous_agg_refresh_execute(refresh, bucketed_refresh_window, seqnum);
 }
@@ -760,6 +767,21 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 													  continuous_agg_refresh_execute_wrapper,
 													  (void *) &refresh /* arg1 */);
 	Assert(count);
+
+	/* The watermark only moves forward, so update only if current refresh window > old watermark */
+	if (refresh_window->end > refresh.saved_watermark)
+	{
+		const Dimension *time_dim = hyperspace_get_open_dimension(refresh.cagg_ht->space, 0);
+		SchemaAndName cagg_hypertable_name = {
+			.schema = &refresh.cagg_ht->fd.schema_name,
+			.name = &refresh.cagg_ht->fd.table_name,
+		};
+
+		continuous_agg_update_watermark(refresh.cagg_ht,
+										cagg_hypertable_name,
+										&time_dim->fd.column_name,
+										*refresh_window);
+	}
 }
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"

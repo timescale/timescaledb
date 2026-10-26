@@ -12,7 +12,10 @@ SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 SET timescaledb.enable_direct_compress_copy_sort_batches = false;
 -- simple test with compressed copy enabled and without batch sorting
 BEGIN;
+-- this is really slow on windows so disable statement timeout for the copy
+SET statement_timeout = 0;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+SET statement_timeout TO '60s';
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
 ROLLBACK;
