@@ -2122,17 +2122,17 @@ _ts_meta_min_1|1
 _ts_meta_max_1|1
 _ts_meta_v2_first_ts|1
 _ts_meta_v2_last_ts|1
-ts|BAAAAAAAAAAAAQAAAAAAAAABAAAAAQAAAAEAAAAAAAAAAgAAAAAAAAAC
+ts|CAQAAQAAAAEIAAAAAQ==
 regress-test-bloom_x|\x0110010004004400
 x|AQBwZ19jYXRhbG9nAHRleHQAAAEAAAABAAAACXRlc3QgdGV4dA==
 regress-test-bloom_u|\x0004400104004010
 u|AQBwZ19jYXRhbG9nAHV1aWQAAAEAAAABAAAAEJDsno5FAUIynQNtfPYTKBU=
 regress-test-bloom_d|\x4500000005100000
-d|BAAAAAAAAAAd9wAAAAAAAB33AAAAAQAAAAEAAAAAAAAACwAAAAAAADvu
+d|CAQAAQAAAAEQAAAA9x0=
 regress-test-bloom_i4|\x0000080280002880
-i4|BAAAAAAAAAAFmwAAAAAAAAWbAAAAAQAAAAEAAAAAAAAACgAAAAAAAAs2
+i4|CAQAAQAAAAEQAAAAmwU=
 regress-test-bloom_i8|\x0100140040000110
-i8|BAAAAAAG////+QAAAAb////5AAAAAQAAAAEAAAAAAAAADwAAAB3////y
+i8|CAYAAQAAAAEoAAAA+f///wY=
 \pset format aligned
 \pset expanded off
 DROP TABLE hashes CASCADE;
@@ -2181,3 +2181,42 @@ SELECT count(*) FROM int2_crosstype WHERE i2 = 1::bigint AND i4 = 1;
     50
 
 DROP TABLE int2_crosstype;
+-- renaming a column in a chunk composite bloom that the hypertable no longer has
+create table rename_bloom(ts int, a int, b int, v float);
+select create_hypertable('rename_bloom', 'ts', create_default_indexes=>false);
+     create_hypertable      
+----------------------------
+ (24,public,rename_bloom,t)
+
+insert into rename_bloom select x, x % 100, x % 7, x from generate_series(1, 5000) x;
+alter table rename_bloom set (
+    timescaledb.compress,
+    timescaledb.order_by='ts',
+    timescaledb.segment_by='',
+    timescaledb.compress_index = 'bloom(a,b)');
+select count(compress_chunk(x)) from show_chunks('rename_bloom') x;
+ count 
+-------
+     1
+
+alter table rename_bloom set (timescaledb.compress_index = 'minmax(v)');
+NOTICE:  updated compression settings will only apply to future compressions
+alter table rename_bloom rename a to a2;
+select relname,attname from metacols where relname = 'rename_bloom' order by 1,2;
+   relname    |           attname            
+--------------+------------------------------
+ rename_bloom | _ts_meta_count
+ rename_bloom | _ts_meta_max_1
+ rename_bloom | _ts_meta_min_1
+ rename_bloom | regress-test-bloom_9309_a2_b
+ rename_bloom | _ts_meta_v2_first_ts
+ rename_bloom | _ts_meta_v2_last_ts
+
+explain (buffers off, costs off) select * from rename_bloom where a2 = 5 and b = 3;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_24_35_chunk
+   Vectorized Filter: ((a2 = 5) AND (b = 3))
+   ->  Seq Scan on _hyper_24_35_chunk_compressed
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9309_a2_b, TEST-HASHES::bigint[])
+
+drop table rename_bloom;

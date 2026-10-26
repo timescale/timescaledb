@@ -156,9 +156,9 @@ SELECT (_timescaledb_functions.compressed_data_info(time)).algorithm AS time,
     (_timescaledb_functions.compressed_data_info(amount)).algorithm AS amount,
     (_timescaledb_functions.compressed_data_info(note)).algorithm AS note
 FROM :compressed_chunk WHERE device = 0;
-    time    |    seq     |  temp   | flag |  id   | label |   status   | amount | note 
-------------+------------+---------+------+-------+-------+------------+--------+------
- DELTADELTA | DELTADELTA | GORILLA | BOOL | ARRAY | ARRAY | DICTIONARY | ARRAY  | NULL
+ time | seq |  temp   | flag |  id   | label |   status   | amount | note 
+------+-----+---------+------+-------+-------+------------+--------+------
+ AIC  | AIC | GORILLA | BOOL | ARRAY | ARRAY | DICTIONARY | ARRAY  | NULL
 
 -- Each statement decompresses a different batch: a row-by-row match on the
 -- numeric key, a vectorized match on the array text, on the dictionary text and
