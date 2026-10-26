@@ -1,2 +1,0 @@
-Fixes: #10804 Fix parallel chunkwise aggregation with parallel-unsafe aggregate expressions
-Thanks: @hyeokhee for reporting an error with parallel chunkwise aggregation and subqueries in aggregates
