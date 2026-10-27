@@ -817,7 +817,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	}
 
 	/*
-	 * var = expr implies bloom1_contains(var_bloom, expr).
+	 * var = expr implies bloom1_contains_any_hashes(var_bloom, array[bloom1_hash(expr)]).
 	 */
 	Var *bloom_var = makeVar(context->compressed_rel->relid,
 							 bloom1_attno,
@@ -1135,7 +1135,8 @@ extract_var_for_composite_bloom(OpExpr *opexpr, QualPushdownContext *context, Ex
 
 /*
  * Scan baserestrictinfo for composite bloom opportunities.
- * For each applicable composite bloom, generate bloom1_contains(bloom, ROW(...)).
+ * For each applicable composite bloom, generate
+ * bloom1_contains_any_hashes(bloom, array[bloom1_hash(ROW(...))]).
  *
  * Scans predicates first, then parses settings only if needed.
  */
@@ -1325,7 +1326,7 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 			continue;
 		}
 
-		/* Build bloom1_contains(composite_bloom, ROW(...)) */
+		/* Build bloom1_contains_any_hashes(composite_bloom, array[bloom1_hash(ROW(...))]) */
 		Var *bloom_var = makeVar(context->compressed_rel->relid,
 								 composite_attno,
 								 ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
