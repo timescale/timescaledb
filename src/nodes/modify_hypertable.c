@@ -251,6 +251,15 @@ modify_hypertable_init_child_plan_states(CustomScanState *node)
 	outerPlanState(modify_table_state) = subplan_state;
 	outerPlan(modify_table_state->ps.plan) = subplan_state->plan;
 
+	/*
+	 * ExecInitModifyTable() set up EvalPlanQual with the dummy Result, so
+	 * rechecking a concurrently updated row would never find it. Use the
+	 * real subplan instead.
+	 */
+	EvalPlanQualSetPlan(&modify_table_state->mt_epqstate,
+						modify_hypertable_state->deferred_modify_table_subplan,
+						modify_table_state->mt_epqstate.arowMarks);
+
 	modify_hypertable_state->deferred_modify_table_subplan = NULL;
 
 	if (modify_table_state->operation == CMD_INSERT || modify_table_state->operation == CMD_MERGE)
