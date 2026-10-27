@@ -1,0 +1,1 @@
+Fixes: #10075 Removing the bloom1_contains function and rejecting anonymous record arrays in bloom1_contains_any
