@@ -3,6 +3,7 @@ set(TEST_FILES
     insert_dropchunks_race.spec
     isolation_nop.spec
     read_committed_insert.spec
+    read_committed_update.spec
     read_uncommitted_insert.spec
     repeatable_read_insert.spec
     serializable_insert_rollback.spec
