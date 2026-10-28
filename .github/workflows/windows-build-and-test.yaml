@@ -22,7 +22,7 @@ name: Regression Windows
         type: string
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest_win }}
@@ -48,7 +48,7 @@ jobs:
         fi
 
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -434,7 +434,7 @@ jobs:
     name: Regression Windows summary
     needs: [check_paths, build]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

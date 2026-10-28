@@ -13,7 +13,7 @@ name: "timescaledb-extras diagnostic"
 jobs:
   diagnostic_test:
     name: timescaledb-extras PG${{ matrix.pg }} nightly
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
     services:
       ts:
         image: timescaledev/timescaledb:nightly-pg${{ matrix.pg }}

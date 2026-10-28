@@ -20,7 +20,7 @@ permissions:
 jobs:
   docs:
     name: Post Release Ceremonies
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
 
     steps:
       - name: Generate list of GUCs for docs
