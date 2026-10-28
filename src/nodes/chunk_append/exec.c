@@ -591,10 +591,6 @@ init_subplans(ChunkAppendState *state, EState *estate, int eflags)
 	if (state->runtime_exclusion_parent || state->runtime_exclusion_children)
 	{
 		state->params = state->subplan_states[0]->plan->allParam;
-		/*
-		 * make sure all params are initialized for runtime exclusion
-		 */
-		state->csstate.ss.ps.chgParam = bms_copy(state->subplan_states[0]->plan->allParam);
 	}
 }
 
