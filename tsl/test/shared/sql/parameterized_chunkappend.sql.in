@@ -68,3 +68,11 @@ where time is not null or (select name from devices limit 1) > '1'
 order by metrics_compressed limit 1
 ;
 
+
+-- ChunkAppend as InitPlan
+select v0 from metrics_compressed where exists (
+    select 1 from metrics_compressed
+    where device_id = (select max(device_id) from metrics_compressed)
+) or v0 is null
+;
+
