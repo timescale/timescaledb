@@ -110,9 +110,56 @@ order by metrics_compressed limit 1
        0
 
 -- ChunkAppend as InitPlan
+:PREFIX
 select v0 from metrics_compressed where exists (
     select 1 from metrics_compressed
     where device_id = (select max(device_id) from metrics_compressed)
 ) or v0 is null
 ;
-ERROR:  extParam set of initplan is empty
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on metrics_compressed (actual rows=68370.00 loops=1)
+   Hypertables excluded during runtime: 0
+   InitPlan 3
+     ->  Custom Scan (ChunkAppend) on metrics_compressed metrics_compressed_2 (actual rows=1.00 loops=1)
+           Hypertables excluded during runtime: 0
+           InitPlan 2
+             ->  Result (actual rows=1.00 loops=1)
+                   InitPlan 1
+                     ->  Limit (actual rows=1.00 loops=1)
+                           ->  Merge Append (actual rows=1.00 loops=1)
+                                 Sort Key: metrics_compressed_1.device_id DESC
+                                 ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=1.00 loops=1)
+                                       ->  Index Scan Backward using _hyper_X_X_chunk_compressed_device_id__ts_meta_min_1__ts_m_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=1)
+                                             Index Cond: (device_id IS NOT NULL)
+                                 ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=1.00 loops=1)
+                                       Index Cond: (device_id IS NOT NULL)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=1.00 loops=1)
+                                       ->  Index Scan Backward using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=1)
+                                             Index Cond: (device_id IS NOT NULL)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=1.00 loops=1)
+                                       ->  Index Scan Backward using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=1)
+                                             Index Cond: (device_id IS NOT NULL)
+           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_2 (actual rows=1.00 loops=1)
+                 ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_2 (actual rows=1.00 loops=1)
+                       Filter: (device_id = (InitPlan 2).col1)
+                       Rows Removed by Filter: 14
+           ->  Seq Scan on _hyper_X_X_chunk _hyper_X_X_chunk_2 (never executed)
+                 Filter: (device_id = (InitPlan 2).col1)
+           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_2 (never executed)
+                 ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_2 (never executed)
+                       Filter: (device_id = (InitPlan 2).col1)
+           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_2 (never executed)
+                 ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_2 (never executed)
+                       Filter: (device_id = (InitPlan 2).col1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=16392.00 loops=1)
+         Filter: ((InitPlan 3).col1 OR (v0 IS NULL))
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=18.00 loops=1)
+   ->  Seq Scan on _hyper_X_X_chunk (actual rows=1598.00 loops=1)
+         Filter: ((InitPlan 3).col1 OR (v0 IS NULL))
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=25190.00 loops=1)
+         Filter: ((InitPlan 3).col1 OR (v0 IS NULL))
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=30.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=25190.00 loops=1)
+         Filter: ((InitPlan 3).col1 OR (v0 IS NULL))
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=30.00 loops=1)
+
