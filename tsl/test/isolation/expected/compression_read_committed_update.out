@@ -1,0 +1,44 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1_begin s1_update s2_update s1_commit s3_select
+step s1_begin: BEGIN;
+step s1_update: UPDATE hyper SET val = val + 1 WHERE dev = 2;
+step s2_update: UPDATE hyper SET val = val + 1 WHERE dev = 2 RETURNING id, dev, val; <waiting ...>
+step s1_commit: COMMIT;
+step s2_update: <... completed>
+id|dev|val
+--+---+---
+10|  2|  3
+
+step s3_select: SELECT id, dev, val FROM hyper ORDER BY id;
+id|dev|val
+--+---+---
+ 0|  0|  1
+ 1|  1|  1
+ 2|  0|  1
+ 3|  1|  1
+ 4|  0|  1
+ 5|  1|  1
+10|  2|  3
+
+
+starting permutation: s1_begin s1_update s2_delete s1_commit s3_select
+step s1_begin: BEGIN;
+step s1_update: UPDATE hyper SET val = val + 1 WHERE dev = 2;
+step s2_delete: DELETE FROM hyper WHERE dev = 2 RETURNING id, dev, val; <waiting ...>
+step s1_commit: COMMIT;
+step s2_delete: <... completed>
+id|dev|val
+--+---+---
+10|  2|  2
+
+step s3_select: SELECT id, dev, val FROM hyper ORDER BY id;
+id|dev|val
+--+---+---
+ 0|  0|  1
+ 1|  1|  1
+ 2|  0|  1
+ 3|  1|  1
+ 4|  0|  1
+ 5|  1|  1
+
