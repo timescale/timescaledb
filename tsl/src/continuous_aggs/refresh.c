@@ -17,10 +17,12 @@
 #include <utils/date.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/json.h>
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
 
+#include "bgw/job_stat_history.h"
 #include "bgw_policy/policies_v2.h"
 #include "debug_point.h"
 #include "dimension.h"
@@ -787,6 +789,83 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 
 /*
+ * Record a count of a refresh in the execution history of the job that ran it.
+ */
+static void
+cagg_refresh_stats_record_count(const char *key, int64 count)
+{
+	JsonbValue value;
+
+	ts_jsonb_set_value_by_type(&value, INT8OID, Int64GetDatum(count));
+	ts_bgw_job_execution_set_info(key, &value);
+}
+
+/*
+ * Record a boundary of the range a refresh processed so far in the execution
+ * history of the job that ran it.
+ *
+ * The boundary is reported in the time type of the refreshed hypertable, so
+ * integer based ranges show up as JSON numbers. The timestamp types are
+ * rendered as ISO-8601 strings, the same representation `to_jsonb` produces,
+ * so that the value does not depend on the DateStyle of the background worker
+ * that happened to run the refresh.
+ */
+static void
+cagg_refresh_stats_record_boundary(const char *key, Oid range_type, int64 boundary)
+{
+	JsonbValue value;
+	Datum datum = ts_internal_to_time_value(boundary, range_type);
+
+	switch (range_type)
+	{
+		case DATEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+		{
+			char *str = JsonEncodeDateTime(NULL, datum, range_type, NULL);
+
+			value.type = jbvString;
+			value.val.string.val = str;
+			value.val.string.len = strlen(str);
+			break;
+		}
+
+		default:
+			ts_jsonb_set_value_by_type(&value, range_type, datum);
+			break;
+	}
+
+	ts_bgw_job_execution_set_info(key, &value);
+}
+
+/*
+ * Collect what a refresh did so far in the execution history of the job that
+ * runs it.
+ *
+ * Called after each batch, so that a job that fails in a later batch still
+ * shows how far it got. The batches commit individually, so what is collected
+ * was committed. Nothing is collected until a batch materialized something, so
+ * an up-to-date refresh leaves no information.
+ */
+static void
+cagg_refresh_stats_collect(int32 job_id, const CaggRefreshStats *stats)
+{
+	/* Only jobs have an execution history, manual refreshes don't have a job id */
+	if (job_id <= 0)
+	{
+		return;
+	}
+
+	cagg_refresh_stats_record_count("total_batches", stats->total_batches);
+	cagg_refresh_stats_record_count("batches_processed", stats->batches_processed);
+	cagg_refresh_stats_record_boundary("range_start", stats->range_type, stats->range_start);
+	cagg_refresh_stats_record_boundary("range_end", stats->range_type, stats->range_end);
+	cagg_refresh_stats_record_count("rows_materialized",
+									(int64) stats->mat_stats.rows_materialized);
+	cagg_refresh_stats_record_count("rows_deleted", (int64) stats->mat_stats.rows_deleted);
+}
+
+/*
  * Report what a refresh did.
  */
 static void
@@ -875,6 +954,9 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 
 	context->execution.number_of_batches = list_length(refresh_window_list);
 
+	stats.total_batches = context->execution.number_of_batches;
+	stats.range_type = refresh_window->type;
+
 	/*
 	 * The list is always built oldest-first. When refresh_newest_first is true we
 	 * iterate from the last element down to the first using index-based access so
@@ -930,6 +1012,15 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 														 context,
 														 apply_extend,
 														 &stats.mat_stats);
+
+		stats.batches_processed = context->execution.processing_batch;
+		stats.range_start = processed_range_start;
+		stats.range_end = processed_range_end;
+		if (any_refreshed)
+		{
+			cagg_refresh_stats_collect(context->options.job_id, &stats);
+		}
+
 		DEBUG_ERROR_INJECTION(
 			psprintf("cagg_policy_batch_%d_after_refresh", context->execution.processing_batch));
 
