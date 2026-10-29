@@ -420,6 +420,7 @@ elif len(sys.argv) > 2:
                         "pginstallcheck": False,
                         "valgrind": True,
                         "extra_packages": "clang llvm llvm-dev valgrind",
+                        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DTEST_TIMEOUT=600",
                         "pg_extra_args": (
                             "--enable-debug --enable-cassert "
                             "--with-llvm LLVM_CONFIG=llvm-config "
