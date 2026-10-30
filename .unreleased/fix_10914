@@ -1,0 +1,1 @@
+Fixes: #10914 Fix missing rows with chunk skipping on chunks created from an existing table

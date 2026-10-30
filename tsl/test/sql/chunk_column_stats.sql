@@ -455,4 +455,26 @@ AND chunk_id IS NOT NULL;
 
 SELECT count(*) FROM chunk_skip_invalid WHERE ts > now() - interval '100 years' AND ranged = 1000;
 
+-- Test chunk created from an existing table gets a chunk_column_stats entry
+-- and is not skipped (#10914)
+CREATE TABLE chunk_skip_from_table(time timestamptz NOT NULL, device int NOT NULL, val float);
+SELECT * FROM create_hypertable('chunk_skip_from_table', 'time',
+                         chunk_time_interval => interval '7 days');
+SELECT * FROM enable_chunk_skipping('chunk_skip_from_table', 'device');
+INSERT INTO chunk_skip_from_table VALUES ('2024-01-02 12:00:00+00', 1, 100);
+
+CREATE TABLE skip_chunk_table(time timestamptz NOT NULL, device int NOT NULL, val float);
+INSERT INTO skip_chunk_table VALUES
+    ('2024-01-10 12:00:00+00', 10, 1000),
+    ('2024-01-11 12:00:00+00', 20, 2000);
+SELECT count(*) FROM _timescaledb_functions.create_chunk('chunk_skip_from_table',
+    '{"time": [1704672000000000, 1705276800000000]}', NULL, 'skip_chunk_table', 'skip_chunk_table');
+
+SELECT column_name, range_start, range_end, valid
+FROM _timescaledb_catalog.chunk_column_stats ccs
+JOIN _timescaledb_catalog.chunk c ON c.id = ccs.chunk_id
+WHERE c.relid = '_timescaledb_internal.skip_chunk_table'::regclass;
+
+SELECT count(*), sum(val)::int FROM chunk_skip_from_table WHERE device >= 10;
+
 RESET timescaledb.enable_chunk_skipping;

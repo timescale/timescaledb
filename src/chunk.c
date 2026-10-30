@@ -1520,6 +1520,9 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	prepare_cube_slices_for_chunk(cube, chunk_id);
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
+	/* Insert any new chunk column stats entries into the catalog */
+	ts_chunk_column_stats_insert(ht, chunk);
+
 	chunk_add_inheritance(chunk, ht);
 	chunk_create_table_constraints(ht, chunk);
 
