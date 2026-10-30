@@ -1,5 +1,6 @@
 set(PROVE_TEST_FILES 001_job_crash_log.pl 002_logrepl_decomp_marker.pl
-                     004_truncate_or_delete_spin_lock.pl)
+                     004_truncate_or_delete_spin_lock.pl
+                     008_license_load_cancel.pl)
 
 # The custom toaster only runs on PG 17.11+ and 18.6+, which is what
 # COMPRESSION_TOASTER_SUPPORTED in tsl/src/import/compression_toast.h allows.
