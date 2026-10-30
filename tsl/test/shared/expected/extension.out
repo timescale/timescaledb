@@ -76,7 +76,6 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.get_chunk_primary_range(regclass)
  _timescaledb_functions.get_chunk_primary_range_by_id(integer)
  _timescaledb_functions.get_compressed_chunk_index_for_recompression(regclass)
- _timescaledb_functions.get_create_command(name)
  _timescaledb_functions.get_git_commit()
  _timescaledb_functions.get_hypertable_info(regclass)
  _timescaledb_functions.get_hypertable_info_by_id(integer)
