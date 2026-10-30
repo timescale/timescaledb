@@ -222,7 +222,7 @@ job_add(PG_FUNCTION_ARGS)
 		validate_check_signature(check);
 	}
 
-	ts_bgw_job_run_config_check(check, 0, config);
+	ts_bgw_job_run_config_check(check, 0, owner, config);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										schedule_interval,
