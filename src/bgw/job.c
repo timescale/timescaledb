@@ -1476,7 +1476,8 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
-	name_len = snprintf(NameStr(app_name), NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+	name_len =
+		snprintf(NameStr(app_name), NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
 
 	if (name_len >= NAMEDATALEN)
 	{

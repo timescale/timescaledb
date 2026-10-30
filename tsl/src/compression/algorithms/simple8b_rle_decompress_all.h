@@ -26,8 +26,7 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 	 */
 	Assert(n_buffer_elements >= n_total_values + 63);
 
-	const uint32 num_selector_slots =
-		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
+	const uint32 num_selector_slots = SIMPLE8B_NUM_SELECTORS_FOR_NBLOCKS(compressed->num_blocks);
 	const uint32 num_blocks = compressed->num_blocks;
 
 	/*

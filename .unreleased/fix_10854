@@ -1,0 +1,2 @@
+Fixes: #10854 Correctly skip rows with conversion errors during COPY FROM ON_ERROR ignore
+Fixes: #10855 Enforce REJECT_LIMIT during COPY FROM on PostgreSQL 18 and later

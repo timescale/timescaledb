@@ -171,7 +171,6 @@ typedef struct CrossModuleFunctions
 	PGFunction bool_compressor_finish;
 	PGFunction uuid_compressor_append;
 	PGFunction uuid_compressor_finish;
-	PGFunction bloom1_contains;
 	PGFunction bloom1_contains_any;
 	PGFunction bloom1_contains_any_hashes;
 	PGFunction bloom1_hash;
