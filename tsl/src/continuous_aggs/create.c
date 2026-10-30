@@ -800,7 +800,12 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	ts_feature_flag_check(FEATURE_CAGG);
 
-	nspid = RangeVarGetCreationNamespace(stmt->into->rel);
+	/*
+	 * Check CREATE privilege on the target schema as the calling user. The
+	 * user view is created later as the catalog owner if it is placed in the
+	 * internal schema, which would otherwise bypass this check.
+	 */
+	nspid = RangeVarGetAndCheckCreationNamespace(stmt->into->rel, NoLock, NULL);
 	relid = get_relname_relid(stmt->into->rel->relname, nspid);
 
 	if (OidIsValid(relid))
