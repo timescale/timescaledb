@@ -159,6 +159,31 @@ DROP MATERIALIZED VIEW mat_refresh_test;
 ERROR:  must be owner of continuous aggregate "mat_refresh_test"
 CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
 ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+-- The refresh policy procedure must also reject non-owners that can read the
+-- raw hypertable, and the invalidation threshold must not move
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT SELECT ON conditions TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT watermark FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                       WHERE mat_hypertable_id = :mat_hypertable_id);
+ watermark 
+-----------
+       100
+
+CALL _timescaledb_functions.policy_refresh_continuous_aggregate(:cagg_job_id,
+  format('{"mat_hypertable_id": %s, "start_offset": null, "end_offset": -1000}', :mat_hypertable_id)::jsonb);
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+SELECT watermark FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                       WHERE mat_hypertable_id = :mat_hypertable_id);
+ watermark 
+-----------
+       100
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+REVOKE SELECT ON conditions FROM :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 SELECT * FROM mat_refresh_test;
 ERROR:  permission denied for view mat_refresh_test
 -- Test permissions also when the watermark is not constified and the ACL checks
