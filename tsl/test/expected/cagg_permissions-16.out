@@ -359,3 +359,44 @@ SELECT add_continuous_aggregate_policy('dbowner_summary', NULL, -200, '12 h'::in
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+-- The materialization runs as the cagg owner in a security-restricted
+-- context, like REFRESH MATERIALIZED VIEW. When a superuser (or the
+-- database owner) refreshes on the owner's behalf, the partial view body
+-- must execute with the owner's identity, not the caller's, and in a
+-- restricted context.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE metrics (t TIMESTAMPTZ NOT NULL, v INT);
+SELECT FROM create_hypertable('metrics', 't', chunk_time_interval => interval '1 day');
+--
+
+INSERT INTO metrics VALUES ('2026-01-01', 1);
+-- Reports the role the partial view body runs as, and whether it runs in a
+-- security-restricted context (creating a temp table is forbidden there).
+CREATE FUNCTION record_refresh_user(v INT) RETURNS INT LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  restricted bool;
+BEGIN
+  BEGIN
+    EXECUTE 'CREATE TEMP TABLE refresh_tmp(x int) ON COMMIT DROP';
+    restricted := false;
+  EXCEPTION WHEN others THEN
+    restricted := true;
+  END;
+  RAISE NOTICE 'refresh ran as %, restricted context = %', current_user, restricted;
+  RETURN v;
+END $$;
+CREATE MATERIALIZED VIEW metrics_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 hour', t) AS bucket, sum(record_refresh_user(v))
+FROM metrics
+GROUP BY bucket WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+-- A superuser refreshes on the owner's behalf: the body must run as the cagg
+-- owner (not the superuser) and in a restricted context.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CALL refresh_continuous_aggregate('metrics_cagg', NULL, NULL);
+NOTICE:  refresh ran as default_perm_user, restricted context = t
+DROP MATERIALIZED VIEW metrics_cagg;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_12_chunk
+DROP TABLE metrics;
+DROP FUNCTION record_refresh_user(INT);
