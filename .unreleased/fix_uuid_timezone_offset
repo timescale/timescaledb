@@ -1,0 +1,1 @@
+Fixes: #10555 UUID time_bucket timezone overload dropped the offset argument
