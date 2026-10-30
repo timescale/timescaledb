@@ -143,4 +143,3 @@ select count(*) from qualdef where bool_identity(ln) or bool_identity(lf);
 reset timescaledb.debug_require_vector_agg;
 
 reset timescaledb.enable_bulk_decompression;
--- Trigger the valgrind CI run for this test.

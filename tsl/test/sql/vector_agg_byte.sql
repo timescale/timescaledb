@@ -55,4 +55,3 @@ order by function, grouping.n
 \gexec
 
 reset timescaledb.debug_require_vector_agg;
--- Trigger the valgrind CI run for this test.

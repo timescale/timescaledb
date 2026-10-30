@@ -911,3 +911,4 @@ ERROR:  insert or update on table "_hyper_18_39_chunk" violates foreign key cons
 \set ON_ERROR_STOP 1
 DROP TABLE fk_ht;
 DROP TABLE fk_ref;
+-- Trigger the valgrind CI run for this test.

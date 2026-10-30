@@ -154,3 +154,4 @@ SET timescaledb.debug_skip_scan_info TO true;
 \o
 
 RESET timescaledb.debug_skip_scan_info;
+-- Trigger the valgrind CI run for this test.

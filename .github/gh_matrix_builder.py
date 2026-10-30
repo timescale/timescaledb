@@ -358,7 +358,7 @@ elif len(sys.argv) > 2:
         )
         sys.exit(1)
     tests = set()
-    test_count = 1
+    test_count = 0
     for f in output.decode().split("\n"):
         print(f)
         if not f:

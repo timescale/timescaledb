@@ -83,4 +83,3 @@ join (
 ) t3
 on batches.ts = t3.t
 order by ts;
--- Trigger the valgrind CI run for this test.

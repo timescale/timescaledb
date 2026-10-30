@@ -2953,3 +2953,4 @@ psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_20_c
 SET debug_parallel_query = 'off';
 \o
 RESET timescaledb.debug_skip_scan_info;
+-- Trigger the valgrind CI run for this test.

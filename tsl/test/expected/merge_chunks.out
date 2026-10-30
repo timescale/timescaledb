@@ -1787,3 +1787,4 @@ select count(*), min(v), max(v), count(v) from merge_add_col4;
    288 |   7 |   7 |   288
 
 drop table merge_add_col4;
+-- Trigger the valgrind CI run for this test.

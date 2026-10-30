@@ -1391,3 +1391,4 @@ SELECT count(*) AS leftover_compressed_relations FROM pg_class
   WHERE oid IN (SELECT relid FROM drop_many_compressed);
 DROP TABLE drop_many_compressed;
 DROP TABLE drop_many;
+-- Trigger the valgrind CI run for this test.

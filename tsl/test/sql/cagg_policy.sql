@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Trigger the valgrind CI run for this test.
+
 -- test add and remove refresh policy apis
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;

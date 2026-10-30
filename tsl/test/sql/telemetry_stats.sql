@@ -231,3 +231,4 @@ SELECT jsonb_pretty(get_telemetry_report() -> 'relations' -> 'continuous_aggrega
 
 DROP VIEW relations;
 DROP MATERIALIZED VIEW telemetry_report;
+-- Trigger the valgrind CI run for this test.
