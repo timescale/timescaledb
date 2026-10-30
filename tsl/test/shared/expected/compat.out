@@ -61,9 +61,6 @@ WARNING:  function _timescaledb_internal.get_approx_row_count(regclass) is depre
 SELECT _timescaledb_internal.get_compressed_chunk_index_for_recompression(0);
 WARNING:  function _timescaledb_internal.get_compressed_chunk_index_for_recompression(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
-SELECT _timescaledb_internal.get_create_command(NULL);
-WARNING:  function _timescaledb_internal.get_create_command(name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  hypertable "<NULL>" not found
 SELECT pg_typeof(_timescaledb_internal.get_os_info());
 WARNING:  function _timescaledb_internal.get_os_info() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  pg_typeof 
