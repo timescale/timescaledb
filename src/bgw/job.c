@@ -23,6 +23,7 @@
 #include <utils/backend_status.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
+#include <utils/guc.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
@@ -110,9 +111,13 @@ job_execute_function(FuncExpr *funcexpr)
  *
  * This will run the configuration check validation function registered for
  * the job. If a new job is added, the job_id is going to be zero.
+ *
+ * The check function is owned by the job owner but can be triggered by other
+ * roles altering the job, so run it as the job owner in a security-restricted
+ * context.
  */
 void
-ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
+ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner, Jsonb *config)
 {
 	/* Nothing to check if there is no check function provided */
 	if (!OidIsValid(check))
@@ -135,11 +140,7 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 	FuncExpr *funcexpr =
 		makeFuncExpr(check, VOIDOID, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 
-	if (get_func_prokind(check) == PROKIND_FUNCTION)
-	{
-		job_execute_function(funcexpr);
-	}
-	else
+	if (get_func_prokind(check) != PROKIND_FUNCTION)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -147,6 +148,18 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 				 errdetail("Only functions are allowed as custom configuration checks"),
 				 errhint("Use a FUNCTION instead")));
 	}
+
+	Oid save_userid;
+	int save_sec_context;
+	GetUserIdAndSecContext(&save_userid, &save_sec_context);
+	SetUserIdAndSecContext(owner, save_sec_context | SECURITY_RESTRICTED_OPERATION);
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
+	job_execute_function(funcexpr);
+
+	AtEOXact_GUC(false, save_nestlevel);
+	SetUserIdAndSecContext(save_userid, save_sec_context);
 }
 
 /* Run the check function on a configuration. It will generate errors if there
@@ -181,7 +194,7 @@ job_config_check(BgwJob *job, Jsonb *config)
 	 without validating the config but also print a warning */
 	if (OidIsValid(proc))
 	{
-		ts_bgw_job_run_config_check(proc, job->fd.id, config);
+		ts_bgw_job_run_config_check(proc, job->fd.id, job->fd.owner, config);
 	}
 	else
 	{
