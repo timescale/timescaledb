@@ -8,6 +8,7 @@ log_directory='@TEST_PG_LOG_DIRECTORY@'
 log_filename='postmaster.log'
 log_line_prefix='%m: %u [%p] %d '
 logging_collector=true
+log_error_verbosity='VERBOSE'
 max_worker_processes=24
 random_page_cost=1.0
 shared_preload_libraries=timescaledb
@@ -26,7 +27,6 @@ extra_float_digits=0
 # This section adds additional options required by TSL.
 timescaledb.license='timescale'
 max_connections=200
-log_error_verbosity='VERBOSE'
 log_min_messages='INFO'
 # This breaks isolation tests, not sure why the statements end in
 # the isolation tester output.
