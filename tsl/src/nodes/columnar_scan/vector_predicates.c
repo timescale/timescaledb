@@ -46,10 +46,12 @@ get_vector_const_predicate(Oid pg_predicate)
 #undef GENERATE_DISPATCH_TABLE
 
 		case F_TEXTEQ:
-			return vector_const_texteq;
+		case F_BYTEAEQ:
+			return vector_const_memeq;
 
 		case F_TEXTNE:
-			return vector_const_textne;
+		case F_BYTEANE:
+			return vector_const_memne;
 
 		case F_BOOLEQ:
 			return vector_booleq;
