@@ -1025,7 +1025,6 @@ dimension_slice_insert_relation(const Relation rel, DimensionSlice *slice)
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_dimension_slice];
 	bool nulls[Natts_dimension_slice] = { false };
-	CatalogSecurityContext sec_ctx;
 
 	if (slice->fd.id > 0)
 	{
@@ -1037,7 +1036,6 @@ dimension_slice_insert_relation(const Relation rel, DimensionSlice *slice)
 		   "dimension slice insert requires a valid chunk id (dimension_id=%d)",
 		   slice->fd.dimension_id);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
 	slice->fd.id = ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION_SLICE);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(slice->fd.id);
@@ -1051,7 +1049,6 @@ dimension_slice_insert_relation(const Relation rel, DimensionSlice *slice)
 		Int64GetDatum(slice->fd.range_end);
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return true;
 }

@@ -132,9 +132,7 @@ chunk_column_stats_insert_relation(const Relation rel, Form_chunk_column_stats i
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_chunk_column_stats] = { 0 };
 	bool nulls[Natts_chunk_column_stats] = { false };
-	CatalogSecurityContext sec_ctx;
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	info->id = ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_COLUMN_STATS);
 	values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_id)] = Int32GetDatum(info->id);
 	values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_hypertable_id)] =
@@ -155,7 +153,6 @@ chunk_column_stats_insert_relation(const Relation rel, Form_chunk_column_stats i
 	}
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return info->id;
 }

@@ -783,12 +783,9 @@ static int32
 get_next_chunk_id()
 {
 	int32 chunk_id;
-	CatalogSecurityContext sec_ctx;
 	const Catalog *catalog = ts_catalog_get();
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk_id = ts_catalog_table_next_seq_id(catalog, CHUNK);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return chunk_id;
 }
@@ -4929,7 +4926,6 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 {
 	Hyperspace *hs = parent_ht->space;
 	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 
 	Oid ht_ownerid = ts_rel_get_owner(parent_ht->main_table_relid);
@@ -4949,9 +4945,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 			 "cannot attach a  foreign table to a hypertable that has more than 1 dimension");
 	}
 	/* Create a new chunk based on the hypercube */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK));
-	ts_catalog_restore_user(&sec_ctx);
 
 	/* fill in the correct table_name for the chunk*/
 	chunk->fd.hypertable_id = hs->hypertable_id;
