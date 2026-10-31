@@ -904,6 +904,17 @@ SELECT * FROM compress_dml t ORDER BY t;
  Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
 
 ROLLBACK;
+BEGIN;
+EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)
+UPDATE compress_dml SET value = 1111 WHERE time IS NULL;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Update on public.compress_dml (actual rows=0.00 loops=1)
+         ->  Result (actual rows=0.00 loops=1)
+               Output: '1111'::double precision, NULL::oid, NULL::tid
+               One-Time Filter: false
+
+ROLLBACK;
 DROP TABLE compress_dml;
 -- Test issue #8241: invalidate generic plans for prepared statements
 -- when partial chunk is created from compressed chunk via UPDATE/DELETE

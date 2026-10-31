@@ -1341,6 +1341,14 @@ SELECT kind::text FROM enum_metrics WHERE kind = CAST(NULL::text AS dca_enum) LI
  kind 
 ------
 
+-- NULL constraint handling
+EXPLAIN (COSTS OFF) SELECT * FROM enum_metrics WHERE seen IS NULL ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (DeferredChunkAppend) on enum_metrics
+         Order: "time"
+         Filter: ((seen IS NULL))
+
 RESET timescaledb.debug_require_deferred_chunk_append;
 -- float literals under a lossy extra_float_digits
 CREATE TABLE float_metrics (time timestamptz NOT NULL, val float8 NOT NULL)
@@ -1356,6 +1364,21 @@ SELECT val FROM float_metrics WHERE val = 0.30000000000000004::float8 ORDER BY t
  val 
 -----
  0.3
+
+-- NULL constraint handling
+EXPLAIN (COSTS OFF) SELECT * FROM float_metrics WHERE val IS NOT NULL ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (DeferredChunkAppend) on float_metrics
+         Order: "time"
+         Filter: ((val IS NOT NULL))
+
+EXPLAIN (COSTS OFF) SELECT * FROM float_metrics WHERE time IS NOT NULL ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (DeferredChunkAppend) on float_metrics
+         Order: "time"
+         Filter: (("time" IS NOT NULL))
 
 RESET timescaledb.debug_require_deferred_chunk_append;
 RESET extra_float_digits;
