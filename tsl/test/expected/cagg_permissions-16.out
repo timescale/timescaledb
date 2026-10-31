@@ -244,7 +244,7 @@ CREATE TABLE devices (
 SELECT create_hypertable('devices', 'time');
   create_hypertable   
 ----------------------
- (8,public,devices,t)
+ (7,public,devices,t)
 
 GRANT SELECT, TRIGGER ON devices TO :ROLE_DEFAULT_PERM_USER_2;
 INSERT INTO devices
@@ -260,11 +260,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+--------------------------------------
 user_view         | devices_summary
 user_view_perm    | 
-mat_table         | _materialized_hypertable_9
+mat_table         | _materialized_hypertable_8
 mat_table_perm    | 
-direct_view       | _timescaledb_internal._direct_view_9
+direct_view       | _timescaledb_internal._direct_view_8
 direct_view_perm  | 
-partial_view      | _timescaledb_internal._partial_view_9
+partial_view      | _timescaledb_internal._partial_view_8
 partial_view_perm | 
 
 GRANT ALL ON devices_summary TO :ROLE_DEFAULT_PERM_USER;
@@ -272,11 +272,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
-mat_table         | _materialized_hypertable_9
+mat_table         | _materialized_hypertable_8
 mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_9
+direct_view       | _timescaledb_internal._direct_view_8
 direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_9
+partial_view      | _timescaledb_internal._partial_view_8
 partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
 
 REVOKE SELECT, UPDATE ON devices_summary FROM :ROLE_DEFAULT_PERM_USER;
@@ -284,11 +284,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+----------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
-mat_table         | _materialized_hypertable_9
+mat_table         | _materialized_hypertable_8
 mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_9
+direct_view       | _timescaledb_internal._direct_view_8
 direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_9
+partial_view      | _timescaledb_internal._partial_view_8
 partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
 
 \x off
@@ -304,9 +304,9 @@ CREATE TABLE test_default_privileges.devices (
    PRIMARY KEY(time, device)
 );
 SELECT create_hypertable('test_default_privileges.devices', 'time');
-           create_hypertable            
-----------------------------------------
- (10,test_default_privileges,devices,t)
+           create_hypertable           
+---------------------------------------
+ (9,test_default_privileges,devices,t)
 
 CREATE MATERIALIZED VIEW test_default_privileges.devices_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -359,3 +359,19 @@ SELECT add_continuous_aggregate_policy('dbowner_summary', NULL, -200, '12 h'::in
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+-- Creating a continuous aggregate in a schema the user has no CREATE
+-- privilege on must fail, including the internal schema
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW _timescaledb_internal.cagg_in_internal
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket(100, timec) AS bucket, max(val)
+FROM dbowner_metrics
+GROUP BY bucket WITH NO DATA;
+ERROR:  permission denied for schema _timescaledb_internal
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM pg_class WHERE relname = 'cagg_in_internal';
+ count 
+-------
+     0
+
