@@ -29,6 +29,8 @@ extern void ts_chunk_index_create(Relation hypertable_rel, int32 hypertable_id,
 								  Relation hypertable_idxrel, int32 chunk_id, Relation chunkrel);
 
 void ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation chunkrel);
+extern void ts_chunk_index_create_constraint(Relation htrel, Relation ht_idxrel, Relation chunkrel,
+											 const char *constraint_name, uint16 constr_flags);
 extern void ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id,
 														   Relation hypertable_idxrel,
 														   Relation chunkrel, IndexInfo *indexinfo);
