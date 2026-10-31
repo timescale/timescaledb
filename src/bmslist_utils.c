@@ -99,5 +99,11 @@ ts_bmslist_contains_set(TsBmsList bmslist, Bitmapset *set)
 void
 ts_bmslist_free(TsBmsList bmslist)
 {
-	list_free_deep(bmslist);
+	ListCell *lc;
+
+	foreach (lc, bmslist)
+	{
+		bms_free((Bitmapset *) lfirst(lc));
+	}
+	list_free(bmslist);
 }
