@@ -24,6 +24,110 @@ typedef struct BgwJobStatHistoryContext
 	Jsonb *edata;
 } BgwJobStatHistoryContext;
 
+/*
+ * The job execution currently running in this process, if any. Opened and
+ * closed by the background worker around the execution of the job, see
+ * ts_bgw_job_entrypoint().
+ *
+ * While running, the job can record information about what it did. The
+ * information is a JSON object built one key at a time with
+ * ts_bgw_job_execution_set_info(), and it ends up under the "info" key of the
+ * history entry of the execution.
+ */
+typedef struct BgwJobExecution
+{
+	/* Owns this struct and the information. The job commits between
+	 * transactions while running, so it must outlive all of them. */
+	MemoryContext mcxt;
+	Jsonb *info;
+} BgwJobExecution;
+
+static BgwJobExecution *current_execution = NULL;
+
+void
+ts_bgw_job_execution_begin(void)
+{
+	Assert(current_execution == NULL);
+
+	MemoryContext mcxt =
+		AllocSetContextCreate(TopMemoryContext, "BgwJobExecution", ALLOCSET_SMALL_SIZES);
+	current_execution = MemoryContextAllocZero(mcxt, sizeof(BgwJobExecution));
+	current_execution->mcxt = mcxt;
+}
+
+void
+ts_bgw_job_execution_end(void)
+{
+	Assert(current_execution != NULL);
+
+	MemoryContextDelete(current_execution->mcxt);
+	current_execution = NULL;
+}
+
+/*
+ * Set a key of the information recorded for the running job execution,
+ * replacing the value of the key if it was set before.
+ *
+ * Nothing is recorded when the job is not run by a background worker, for
+ * example by run_job(), since there is no history entry for the execution.
+ */
+void
+ts_bgw_job_execution_set_info(const char *key, const JsonbValue *value)
+{
+	Assert(key != NULL && value != NULL);
+
+	if (current_execution == NULL)
+	{
+		return;
+	}
+
+	JsonbInState parse_state = { 0 };
+	size_t key_len = strlen(key);
+
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+
+	/* Copy over the other keys. Keys of a jsonb object are kept sorted, so
+	 * the order they are pushed in does not matter. */
+	if (current_execution->info != NULL)
+	{
+		JsonbIterator *it = JsonbIteratorInit(&current_execution->info->root);
+		JsonbIteratorToken token;
+		JsonbValue k, v;
+
+		while ((token = JsonbIteratorNext(&it, &k, true)) != WJB_DONE)
+		{
+			if (token != WJB_KEY)
+			{
+				continue;
+			}
+
+			token = JsonbIteratorNext(&it, &v, true);
+			Assert(token == WJB_VALUE);
+
+			if (k.val.string.len == (int) key_len && memcmp(k.val.string.val, key, key_len) == 0)
+			{
+				continue;
+			}
+
+			pushJsonbValueCompat(&parse_state, WJB_KEY, &k);
+			pushJsonbValueCompat(&parse_state, WJB_VALUE, &v);
+		}
+	}
+
+	ts_jsonb_add_value(&parse_state, key, (JsonbValue *) value);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+
+	MemoryContext oldcontext = MemoryContextSwitchTo(current_execution->mcxt);
+	Jsonb *info = JsonbValueToJsonb(parse_state.result);
+	MemoryContextSwitchTo(oldcontext);
+
+	if (current_execution->info != NULL)
+	{
+		pfree(current_execution->info);
+	}
+	current_execution->info = info;
+}
+
 static Jsonb *
 build_job_info(BgwJob *job)
 {
@@ -96,6 +200,12 @@ ts_bgw_job_stat_history_build_data_info(BgwJobStatHistoryContext *context)
 		/* error information jsonb */
 		JsonbToJsonbValue(context->edata, &value);
 		ts_jsonb_add_value(&parse_state, "error_data", &value);
+	}
+
+	if (current_execution != NULL && current_execution->info != NULL)
+	{
+		JsonbToJsonbValue(current_execution->info, &value);
+		ts_jsonb_add_value(&parse_state, "info", &value);
 	}
 
 	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
