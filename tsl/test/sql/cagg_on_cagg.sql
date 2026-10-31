@@ -322,3 +322,22 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1160 usec\''
 \ir include/cagg_on_cagg_validations.sql
+
+-- ########################################################
+-- ## DROP tests
+-- ########################################################
+\set MAT_ONLY_1ST true
+\set MAT_ONLY_2TH true
+\set MAT_ONLY_3TH true
+\ir include/cagg_on_cagg_drop.sql
+
+\set MAT_ONLY_1ST false
+\set MAT_ONLY_2TH false
+\set MAT_ONLY_3TH false
+\ir include/cagg_on_cagg_drop.sql
+
+-- Mix of real-time and materialized only caggs
+\set MAT_ONLY_1ST true
+\set MAT_ONLY_2TH false
+\set MAT_ONLY_3TH true
+\ir include/cagg_on_cagg_drop.sql
