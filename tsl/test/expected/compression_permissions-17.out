@@ -455,3 +455,43 @@ RESET ROLE;
 DROP SCHEMA io CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DROP ROLE idx_owner;
+-- The background worker runs the config check function as the job owner. The database
+-- owner can change the schedule of a job but not its check function.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE FUNCTION dbowner_check_config(config JSONB) RETURNS VOID LANGUAGE PLPGSQL AS $$ BEGIN END $$;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT add_retention_policy('dbowner_conditions', INTERVAL '1 year') AS dbowner_retention_id \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT (alter_job(:dbowner_retention_id, schedule_interval => INTERVAL '1 hour')).schedule_interval AS altered;
+ altered  
+----------
+ @ 1 hour
+
+\set ON_ERROR_STOP 0
+SELECT alter_job(:dbowner_retention_id, check_config => 'dbowner_check_config'::regproc);
+ERROR:  insufficient permissions to change the config check function of job 1003
+SELECT alter_job(:dbowner_retention_id, check_config => 0);
+ERROR:  insufficient permissions to change the config check function of job 1003
+\set ON_ERROR_STOP 1
+-- The job owner can change the check function.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT (alter_job(:dbowner_retention_id, check_config => 'dbowner_check_config'::regproc)).check_config;
+        check_config         
+-----------------------------
+ public.dbowner_check_config
+
+SELECT (alter_job(:dbowner_retention_id, check_config => 0)).check_config;
+ check_config 
+--------------
+ 
+
+SELECT delete_job(:dbowner_retention_id);
+ delete_job 
+------------
+ 
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+DROP FUNCTION dbowner_check_config(JSONB);
