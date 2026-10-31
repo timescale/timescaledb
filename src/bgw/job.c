@@ -989,6 +989,25 @@ ts_bgw_job_execute(BgwJob *job)
 	return ts_cm_functions->job_execute(job);
 }
 
+static JobResult
+ts_bgw_job_execute_in_tss_scope(BgwJob *job, volatile TsTssStatementScope *tss_scope)
+{
+	JobResult volatile result = JOB_FAILURE_IN_EXECUTION;
+
+	ts_tss_statement_scope_enter(tss_scope);
+	PG_TRY();
+	{
+		result = ts_bgw_job_execute(job);
+	}
+	PG_FINALLY();
+	{
+		ts_tss_statement_scope_exit(tss_scope);
+	}
+	PG_END_TRY();
+
+	return result;
+}
+
 bool
 ts_bgw_job_has_timeout(BgwJob *job)
 {
@@ -1103,6 +1122,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	JobResult volatile res = JOB_FAILURE_IN_EXECUTION;
 	instr_time start;
 	instr_time duration;
+	volatile TsTssStatementScope tss_scope = TS_TSS_STATEMENT_SCOPE_INIT;
 
 	memcpy(&params, MyBgworkerEntry->bgw_extra, sizeof(BgwParams));
 	Ensure(OidIsValid(params.user_oid) && params.job_id != 0,
@@ -1172,7 +1192,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	bool job_failed = false;
 	if (scheduler_test_hook == NULL)
 	{
-		ts_begin_tss_store_callback();
+		ts_begin_tss_store_callback(&tss_scope);
 	}
 
 	PG_TRY();
@@ -1185,7 +1205,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		zero_guc("max_parallel_workers");
 		zero_guc("max_parallel_maintenance_workers");
 
-		res = ts_bgw_job_execute(job);
+		res = ts_bgw_job_execute_in_tss_scope(job, &tss_scope);
 
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
@@ -1267,7 +1287,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 */
 	ts_bgw_job_stat_mark_end(job, res, NULL);
 
-	if (!job_failed && ts_is_tss_enabled() && scheduler_test_hook == NULL)
+	if (!job_failed && ts_tss_store_callback_started(&tss_scope) && scheduler_test_hook == NULL)
 	{
 		const char *stmt;
 #ifdef USE_TELEMETRY
@@ -1283,7 +1303,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		else
 #endif
 			stmt = ts_bgw_job_function_call_string(job);
-		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
+		ts_end_tss_store_callback(&tss_scope, stmt, -1, (int) strlen(stmt), 0, 0);
 	}
 
 	PopActiveSnapshot();
