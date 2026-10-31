@@ -882,3 +882,4 @@ reset timescaledb.debug_enable_columnarscan;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;
 
+-- Trigger the valgrind CI run for this test.

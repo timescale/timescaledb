@@ -1094,3 +1094,4 @@ SELECT _timescaledb_functions.unfreeze_chunk(:'FREEZECHUNK');
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP TABLE freeze_perm;
+-- Trigger the valgrind CI run for this test.

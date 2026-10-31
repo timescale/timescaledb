@@ -1002,3 +1002,4 @@ reset timescaledb.enable_in_memory_recompression;
 select s.orderby from _timescaledb_catalog.compression_settings s join show_chunks('merge_add_col4') c on s.relid = c order by c;
 select count(*), min(v), max(v), count(v) from merge_add_col4;
 drop table merge_add_col4;
+-- Trigger the valgrind CI run for this test.

@@ -580,3 +580,4 @@ INSERT INTO fk_ht VALUES ('2024-02-01', 999);
 DROP TABLE fk_ht;
 DROP TABLE fk_ref;
 
+-- Trigger the valgrind CI run for this test.

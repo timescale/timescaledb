@@ -585,3 +585,4 @@ DROP FUNCTION gf_userfn.time_bucket_gapfill(int, text);
 DROP FUNCTION gf_userfn.locf(int);
 DROP FUNCTION gf_userfn.interpolate(int);
 DROP SCHEMA gf_userfn;
+-- Trigger the valgrind CI run for this test.
