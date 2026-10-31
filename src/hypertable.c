@@ -904,10 +904,7 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	fd.id = hypertable_id;
 	if (fd.id == INVALID_HYPERTABLE_ID)
 	{
-		CatalogSecurityContext sec_ctx;
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		fd.id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-		ts_catalog_restore_user(&sec_ctx);
 	}
 
 	namestrcpy(&fd.schema_name, NameStr(*schema_name));

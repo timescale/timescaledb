@@ -607,7 +607,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
 	FinalizeQueryInfo finalqinfo;
-	CatalogSecurityContext sec_ctx;
 	bool is_create_mattbl_index;
 
 	Query *final_selquery;
@@ -654,9 +653,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	/*
 	 * Step 1: create the materialization table.
 	 */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-	ts_catalog_restore_user(&sec_ctx);
 	makeMaterializedTableName(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	is_create_mattbl_index =
