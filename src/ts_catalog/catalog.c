@@ -620,7 +620,8 @@ ts_catalog_table_next_seq_id(const Catalog *catalog, CatalogTable table)
 			 catalog_table_name(table));
 	}
 
-	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
+	/* Skip permission checks since the catalog sequences are internal. */
+	return nextval_internal(relid, false);
 }
 
 Oid

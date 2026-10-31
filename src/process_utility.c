@@ -4471,10 +4471,7 @@ process_create_table_end(Node *parsetree)
 										  InvalidOid		 /* partitioning func */
 			);
 
-		CatalogSecurityContext sec_ctx;
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-		ts_catalog_restore_user(&sec_ctx);
 
 		if (ts_hypertable_create_from_info(table_relid,
 										   ht_id,
