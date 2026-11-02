@@ -459,6 +459,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 {
 	Oid uncompressed_relid = uncompressed_chunk->fd.relid;
 
+	ts_hypertable_permissions_check(uncompressed_chunk->hypertable_relid, GetUserId());
+
 	/*
 	 * only proceed if status in (3, 9, 11)
 	 * 1: compressed
@@ -1781,6 +1783,8 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk, bool keep_settings)
 	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("chunk cannot be NULL")));
 	}
+
+	ts_hypertable_permissions_check(uncompressed_chunk->hypertable_relid, GetUserId());
 
 	Ensure(ts_guc_enable_in_memory_recompression, "in-memory recompression functionality disabled");
 
