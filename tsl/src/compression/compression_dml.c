@@ -129,7 +129,7 @@ typedef struct MatchedBloom
 /*
  * Pre-computed bloom filter check for UPDATE/DELETE batch pruning.
  * The hash is computed once in process_predicates() and checked
- * per batch in decompress_batches_scan() via bloom1_contains_hash().
+ * per batch in decompress_batches_scan() via bloom1_contains_any_hash_values().
  */
 typedef struct BloomFilterCheck
 {
@@ -1248,7 +1248,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 				bool isnull;
 				Datum bloom_datum = slot_getattr(slot, check->bloom_attno, &isnull);
 				stats.batches_checked_by_bloom++;
-				if (!isnull && !bloom1_contains_hash(bloom_datum, check->hash))
+				if (!isnull && !bloom1_contains_any_hash_values(bloom_datum, &check->hash, 1))
 				{
 					bloom_pruned = true;
 					break;
@@ -1322,7 +1322,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 					uint64 hash = cdst->bloom_hasher->hash_values(cdst->bloom_hasher, values);
 
 					stats.batches_checked_by_bloom++;
-					if (!bloom1_contains_hash(bloom_datum, hash))
+					if (!bloom1_contains_any_hash_values(bloom_datum, &hash, 1))
 					{
 						stats.batches_pruned_by_bloom++;
 						continue;

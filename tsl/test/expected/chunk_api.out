@@ -385,3 +385,39 @@ WHERE pubname = 'test_chunk_pub'
 
 -- Cleanup
 DROP PUBLICATION test_chunk_pub CASCADE;
+-- Test that create_chunk won't display revealing error messages
+-- about the table which the user cannot read
+SET ROLE :ROLE_SUPERUSER;
+DROP TABLE chunkapi cascade;
+DROP TABLE devices cascade;
+CREATE TABLE devices (id int PRIMARY KEY);
+INSERT INTO devices VALUES (1);
+CREATE TABLE chunkapi (time timestamptz NOT NULL PRIMARY KEY, device int REFERENCES devices(id), temp float  CHECK(temp > 0));
+SELECT FROM create_hypertable('chunkapi', 'time');
+--
+
+INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
+CREATE USER unprivileged;
+-- User "unprivileged" can create chunks on "chunkapi"
+GRANT INSERT ON TABLE chunkapi TO unprivileged;
+-- Chunk table with a column not in chunkapi, "unprivileged" cannot read it
+CREATE TABLE extracol_chunk (time timestamptz NOT NULL, device int, temp float, extra int, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+-- Chunk table with dimension values out of range of chunkapi, "unprivileged" cannot read it
+CREATE TABLE outofrange_chunk (time timestamptz NOT NULL, device int, temp float, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+INSERT INTO outofrange_chunk VALUES ('2018-01-01 05:00:00-8', 1, 23.4), ('2018-11-11 05:00:00-8', 1, 23.4);
+\c :TEST_DBNAME unprivileged
+\set ON_ERROR_STOP 0
+-- Should not display information about "extracol_chunk"
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1514419200000000, 1515024000000000]}', NULL, NULL, 'extracol_chunk');
+ERROR:  must be owner of table extracol_chunk
+-- Should not display information about "outofrange_chunk"
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1514419200000000, 1515024000000000]}', NULL, NULL, 'outofrange_chunk');
+ERROR:  must be owner of table outofrange_chunk
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+REVOKE INSERT ON TABLE chunkapi FROM unprivileged;
+DROP USER unprivileged;
+DROP TABLE extracol_chunk cascade;
+DROP TABLE outofrange_chunk cascade;
+DROP TABLE chunkapi cascade;
+DROP TABLE devices cascade;
