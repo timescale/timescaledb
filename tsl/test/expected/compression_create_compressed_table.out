@@ -315,3 +315,25 @@ ERROR:  the compressed data is corrupt
 SELECT decompress_chunk(:'NULLCOUNT_CHUNK1');
 ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
+-- The owner of a hypertable must not be able to attach a table owned by someone else
+CREATE TABLE not_my_table(_ts_meta_count int, device text);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE ownerchk(time timestamptz NOT NULL, device text, value float);
+SELECT table_name FROM create_hypertable('ownerchk', 'time');
+ table_name 
+------------
+ ownerchk
+
+ALTER TABLE ownerchk SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO ownerchk VALUES ('2025-01-01', 'dev1', 1.0);
+SELECT ch AS "OWNERCHK_CHUNK" FROM show_chunks('ownerchk') ch LIMIT 1 \gset
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'OWNERCHK_CHUNK'::regclass, 'not_my_table'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  must be owner of table not_my_table
+\set ON_ERROR_STOP 1
+DROP TABLE ownerchk;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE not_my_table;
