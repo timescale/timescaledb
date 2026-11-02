@@ -6,11 +6,6 @@ create schema test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 create schema chunk_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
-\set ON_ERROR_STOP 0
--- get_create_command should fail since hypertable isn't made yet
-SELECT * FROM _timescaledb_functions.get_create_command('test_table');
-ERROR:  hypertable "test_table" not found
-\set ON_ERROR_STOP 1
 SELECT * FROM test.relation WHERE schema = 'test_schema';
    schema    |    name    | type  |       owner       
 -------------+------------+-------+-------------------
@@ -88,11 +83,6 @@ SELECT * FROM test.show_triggers('test_schema.test_table');
  Trigger | Type | Function 
 ---------+------+----------
 
-SELECT * FROM _timescaledb_functions.get_create_command('test_table');
-                                                                get_create_command                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
-
 --test adding one more closed dimension
 select add_dimension('test_schema.test_table', 'location', 4);
              add_dimension             
@@ -144,9 +134,6 @@ ERROR:  invalid number of partitions: must be between 1 and 32767
 -- Too many
 SELECT set_number_partitions('test_schema.test_table', 32768, 'location');
 ERROR:  invalid number of partitions: must be between 1 and 32767
--- get_create_command only works on tables w/ 1 or 2 dimensions
-SELECT * FROM _timescaledb_functions.get_create_command('test_table');
-ERROR:  get_create_command only supports hypertables with up to 2 dimensions
 \set ON_ERROR_STOP 1
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', chunk_time_interval => 1000);
@@ -385,11 +372,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
       create_hypertable      
 -----------------------------
  (7,test_schema,test_1dim,t)
-
-SELECT * FROM _timescaledb_functions.get_create_command('test_1dim');
-                                                       get_create_command                                                       
---------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_1dim', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
 
 SELECT * FROM test.relation WHERE schema = 'test_schema';
    schema    |          name          | type  |       owner       
@@ -645,30 +627,6 @@ select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func
 -----------------------------------------
  (26,test_schema,test_partfunc,device,t)
 
--- check get_create_command produces valid command
-CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
-SELECT create_hypertable('test_schema.test_sql_cmd','time');
-        create_hypertable        
----------------------------------
- (15,test_schema,test_sql_cmd,t)
-
-SELECT * FROM _timescaledb_functions.get_create_command('test_sql_cmd');
-                                                        get_create_command                                                         
------------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
-
-SELECT _timescaledb_functions.get_create_command('test_sql_cmd') AS create_cmd; \gset
-                                                            create_cmd                                                             
------------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
-
-DROP TABLE test_schema.test_sql_cmd CASCADE;
-CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
-SELECT test.execute_sql(:'create_cmd');
-                                                            execute_sql                                                            
------------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
-
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test_table_int(time bigint, junk int);
 SELECT hypertable_id AS "TEST_TABLE_INT_HYPERTABLE_ID" FROM create_hypertable('test_table_int', 'time', chunk_time_interval => 1) \gset
@@ -692,7 +650,7 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
- 29 |            17 | time        | bigint      | t       |            |                          |                   |               1 |                          | public                  | dummy_now
+ 27 |            15 | time        | bigint      | t       |            |                          |                   |               1 |                          | public                  | dummy_now
 
 -- show chunks works with "created_before" and errors out with time used in "older_than"
 SELECT SHOW_CHUNKS('test_table_int', older_than => 10);
@@ -726,7 +684,7 @@ ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
- 29 |            17 | time        | bigint      | t       |            |                          |                   |               1 |                          | my_new_schema           | dummy_now4
+ 27 |            15 | time        | bigint      | t       |            |                          |                   |               1 |                          | my_new_schema           | dummy_now4
 
 -- github issue #4650
 CREATE TABLE sample_table (
@@ -741,7 +699,7 @@ ALTER TABLE sample_table DROP COLUMN name;
 SELECT * FROM create_hypertable('sample_table', 'time');
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
-            18 | public      | sample_table | t
+            16 | public      | sample_table | t
 
 -- cleanup
 DROP TABLE sample_table CASCADE;
@@ -779,7 +737,7 @@ SELECT create_hypertable(
 );
     create_hypertable    
 -------------------------
- (19,public,timescale,t)
+ (17,public,timescale,t)
 
 -- creates chunk1
 INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
@@ -791,20 +749,20 @@ INSERT INTO timescale SELECT now() + interval '40' day, generate_series(1,200), 
 SELECT SHOW_CHUNKS('timescale');
                show_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_19_15_chunk
- _timescaledb_internal._hyper_19_16_chunk
- _timescaledb_internal._hyper_19_17_chunk
+ _timescaledb_internal._hyper_17_15_chunk
+ _timescaledb_internal._hyper_17_16_chunk
+ _timescaledb_internal._hyper_17_17_chunk
 
 \set ON_ERROR_STOP 0
 -- record goes into chunk1 violating FK constraint as value 1001 is not present in regular table
 INSERT INTO timescale SELECT now(), 1001, 43;
-ERROR:  insert or update on table "_hyper_19_15_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_17_15_chunk" violates foreign key constraint "timescale_id_fkey"
 -- record goes into chunk2 violating FK constraint as value 1002 is not present in regular table
 INSERT INTO timescale SELECT now() + interval '20' day, 1002, 43;
-ERROR:  insert or update on table "_hyper_19_16_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_17_16_chunk" violates foreign key constraint "timescale_id_fkey"
 -- record goes into chunk3 violating FK constraint as value 1003 is not present in regular table
 INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
-ERROR:  insert or update on table "_hyper_19_17_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_17_17_chunk" violates foreign key constraint "timescale_id_fkey"
 \set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE regular cascade;
@@ -834,7 +792,7 @@ SELECT create_hypertable(
 );
     create_hypertable    
 -------------------------
- (20,public,timescale,t)
+ (18,public,timescale,t)
 
 -- creates chunk1
 INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
@@ -846,20 +804,20 @@ INSERT INTO timescale SELECT now() + interval '40' day, generate_series(400,600)
 SELECT SHOW_CHUNKS('timescale');
                show_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_20_18_chunk
- _timescaledb_internal._hyper_20_19_chunk
- _timescaledb_internal._hyper_20_20_chunk
+ _timescaledb_internal._hyper_18_18_chunk
+ _timescaledb_internal._hyper_18_19_chunk
+ _timescaledb_internal._hyper_18_20_chunk
 
 \set ON_ERROR_STOP 0
 -- FK constraint violation as value 801 is not present in regular table
 INSERT INTO timescale SELECT now(), 801, 43;
-ERROR:  insert or update on table "_hyper_20_18_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_18_18_chunk" violates foreign key constraint "timescale_id_fkey"
 -- FK constraint violation as value 902 is not present in regular table
 INSERT INTO timescale SELECT now() + interval '20' day, 902, 43;
-ERROR:  insert or update on table "_hyper_20_19_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_18_19_chunk" violates foreign key constraint "timescale_id_fkey"
 -- FK constraint violation as value 1003 is not present in regular table
 INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
-ERROR:  insert or update on table "_hyper_20_20_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_18_20_chunk" violates foreign key constraint "timescale_id_fkey"
 \set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE regular cascade;
@@ -887,7 +845,7 @@ SELECT create_hypertable(
 );
     create_hypertable    
 -------------------------
- (21,public,timescale,t)
+ (19,public,timescale,t)
 
 insert into timescale values (now(), 1,2);
 insert into timescale values (now(), 2,2);
@@ -900,13 +858,13 @@ insert into timescale values (now(), 8,2);
 \set ON_ERROR_STOP 0
 -- FK constraint violation as value 9 is not present in regular table
 insert into timescale values (now(), 9,2);
-ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_19_21_chunk" violates foreign key constraint "timescale_id_fkey"
 -- FK constraint violation as value 10 is not present in regular table
 insert into timescale values (now(), 10,2);
-ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_19_21_chunk" violates foreign key constraint "timescale_id_fkey"
 -- FK constraint violation as value 111 is not present in regular table
 insert into timescale values (now(), 111,2);
-ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "timescale_id_fkey"
+ERROR:  insert or update on table "_hyper_19_21_chunk" violates foreign key constraint "timescale_id_fkey"
 \set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE regular cascade;
@@ -922,7 +880,7 @@ create table tidrangescan_test (
 select create_hypertable('tidrangescan_test', 'time');
         create_hypertable        
 ---------------------------------
- (22,public,tidrangescan_test,t)
+ (20,public,tidrangescan_test,t)
 
 insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:00+02:40', 1);
 insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:10+02:40', 2);
@@ -954,7 +912,7 @@ create table test_schema.fk_child(
 select create_hypertable ('test_schema.fk_child', 'time');
       create_hypertable      
 -----------------------------
- (23,test_schema,fk_child,t)
+ (21,test_schema,fk_child,t)
 
 \set ON_ERROR_STOP 0
 select create_hypertable ('test_schema.fk_parent', 'time');
@@ -978,8 +936,8 @@ SELECT * FROM test.show_indexes('test') ORDER BY 1;
 SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
                     ch                    |                         Index                          | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------+--------------------------------------------------------+---------+------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_24_23_chunk | _timescaledb_internal._hyper_24_23_chunk_test_val_idx  | {val}   |      | f      | f       | f         | 
- _timescaledb_internal._hyper_24_23_chunk | _timescaledb_internal._hyper_24_23_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_22_23_chunk | _timescaledb_internal._hyper_22_23_chunk_test_val_idx  | {val}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_22_23_chunk | _timescaledb_internal._hyper_22_23_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
 
 DROP TABLE test;
 -- don't create default indexes on chunks when migrating data
@@ -999,7 +957,7 @@ SELECT * FROM test.show_indexes('test') ORDER BY 1;
 SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
                     ch                    |                         Index                         | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------+-------------------------------------------------------+---------+------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_25_24_chunk | _timescaledb_internal._hyper_25_24_chunk_test_val_idx | {val}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_23_24_chunk | _timescaledb_internal._hyper_23_24_chunk_test_val_idx | {val}   |      | f      | f       | f         | 
 
 DROP TABLE test;
 -- test creating a hypertable with a primary key where the partitioning column is not part of the primary key
@@ -1078,7 +1036,7 @@ CREATE TABLE test_no_guc_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_no_guc_timestamptz', 'time');
            create_hypertable           
 ---------------------------------------
- (28,public,test_no_guc_timestamptz,t)
+ (26,public,test_no_guc_timestamptz,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_no_guc_timestamptz';
@@ -1093,7 +1051,7 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 HINT:  Use datatype TIMESTAMPTZ instead.
           create_hypertable          
 -------------------------------------
- (29,public,test_no_guc_timestamp,t)
+ (27,public,test_no_guc_timestamp,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_no_guc_timestamp';
@@ -1106,7 +1064,7 @@ CREATE TABLE test_no_guc_date(time DATE NOT NULL, val INT);
 SELECT create_hypertable('test_no_guc_date', 'time');
        create_hypertable        
 --------------------------------
- (30,public,test_no_guc_date,t)
+ (28,public,test_no_guc_date,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_no_guc_date';
@@ -1119,7 +1077,7 @@ CREATE TABLE test_no_guc_uuid(time UUID NOT NULL, val INT);
 SELECT create_hypertable('test_no_guc_uuid', 'time');
        create_hypertable        
 --------------------------------
- (31,public,test_no_guc_uuid,t)
+ (29,public,test_no_guc_uuid,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_no_guc_uuid';
@@ -1139,7 +1097,7 @@ CREATE TABLE test_guc_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_guc_timestamptz', 'time');
          create_hypertable          
 ------------------------------------
- (32,public,test_guc_timestamptz,t)
+ (30,public,test_guc_timestamptz,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_timestamptz';
@@ -1154,7 +1112,7 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 HINT:  Use datatype TIMESTAMPTZ instead.
         create_hypertable         
 ----------------------------------
- (33,public,test_guc_timestamp,t)
+ (31,public,test_guc_timestamp,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_timestamp';
@@ -1167,7 +1125,7 @@ CREATE TABLE test_guc_date(time DATE NOT NULL, val INT);
 SELECT create_hypertable('test_guc_date', 'time');
       create_hypertable      
 -----------------------------
- (34,public,test_guc_date,t)
+ (32,public,test_guc_date,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_date';
@@ -1180,7 +1138,7 @@ CREATE TABLE test_guc_uuid(time UUID NOT NULL, val INT);
 SELECT create_hypertable('test_guc_uuid', 'time');
       create_hypertable      
 -----------------------------
- (35,public,test_guc_uuid,t)
+ (33,public,test_guc_uuid,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_uuid';
@@ -1200,7 +1158,7 @@ CREATE TABLE test_guc_1day_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_guc_1day_timestamptz', 'time');
             create_hypertable            
 -----------------------------------------
- (36,public,test_guc_1day_timestamptz,t)
+ (34,public,test_guc_1day_timestamptz,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_1day_timestamptz';
@@ -1220,7 +1178,7 @@ CREATE TABLE test_guc_1month_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_guc_1month_timestamptz', 'time');
              create_hypertable             
 -------------------------------------------
- (37,public,test_guc_1month_timestamptz,t)
+ (35,public,test_guc_1month_timestamptz,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_1month_timestamptz';
@@ -1235,7 +1193,7 @@ CREATE TABLE test_guc_bigint(time BIGINT NOT NULL, val INT);
 SELECT create_hypertable('test_guc_bigint', 'time');
        create_hypertable       
 -------------------------------
- (38,public,test_guc_bigint,t)
+ (36,public,test_guc_bigint,t)
 
 SELECT integer_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_bigint';
@@ -1248,7 +1206,7 @@ CREATE TABLE test_guc_int(time INT NOT NULL, val INT);
 SELECT create_hypertable('test_guc_int', 'time');
      create_hypertable      
 ----------------------------
- (39,public,test_guc_int,t)
+ (37,public,test_guc_int,t)
 
 SELECT integer_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_int';
@@ -1261,7 +1219,7 @@ CREATE TABLE test_guc_smallint(time SMALLINT NOT NULL, val INT);
 SELECT create_hypertable('test_guc_smallint', 'time');
         create_hypertable        
 ---------------------------------
- (40,public,test_guc_smallint,t)
+ (38,public,test_guc_smallint,t)
 
 SELECT integer_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_guc_smallint';
@@ -1276,7 +1234,7 @@ CREATE TABLE test_override_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_override_timestamptz', 'time', chunk_time_interval => INTERVAL '2 days');
             create_hypertable            
 -----------------------------------------
- (41,public,test_override_timestamptz,t)
+ (39,public,test_override_timestamptz,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_override_timestamptz';
@@ -1296,7 +1254,7 @@ CREATE TABLE test_reset_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_reset_timestamptz', 'time');
           create_hypertable           
 --------------------------------------
- (42,public,test_reset_timestamptz,t)
+ (40,public,test_reset_timestamptz,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_reset_timestamptz';
@@ -1319,7 +1277,7 @@ CREATE TABLE test_add_dim(time TIMESTAMPTZ NOT NULL, time2 TIMESTAMPTZ NOT NULL,
 SELECT create_hypertable('test_add_dim', 'time');
      create_hypertable      
 ----------------------------
- (43,public,test_add_dim,t)
+ (41,public,test_add_dim,t)
 
 -- First dimension uses GUC
 SELECT time_interval FROM timescaledb_information.dimensions
@@ -1337,7 +1295,7 @@ ERROR:  must specify either the number of partitions or an interval
 SELECT add_dimension('test_add_dim', 'time2', chunk_time_interval => INTERVAL '1 day');
           add_dimension           
 ----------------------------------
- (56,public,test_add_dim,time2,t)
+ (54,public,test_add_dim,time2,t)
 
 SELECT column_name, time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_add_dim'
@@ -1355,7 +1313,7 @@ CREATE TABLE test_session_1(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_session_1', 'time');
       create_hypertable       
 ------------------------------
- (44,public,test_session_1,t)
+ (42,public,test_session_1,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_session_1';
@@ -1369,7 +1327,7 @@ CREATE TABLE test_session_2(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_session_2', 'time');
       create_hypertable       
 ------------------------------
- (45,public,test_session_2,t)
+ (43,public,test_session_2,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_session_2';
@@ -1388,7 +1346,7 @@ CREATE TABLE test_local_guc(time TIMESTAMPTZ NOT NULL, val INT);
 SELECT create_hypertable('test_local_guc', 'time');
       create_hypertable       
 ------------------------------
- (46,public,test_local_guc,t)
+ (44,public,test_local_guc,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_local_guc';
@@ -1411,7 +1369,7 @@ CREATE TABLE test_uuid_1day(time UUID NOT NULL, val INT);
 SELECT create_hypertable('test_uuid_1day', 'time');
       create_hypertable       
 ------------------------------
- (47,public,test_uuid_1day,t)
+ (45,public,test_uuid_1day,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_uuid_1day';
@@ -1425,7 +1383,7 @@ CREATE TABLE test_uuid_1hour(time UUID NOT NULL, val INT);
 SELECT create_hypertable('test_uuid_1hour', 'time');
        create_hypertable       
 -------------------------------
- (48,public,test_uuid_1hour,t)
+ (46,public,test_uuid_1hour,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_uuid_1hour';
@@ -1440,7 +1398,7 @@ CREATE TABLE test_uuid_override(time UUID NOT NULL, val INT);
 SELECT create_hypertable('test_uuid_override', 'time', chunk_time_interval => INTERVAL '12 hours');
         create_hypertable         
 ----------------------------------
- (49,public,test_uuid_override,t)
+ (47,public,test_uuid_override,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_uuid_override';
@@ -1455,7 +1413,7 @@ CREATE TABLE test_uuid_legacy(time UUID NOT NULL, val INT);
 SELECT create_hypertable('test_uuid_legacy', 'time');
        create_hypertable        
 --------------------------------
- (50,public,test_uuid_legacy,t)
+ (48,public,test_uuid_legacy,t)
 
 SELECT time_interval FROM timescaledb_information.dimensions
   WHERE hypertable_name = 'test_uuid_legacy';
