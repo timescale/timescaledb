@@ -385,6 +385,17 @@ chunk_create(PG_FUNCTION_ARGS)
 	Assert(NULL != ht);
 	Assert(OidIsValid(ht->main_table_relid));
 	check_privileges_for_creating_chunk(hypertable_relid);
+	/* check whether the table referenced by the "chunk_table_relid"
+	 * can inherit the hypertable, otherwise bail out */
+	if (OidIsValid(chunk_table_relid))
+	{
+		if (!object_ownercheck(RelationRelationId, chunk_table_relid, GetUserId()))
+		{
+			aclcheck_error(ACLCHECK_NOT_OWNER,
+						   get_relkind_objtype(get_rel_relkind(chunk_table_relid)),
+						   get_rel_name(chunk_table_relid));
+		}
+	}
 
 	if (NULL == slices)
 	{

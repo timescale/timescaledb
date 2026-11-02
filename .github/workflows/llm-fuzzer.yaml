@@ -469,7 +469,7 @@ jobs:
         if-no-files-found: ignore
 
     - name: Upload results to the database
-      if: always() && steps.repro.outputs.found == 'true'
+      if: always()
       env:
         JOB_NAME: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
