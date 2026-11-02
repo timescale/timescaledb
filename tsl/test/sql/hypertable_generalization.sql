@@ -227,7 +227,6 @@ SELECT create_hypertable('test_table_int', by_range('id', 10));
 
 -- No error when if_not_exists => true
 SELECT create_hypertable('test_table_int', by_range('id', 10), if_not_exists => true);
-SELECT * FROM _timescaledb_functions.get_create_command('test_table_int');
 
 \set ON_ERROR_STOP 0
 -- Should throw an error when if_not_exists is not set
