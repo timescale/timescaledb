@@ -126,12 +126,12 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES tableam_alter_defaults.sql
+  list(APPEND TEST_FILES copy_on_error.sql tableam_alter_defaults.sql
        merge_not_matched_by_source.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES insert_returning_old_new.sql)
+  list(APPEND TEST_FILES copy_reject_limit.sql insert_returning_old_new.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
