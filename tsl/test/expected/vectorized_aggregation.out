@@ -117,14 +117,17 @@ SELECT sum(segment_by_value) FROM testtable;
                Output: testtable_1.segment_by_value
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk testtable_2
                Output: testtable_2.segment_by_value
+               First Row From Metadata: true
                ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
                      Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.segment_by_value, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.int_value, _hyper_1_1_chunk_compressed.float_value
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk testtable_3
                Output: testtable_3.segment_by_value
+               First Row From Metadata: true
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed
                      Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.segment_by_value, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.int_value, _hyper_1_2_chunk_compressed.float_value
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk testtable_4
                Output: testtable_4.segment_by_value
+               First Row From Metadata: true
                ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed
                      Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.segment_by_value, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.int_value, _hyper_1_3_chunk_compressed.float_value
          ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk testtable_5
@@ -2374,6 +2377,7 @@ SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.segment_by_value
                      Chunk Status: PARTIAL
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
                            Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.segment_by_value, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.int_value, _hyper_1_1_chunk_compressed.float_value
          ->  Partial Aggregate
@@ -2384,54 +2388,63 @@ SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_2_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_2_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
                      Output: _hyper_1_2_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed
                            Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.segment_by_value, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.int_value, _hyper_1_2_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_3_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_3_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
                      Output: _hyper_1_3_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed
                            Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.segment_by_value, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.int_value, _hyper_1_3_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_4_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_4_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk
                      Output: _hyper_1_4_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed
                            Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.segment_by_value, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.int_value, _hyper_1_4_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_5_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_5_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_5_chunk
                      Output: _hyper_1_5_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk_compressed
                            Output: _hyper_1_5_chunk_compressed._ts_meta_count, _hyper_1_5_chunk_compressed.segment_by_value, _hyper_1_5_chunk_compressed._ts_meta_min_1, _hyper_1_5_chunk_compressed._ts_meta_max_1, _hyper_1_5_chunk_compressed._ts_meta_v2_first_time, _hyper_1_5_chunk_compressed._ts_meta_v2_last_time, _hyper_1_5_chunk_compressed."time", _hyper_1_5_chunk_compressed.int_value, _hyper_1_5_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_6_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_6_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_6_chunk
                      Output: _hyper_1_6_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk_compressed
                            Output: _hyper_1_6_chunk_compressed._ts_meta_count, _hyper_1_6_chunk_compressed.segment_by_value, _hyper_1_6_chunk_compressed._ts_meta_min_1, _hyper_1_6_chunk_compressed._ts_meta_max_1, _hyper_1_6_chunk_compressed._ts_meta_v2_first_time, _hyper_1_6_chunk_compressed._ts_meta_v2_last_time, _hyper_1_6_chunk_compressed."time", _hyper_1_6_chunk_compressed.int_value, _hyper_1_6_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_7_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_7_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_7_chunk
                      Output: _hyper_1_7_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_7_chunk_compressed
                            Output: _hyper_1_7_chunk_compressed._ts_meta_count, _hyper_1_7_chunk_compressed.segment_by_value, _hyper_1_7_chunk_compressed._ts_meta_min_1, _hyper_1_7_chunk_compressed._ts_meta_max_1, _hyper_1_7_chunk_compressed._ts_meta_v2_first_time, _hyper_1_7_chunk_compressed._ts_meta_v2_last_time, _hyper_1_7_chunk_compressed."time", _hyper_1_7_chunk_compressed.int_value, _hyper_1_7_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_8_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_8_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_8_chunk
                      Output: _hyper_1_8_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_8_chunk_compressed
                            Output: _hyper_1_8_chunk_compressed._ts_meta_count, _hyper_1_8_chunk_compressed.segment_by_value, _hyper_1_8_chunk_compressed._ts_meta_min_1, _hyper_1_8_chunk_compressed._ts_meta_max_1, _hyper_1_8_chunk_compressed._ts_meta_v2_first_time, _hyper_1_8_chunk_compressed._ts_meta_v2_last_time, _hyper_1_8_chunk_compressed."time", _hyper_1_8_chunk_compressed.int_value, _hyper_1_8_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_9_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_9_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_9_chunk
                      Output: _hyper_1_9_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_9_chunk_compressed
                            Output: _hyper_1_9_chunk_compressed._ts_meta_count, _hyper_1_9_chunk_compressed.segment_by_value, _hyper_1_9_chunk_compressed._ts_meta_min_1, _hyper_1_9_chunk_compressed._ts_meta_max_1, _hyper_1_9_chunk_compressed._ts_meta_v2_first_time, _hyper_1_9_chunk_compressed._ts_meta_v2_last_time, _hyper_1_9_chunk_compressed."time", _hyper_1_9_chunk_compressed.int_value, _hyper_1_9_chunk_compressed.float_value
          ->  Partial Aggregate
                Output: PARTIAL sum(_hyper_1_10_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_10_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value
+                     First Row From Metadata: true
                      ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk_compressed
                            Output: _hyper_1_10_chunk_compressed._ts_meta_count, _hyper_1_10_chunk_compressed.segment_by_value, _hyper_1_10_chunk_compressed._ts_meta_min_1, _hyper_1_10_chunk_compressed._ts_meta_max_1, _hyper_1_10_chunk_compressed._ts_meta_v2_first_time, _hyper_1_10_chunk_compressed._ts_meta_v2_last_time, _hyper_1_10_chunk_compressed."time", _hyper_1_10_chunk_compressed.int_value, _hyper_1_10_chunk_compressed.float_value
 

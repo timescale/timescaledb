@@ -148,6 +148,7 @@ select sum((b = (i > 0))::int), count(b = (i > 0)) from cse_explain;
          Cached Subexpressions: (_hyper_1_1_chunk.b = (_hyper_1_1_chunk.i > 0))
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.b, _hyper_1_1_chunk.i
+               First Row From Metadata: true
                ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
                      Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.i, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.b, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts, _hyper_1_1_chunk_compressed.ts, _hyper_1_1_chunk_compressed.v
 
