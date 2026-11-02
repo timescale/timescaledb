@@ -61,7 +61,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * converts the elements to postgres Datum always reads in 8 bytes.
 	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
-	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
+	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAllocZero(dest_mctx, buffer_bytes);
 
 	/* Now fill the data w/o nulls. */
 	ELEMENT_TYPE current_delta = 0;
