@@ -311,3 +311,15 @@ SELECT add_continuous_aggregate_policy('dbowner_summary', NULL, -200, '12 h'::in
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+
+-- Creating a continuous aggregate in a schema the user has no CREATE
+-- privilege on must fail, including the internal schema
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW _timescaledb_internal.cagg_in_internal
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket(100, timec) AS bucket, max(val)
+FROM dbowner_metrics
+GROUP BY bucket WITH NO DATA;
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM pg_class WHERE relname = 'cagg_in_internal';

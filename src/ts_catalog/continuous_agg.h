@@ -21,8 +21,7 @@
 #define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
 	do                                                                                             \
 	{                                                                                              \
-		if ((schemaname) &&                                                                        \
-			strncmp(schemaname, INTERNAL_SCHEMA_NAME, strlen(INTERNAL_SCHEMA_NAME)) == 0)          \
+		if ((schemaname) && strcmp(schemaname, INTERNAL_SCHEMA_NAME) == 0)                         \
 			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
 		else                                                                                       \
 			(newuid) = InvalidOid;                                                                 \
