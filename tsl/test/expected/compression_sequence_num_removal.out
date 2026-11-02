@@ -597,6 +597,7 @@ GROUP BY device_id, text;
                      Group Key: _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_15_chunk
                            Output: _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text
+                           First Row From Metadata: true
                            ->  Index Scan using _hyper_2_15_chunk_compressed_device_id__ts_meta_v2_first_te_idx on _timescaledb_internal._hyper_2_15_chunk_compressed
                                  Output: _hyper_2_15_chunk_compressed._ts_meta_count, _hyper_2_15_chunk_compressed.device_id, _hyper_2_15_chunk_compressed._ts_meta_min_2, _hyper_2_15_chunk_compressed._ts_meta_max_2, _hyper_2_15_chunk_compressed._ts_meta_v2_first_time, _hyper_2_15_chunk_compressed._ts_meta_v2_last_time, _hyper_2_15_chunk_compressed."time", _hyper_2_15_chunk_compressed._ts_meta_min_1, _hyper_2_15_chunk_compressed._ts_meta_max_1, _hyper_2_15_chunk_compressed._ts_meta_v2_first_text, _hyper_2_15_chunk_compressed._ts_meta_v2_last_text, _hyper_2_15_chunk_compressed.text, _hyper_2_15_chunk_compressed.val
                ->  Partial GroupAggregate
@@ -604,6 +605,7 @@ GROUP BY device_id, text;
                      Group Key: _hyper_2_16_chunk.device_id, _hyper_2_16_chunk.text
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_16_chunk
                            Output: _hyper_2_16_chunk.device_id, _hyper_2_16_chunk.text
+                           First Row From Metadata: true
                            ->  Index Scan using _hyper_2_16_chunk_compressed_device_id__ts_meta_v2_first_te_idx on _timescaledb_internal._hyper_2_16_chunk_compressed
                                  Output: _hyper_2_16_chunk_compressed._ts_meta_count, _hyper_2_16_chunk_compressed.device_id, _hyper_2_16_chunk_compressed._ts_meta_min_2, _hyper_2_16_chunk_compressed._ts_meta_max_2, _hyper_2_16_chunk_compressed._ts_meta_v2_first_time, _hyper_2_16_chunk_compressed._ts_meta_v2_last_time, _hyper_2_16_chunk_compressed."time", _hyper_2_16_chunk_compressed._ts_meta_min_1, _hyper_2_16_chunk_compressed._ts_meta_max_1, _hyper_2_16_chunk_compressed._ts_meta_v2_first_text, _hyper_2_16_chunk_compressed._ts_meta_v2_last_text, _hyper_2_16_chunk_compressed.text, _hyper_2_16_chunk_compressed.val
 
