@@ -24,6 +24,7 @@ insert into bytea_test select ts, 3, mix(ts), (ts % 10)::text::bytea from genera
 -- some values for testing zero byte in the middle (not possible for text)
 insert into bytea_test select 4000, 5, 0.5, '\x310031'::bytea;
 insert into bytea_test select 4001, 6, 0.6, '\x31'::bytea;
+insert into bytea_test select 4001, 7, 0.7, '\x310032'::bytea;
 select count(compress_chunk(x)) from show_chunks('bytea_test') x;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  count 
@@ -47,7 +48,7 @@ vacuum analyze bytea_test;
 explain (costs off, verbose, analyze, buffers off, timing off, summary off)
 select * from bytea_test;
 --- QUERY PLAN ---
- Append (actual rows=3998.00 loops=1)
+ Append (actual rows=3999.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=999.00 loops=1)
          Output: _hyper_1_1_chunk.ts, _hyper_1_1_chunk.s, _hyper_1_1_chunk.value, _hyper_1_1_chunk.tag
          Bulk Decompression: true
@@ -63,7 +64,7 @@ select * from bytea_test;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed (actual rows=1.00 loops=1)
                Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_3_chunk_compressed._ts_meta_v2_last_ts, _hyper_1_3_chunk_compressed.ts, _hyper_1_3_chunk_compressed.s, _hyper_1_3_chunk_compressed.value, _hyper_1_3_chunk_compressed.tag
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk (actual rows=2.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk (actual rows=3.00 loops=1)
          Output: _hyper_1_4_chunk.ts, _hyper_1_4_chunk.s, _hyper_1_4_chunk.value, _hyper_1_4_chunk.tag
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed (actual rows=1.00 loops=1)
@@ -84,6 +85,7 @@ group by s order by s;
  4 |    10 | \x30       | \x39
  5 |     1 | \x310031   | \x310031
  6 |     1 | \x31       | \x31
+ 7 |     1 | \x310032   | \x310032
 
 -- Filters must be vectorized.
 set timescaledb.debug_require_vector_qual to 'require';
@@ -96,7 +98,7 @@ select count(*) from bytea_test where ts < 5000 and tag = '\x31'::bytea;
 select count(*) from bytea_test where ts < 5000 and tag != '\x31'::bytea;
  count 
 -------
-  2898
+  2899
 
 select count(*) from bytea_test where ts < 5000 and tag = '\x310031'::bytea;
  count 
@@ -106,7 +108,7 @@ select count(*) from bytea_test where ts < 5000 and tag = '\x310031'::bytea;
 select count(*) from bytea_test where ts < 5000 and tag != '\x310031'::bytea;
  count 
 -------
-  2998
+  2999
 
 reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;

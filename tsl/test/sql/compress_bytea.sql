@@ -31,6 +31,8 @@ insert into bytea_test select 4000, 5, 0.5, '\x310031'::bytea;
 
 insert into bytea_test select 4001, 6, 0.6, '\x31'::bytea;
 
+insert into bytea_test select 4001, 7, 0.7, '\x310032'::bytea;
+
 select count(compress_chunk(x)) from show_chunks('bytea_test') x;
 
 -- bytea segmentby
