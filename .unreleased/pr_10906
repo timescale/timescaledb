@@ -1,0 +1,2 @@
+Fixes: #10902 Fix concurrent UPDATE/DELETE on hypertables silently skipping rows under READ COMMITTED
+Thanks: @manishnithinreddy for reporting the concurrent UPDATE/DELETE regression and bisecting it to 2.28.1
