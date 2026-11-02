@@ -332,27 +332,27 @@ WHERE a.attrelid = (:'ic_schema1' || '.' || :'ic_table1')::regclass
   AND NOT a.attisdropped LIMIT 1 \gset
 
 -- present values (expect true)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_humidity", 42) AS val_42,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 100) AS val_100,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 7) AS val_7
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[42]) AS val_42,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[100]) AS val_100,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[7]) AS val_7
 FROM :ic_schema1.:ic_table1 WHERE device = 'd1' LIMIT 1;
 
 -- absent values (expect false)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_humidity", -999) AS val_neg999,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 999) AS val_999,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 12345) AS val_12345
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[-999]) AS val_neg999,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[999]) AS val_999,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[12345]) AS val_12345
 FROM :ic_schema1.:ic_table1 WHERE device = 'd1' LIMIT 1;
 
 -- present labels (expect true)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_label", 'label_0'::text) AS label_0,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'label_3'::text) AS label_3,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'label_6'::text) AS label_6
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['label_0'::text]) AS label_0,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['label_3'::text]) AS label_3,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['label_6'::text]) AS label_6
 FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 
 -- absent labels (expect false)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_label", 'nonexistent'::text) AS nope1,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'zzz_never'::text) AS nope2,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'NOPE'::text) AS nope3
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['nonexistent'::text]) AS nope1,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['zzz_never'::text]) AS nope2,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['NOPE'::text]) AS nope3
 FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 
 -- Sparse index integrity: the (device, first_time, last_time) btree must be
