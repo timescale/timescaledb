@@ -272,6 +272,7 @@ compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_dat
 					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
 				break;
 			}
+#ifndef WORDS_BIGENDIAN
 			case 2:
 			case 4:
 #ifdef USE_FLOAT8_BYVAL
@@ -294,6 +295,42 @@ compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_dat
 					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
 				break;
 			}
+#else
+			case 1:
+			{
+				const uint8 *src = (const uint8 *) column_values->buffers[1];
+				*column_values->output_value = (Datum) src[arrow_row];
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+			case 2:
+			{
+				const uint16 *src = (const uint16 *) column_values->buffers[1];
+				*column_values->output_value = (Datum) src[arrow_row];
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+			case 4:
+			{
+				const uint32 *src = (const uint32 *) column_values->buffers[1];
+				*column_values->output_value = (Datum) src[arrow_row];
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+#ifdef USE_FLOAT8_BYVAL
+			case 8:
+			{
+				const uint64 *src = (const uint64 *) column_values->buffers[1];
+				*column_values->output_value = (Datum) src[arrow_row];
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+#endif
+#endif
 			case DT_ArrowText:
 			{
 				store_text_datum(column_values, arrow_row);
