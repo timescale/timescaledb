@@ -655,6 +655,8 @@ gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterat
 	iterator->prev_val = 0;
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
+	iterator->last_value_to_return = 0;
+	iterator->last_returned_value = 0;
 
 	simple8brle_decompression_iterator_init_forward(&iterator->tag0s, iterator->gorilla_data.tag0s);
 	simple8brle_decompression_iterator_init_forward(&iterator->tag1s, iterator->gorilla_data.tag1s);
