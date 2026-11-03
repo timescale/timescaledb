@@ -485,3 +485,163 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
 SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
 
 DROP TABLE test_exclude_datetype;
+
+-- the default functions must return a single jsonb value: a set-returning
+-- function can return zero or many rows and an array is not a JSON object
+CREATE TABLE no_rows_defaults(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('no_rows_defaults', 'time');
+INSERT INTO no_rows_defaults VALUES ('2024-01-01 00:00:00+00', 1, 1);
+CREATE FUNCTION segmentby_no_rows(regclass) RETURNS SETOF jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb WHERE false $$;
+CREATE FUNCTION orderby_no_rows(regclass, text[]) RETURNS SETOF jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb WHERE false $$;
+CREATE FUNCTION segmentby_array(regclass) RETURNS jsonb[] LANGUAGE sql AS $$ SELECT ARRAY['{}'::jsonb] $$;
+CREATE FUNCTION orderby_array(regclass, text[]) RETURNS jsonb[] LANGUAGE sql AS $$ SELECT ARRAY['{}'::jsonb] $$;
+
+-- rejected when the setting is changed
+\set ON_ERROR_STOP 0
+SET timescaledb.compression_segmentby_default_function = 'segmentby_no_rows';
+SET timescaledb.compression_segmentby_default_function = 'segmentby_array';
+SET timescaledb.compression_orderby_default_function = 'orderby_no_rows';
+SET timescaledb.compression_orderby_default_function = 'orderby_array';
+\set ON_ERROR_STOP 1
+SHOW timescaledb.compression_segmentby_default_function;
+SHOW timescaledb.compression_orderby_default_function;
+
+-- the check hook cannot see a function that is replaced after the setting was
+-- validated, so the signature is checked again when a default is computed
+CREATE FUNCTION segmentby_replaced(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": ["device"], "confidence": 10}'::jsonb $$;
+CREATE FUNCTION orderby_replaced(regclass, text[]) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"clauses": ["time desc"], "confidence": 10}'::jsonb $$;
+SET timescaledb.compression_segmentby_default_function = 'segmentby_replaced';
+SET timescaledb.compression_orderby_default_function = 'orderby_replaced';
+ALTER TABLE no_rows_defaults SET (timescaledb.compress);
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+select * from chunk_settings;
+select count(decompress_chunk(x)) from show_chunks('no_rows_defaults') x;
+ALTER TABLE no_rows_defaults SET (timescaledb.compress = false);
+
+DROP FUNCTION segmentby_replaced(regclass);
+CREATE FUNCTION segmentby_replaced(regclass) RETURNS SETOF jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb WHERE false $$;
+\set ON_ERROR_STOP 0
+ALTER TABLE no_rows_defaults SET (timescaledb.compress);
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+\set ON_ERROR_STOP 1
+ALTER TABLE no_rows_defaults SET (timescaledb.compress = false);
+RESET timescaledb.compression_segmentby_default_function;
+
+DROP FUNCTION orderby_replaced(regclass, text[]);
+CREATE FUNCTION orderby_replaced(regclass, text[]) RETURNS SETOF jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb WHERE false $$;
+\set ON_ERROR_STOP 0
+ALTER TABLE no_rows_defaults SET (timescaledb.compress);
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+\set ON_ERROR_STOP 1
+ALTER TABLE no_rows_defaults SET (timescaledb.compress = false);
+RESET timescaledb.compression_orderby_default_function;
+
+-- the returned column list is validated like a user-specified segmentby
+CREATE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": [null]}'::jsonb $$;
+SET timescaledb.compression_segmentby_default_function = 'segmentby_value';
+ALTER TABLE no_rows_defaults SET (timescaledb.compress);
+\set ON_ERROR_STOP 0
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+CREATE OR REPLACE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": ["device", null]}'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+CREATE OR REPLACE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": ["nonexistent"]}'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+CREATE OR REPLACE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": ["device", "device"]}'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+CREATE OR REPLACE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": "device"}'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+CREATE OR REPLACE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": ["device"], "confidence": "high"}'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+\set ON_ERROR_STOP 1
+-- a result that is not an object or has no columns means no segmentby
+CREATE OR REPLACE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '[]'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+select * from chunk_settings;
+select count(decompress_chunk(x)) from show_chunks('no_rows_defaults') x;
+CREATE OR REPLACE FUNCTION segmentby_value(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": []}'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+select * from chunk_settings;
+select count(decompress_chunk(x)) from show_chunks('no_rows_defaults') x;
+ALTER TABLE no_rows_defaults SET (timescaledb.compress = false);
+RESET timescaledb.compression_segmentby_default_function;
+
+-- orderby clauses go through the same parser as a user-specified orderby
+CREATE FUNCTION orderby_value(regclass, text[]) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"clauses": ["nonexistent desc"]}'::jsonb $$;
+SET timescaledb.compression_orderby_default_function = 'orderby_value';
+ALTER TABLE no_rows_defaults SET (timescaledb.compress);
+\set ON_ERROR_STOP 0
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+CREATE OR REPLACE FUNCTION orderby_value(regclass, text[]) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"clauses": ["time desc; select 1"]}'::jsonb $$;
+select count(compress_chunk(x)) from show_chunks('no_rows_defaults') x;
+\set ON_ERROR_STOP 1
+ALTER TABLE no_rows_defaults SET (timescaledb.compress = false);
+RESET timescaledb.compression_orderby_default_function;
+
+DROP TABLE no_rows_defaults;
+DROP FUNCTION segmentby_no_rows(regclass);
+DROP FUNCTION orderby_no_rows(regclass, text[]);
+DROP FUNCTION segmentby_array(regclass);
+DROP FUNCTION orderby_array(regclass, text[]);
+DROP FUNCTION segmentby_replaced(regclass);
+DROP FUNCTION orderby_replaced(regclass, text[]);
+DROP FUNCTION segmentby_value(regclass);
+DROP FUNCTION orderby_value(regclass, text[]);
+
+-- the default functions run as the hypertable owner in a security-restricted
+-- operation, like index expressions during an index build. compress_chunk can
+-- be run on the owner's behalf by a superuser, and the function must then run
+-- with the owner's identity, not the caller's, and in a restricted context
+-- (creating a temp table is forbidden there).
+CREATE TABLE owner_defaults(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('owner_defaults', 'time');
+INSERT INTO owner_defaults VALUES ('2024-01-01', 1, 1.0);
+CREATE FUNCTION segmentby_owner(regclass) RETURNS jsonb LANGUAGE plpgsql AS $$
+BEGIN
+  BEGIN
+    EXECUTE 'CREATE TEMP TABLE defaults_tmp(x int) ON COMMIT DROP';
+    RAISE NOTICE 'segmentby default ran as % unrestricted', current_user;
+  EXCEPTION WHEN others THEN
+    RAISE NOTICE 'segmentby default ran as %: %', current_user, SQLERRM;
+  END;
+  RETURN '{"columns": ["device"]}';
+END $$;
+CREATE FUNCTION orderby_owner(regclass, text[]) RETURNS jsonb LANGUAGE plpgsql AS $$
+BEGIN
+  BEGIN
+    EXECUTE 'CREATE TEMP TABLE defaults_tmp(x int) ON COMMIT DROP';
+    RAISE NOTICE 'orderby default ran as % unrestricted', current_user;
+  EXCEPTION WHEN others THEN
+    RAISE NOTICE 'orderby default ran as %: %', current_user, SQLERRM;
+  END;
+  RETURN '{"clauses": ["time desc"]}';
+END $$;
+
+-- a superuser compresses on the owner's behalf
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.compression_segmentby_default_function = 'segmentby_owner';
+SET timescaledb.compression_orderby_default_function = 'orderby_owner';
+ALTER TABLE owner_defaults SET (timescaledb.compress);
+select count(compress_chunk(x)) from show_chunks('owner_defaults') x;
+select * from chunk_settings;
+select count(decompress_chunk(x)) from show_chunks('owner_defaults') x;
+
+-- the owner must be allowed to execute the default function, the privileges
+-- of the caller do not matter
+CREATE FUNCTION segmentby_private(regclass) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"columns": ["device"]}'::jsonb $$;
+REVOKE EXECUTE ON FUNCTION segmentby_private(regclass) FROM PUBLIC;
+SET timescaledb.compression_segmentby_default_function = 'segmentby_private';
+\set ON_ERROR_STOP 0
+select count(compress_chunk(x)) from show_chunks('owner_defaults') x;
+\set ON_ERROR_STOP 1
+GRANT EXECUTE ON FUNCTION segmentby_private(regclass) TO :ROLE_DEFAULT_PERM_USER;
+select count(compress_chunk(x)) from show_chunks('owner_defaults') x;
+select * from chunk_settings;
+
+DROP FUNCTION segmentby_private(regclass);
+RESET timescaledb.compression_segmentby_default_function;
+RESET timescaledb.compression_orderby_default_function;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+DROP TABLE owner_defaults;
+DROP FUNCTION segmentby_owner(regclass);
+DROP FUNCTION orderby_owner(regclass, text[]);
