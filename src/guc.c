@@ -8,6 +8,7 @@
 #include <parser/parse_func.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/lsyscache.h>
 #include <utils/regproc.h>
 #include <utils/timestamp.h>
 #include <utils/varlena.h>
@@ -345,80 +346,103 @@ assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable, newval);
 }
 
-static Oid
-get_segmentby_func(char *input_name)
-{
-	List *namelist = NIL;
+/*
+ * The default segmentby and orderby functions are configured by name. Their
+ * result is read as the first row of a one-row SPI result, so the function
+ * must return a single jsonb value.
+ */
+static const Oid segmentby_fn_argtypes[] = { REGCLASSOID };
+static const Oid orderby_fn_argtypes[] = { REGCLASSOID, TEXTARRAYOID };
 
+static Oid
+lookup_default_fn(const char *input_name, const Oid *argtypes, int nargs)
+{
 	if (strlen(input_name) == 0)
 	{
 		return InvalidOid;
 	}
 
-	namelist = stringToQualifiedNameList(input_name, NULL);
-	Oid argtyp[] = { REGCLASSOID };
-	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+	List *namelist = stringToQualifiedNameList(input_name, NULL);
+	return LookupFuncName(namelist, nargs, argtypes, true);
+}
+
+static bool
+default_fn_returns_jsonb(Oid fnoid)
+{
+	return get_func_rettype(fnoid) == JSONBOID && !get_func_retset(fnoid);
+}
+
+static bool
+check_default_fn(char **newval, const Oid *argtypes, int nargs)
+{
+	if (!ts_extension_is_loaded_and_not_upgrading() || strlen(*newval) == 0)
+	{
+		return true;
+	}
+
+	Oid fnoid = lookup_default_fn(*newval, argtypes, nargs);
+
+	if (!OidIsValid(fnoid))
+	{
+		GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
+		return false;
+	}
+
+	if (!default_fn_returns_jsonb(fnoid))
+	{
+		GUC_check_errdetail("Function \"%s\" must return jsonb and must not return a set.",
+							*newval);
+		return false;
+	}
+
+	return true;
+}
+
+static Oid
+get_default_fn_oid(const char *gucname, const char *input_name, const Oid *argtypes, int nargs)
+{
+	Oid fnoid = lookup_default_fn(input_name, argtypes, nargs);
+
+	if (OidIsValid(fnoid) && !default_fn_returns_jsonb(fnoid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid value for parameter \"%s\": \"%s\"", gucname, input_name),
+				 errdetail("Function \"%s\" must return jsonb and must not return a set.",
+						   input_name)));
+	}
+
+	return fnoid;
 }
 
 static bool
 check_segmentby_func(char **newval, void **extra, GucSource source)
 {
-	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded_and_not_upgrading())
-	{
-		Oid segment_func_oid = get_segmentby_func(*newval);
-
-		if (strlen(*newval) > 0 && !OidIsValid(segment_func_oid))
-		{
-			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
-			return false;
-		}
-	}
-	return true;
+	return check_default_fn(newval, segmentby_fn_argtypes, lengthof(segmentby_fn_argtypes));
 }
 
 Oid
 ts_guc_default_segmentby_fn_oid()
 {
-	return get_segmentby_func(ts_guc_default_segmentby_fn);
-}
-
-static Oid
-get_orderby_func(char *input_name)
-{
-	List *namelist = NIL;
-
-	if (strlen(input_name) == 0)
-	{
-		return InvalidOid;
-	}
-
-	namelist = stringToQualifiedNameList(input_name, NULL);
-	Oid argtyp[] = { REGCLASSOID, TEXTARRAYOID };
-	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+	return get_default_fn_oid(MAKE_EXTOPTION("compression_segmentby_default_function"),
+							  ts_guc_default_segmentby_fn,
+							  segmentby_fn_argtypes,
+							  lengthof(segmentby_fn_argtypes));
 }
 
 static bool
 check_orderby_func(char **newval, void **extra, GucSource source)
 {
-	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded_and_not_upgrading())
-	{
-		Oid func_oid = get_orderby_func(*newval);
-
-		if (strlen(*newval) > 0 && !OidIsValid(func_oid))
-		{
-			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
-			return false;
-		}
-	}
-	return true;
+	return check_default_fn(newval, orderby_fn_argtypes, lengthof(orderby_fn_argtypes));
 }
 
 Oid
 ts_guc_default_orderby_fn_oid()
 {
-	return get_orderby_func(ts_guc_default_orderby_fn);
+	return get_default_fn_oid(MAKE_EXTOPTION("compression_orderby_default_function"),
+							  ts_guc_default_orderby_fn,
+							  orderby_fn_argtypes,
+							  lengthof(orderby_fn_argtypes));
 }
 
 /*
