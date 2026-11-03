@@ -473,16 +473,6 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 		};
 	}
 
-	if (!bulk_decompression_possible_for_some_columns)
-	{
-		/*
-		 * This is mostly a cosmetic thing for EXPLAIN -- don't say that we're
-		 * using bulk decompression, if it is enabled but we have no columns
-		 * that support it.
-		 */
-		path->enable_bulk_decompression = false;
-	}
-
 	/*
 	 * With row-by-row decompression, the executor can build the first row of
 	 * each batch from the first/last sparse metadata and defer the
@@ -529,6 +519,17 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 				context->first_row_from_metadata = false;
 			}
 		}
+	}
+
+	if (!bulk_decompression_possible_for_some_columns)
+	{
+		/*
+		 * This is mostly a cosmetic thing for EXPLAIN -- don't say that we're
+		 * using bulk decompression, if it is enabled but we have no columns
+		 * that support it. The most common case when this happens is when we're
+		 * only selecting segmentby columns.
+		 */
+		path->enable_bulk_decompression = false;
 	}
 
 	/*
