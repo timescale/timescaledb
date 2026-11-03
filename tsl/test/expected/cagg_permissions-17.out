@@ -244,7 +244,7 @@ CREATE TABLE devices (
 SELECT create_hypertable('devices', 'time');
   create_hypertable   
 ----------------------
- (8,public,devices,t)
+ (7,public,devices,t)
 
 GRANT SELECT, TRIGGER ON devices TO :ROLE_DEFAULT_PERM_USER_2;
 INSERT INTO devices
@@ -260,11 +260,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+--------------------------------------
 user_view         | devices_summary
 user_view_perm    | 
-mat_table         | _materialized_hypertable_9
+mat_table         | _materialized_hypertable_8
 mat_table_perm    | 
-direct_view       | _timescaledb_internal._direct_view_9
+direct_view       | _timescaledb_internal._direct_view_8
 direct_view_perm  | 
-partial_view      | _timescaledb_internal._partial_view_9
+partial_view      | _timescaledb_internal._partial_view_8
 partial_view_perm | 
 
 GRANT ALL ON devices_summary TO :ROLE_DEFAULT_PERM_USER;
@@ -272,11 +272,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+--------------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
-mat_table         | _materialized_hypertable_9
+mat_table         | _materialized_hypertable_8
 mat_table_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_9
+direct_view       | _timescaledb_internal._direct_view_8
 direct_view_perm  | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_9
+partial_view      | _timescaledb_internal._partial_view_8
 partial_view_perm | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
 
 REVOKE SELECT, UPDATE ON devices_summary FROM :ROLE_DEFAULT_PERM_USER;
@@ -284,11 +284,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
-mat_table         | _materialized_hypertable_9
+mat_table         | _materialized_hypertable_8
 mat_table_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_9
+direct_view       | _timescaledb_internal._direct_view_8
 direct_view_perm  | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_9
+partial_view      | _timescaledb_internal._partial_view_8
 partial_view_perm | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
 
 \x off
@@ -304,9 +304,9 @@ CREATE TABLE test_default_privileges.devices (
    PRIMARY KEY(time, device)
 );
 SELECT create_hypertable('test_default_privileges.devices', 'time');
-           create_hypertable            
-----------------------------------------
- (10,test_default_privileges,devices,t)
+           create_hypertable           
+---------------------------------------
+ (9,test_default_privileges,devices,t)
 
 CREATE MATERIALIZED VIEW test_default_privileges.devices_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -359,3 +359,60 @@ SELECT add_continuous_aggregate_policy('dbowner_summary', NULL, -200, '12 h'::in
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+-- Creating a continuous aggregate in a schema the user has no CREATE
+-- privilege on must fail, including the internal schema
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW _timescaledb_internal.cagg_in_internal
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket(100, timec) AS bucket, max(val)
+FROM dbowner_metrics
+GROUP BY bucket WITH NO DATA;
+ERROR:  permission denied for schema _timescaledb_internal
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM pg_class WHERE relname = 'cagg_in_internal';
+ count 
+-------
+     0
+
+-- The materialization runs as the cagg owner in a security-restricted
+-- context, like REFRESH MATERIALIZED VIEW. When a superuser (or the
+-- database owner) refreshes on the owner's behalf, the partial view body
+-- must execute with the owner's identity, not the caller's, and in a
+-- restricted context.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE metrics (t TIMESTAMPTZ NOT NULL, v INT);
+SELECT FROM create_hypertable('metrics', 't', chunk_time_interval => interval '1 day');
+--
+
+INSERT INTO metrics VALUES ('2026-01-01', 1);
+-- Reports the role the partial view body runs as, and whether it runs in a
+-- security-restricted context (creating a temp table is forbidden there).
+CREATE FUNCTION record_refresh_user(v INT) RETURNS INT LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  restricted bool;
+BEGIN
+  BEGIN
+    EXECUTE 'CREATE TEMP TABLE refresh_tmp(x int) ON COMMIT DROP';
+    restricted := false;
+  EXCEPTION WHEN others THEN
+    restricted := true;
+  END;
+  RAISE NOTICE 'refresh ran as %, restricted context = %', current_user, restricted;
+  RETURN v;
+END $$;
+CREATE MATERIALIZED VIEW metrics_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 hour', t) AS bucket, sum(record_refresh_user(v))
+FROM metrics
+GROUP BY bucket WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+-- A superuser refreshes on the owner's behalf: the body must run as the cagg
+-- owner (not the superuser) and in a restricted context.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CALL refresh_continuous_aggregate('metrics_cagg', NULL, NULL);
+NOTICE:  refresh ran as default_perm_user, restricted context = t
+DROP MATERIALIZED VIEW metrics_cagg;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
+DROP TABLE metrics;
+DROP FUNCTION record_refresh_user(INT);

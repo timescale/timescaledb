@@ -12,6 +12,7 @@
 #include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am_d.h>
+#include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_type.h>
@@ -33,7 +34,9 @@
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
 #include <utils/jsonb.h>
+#include <utils/lsyscache.h>
 #include <utils/rel.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 #include <utils/typcache.h>
@@ -53,6 +56,7 @@
 #include "extension_constants.h"
 #include "foreach_ptr.h"
 #include "guc.h"
+#include "hypertable.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "trigger.h"
@@ -916,6 +920,56 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
 }
 
 /*
+ * Check the metadata of every batch in a table that gets attached as the
+ * compressed chunk. The count column drives the decompression of a batch, so a
+ * NULL or out-of-range count makes the chunk unreadable. The compressed data
+ * itself is not checked, that would require decompressing all of it.
+ */
+static void
+validate_compressed_chunk_metadata(Oid table_id)
+{
+	Relation rel = table_open(table_id, AccessShareLock);
+	AttrNumber count_attno = get_attnum(table_id, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+	TupleTableSlot *slot = table_slot_create(rel, NULL);
+	TableScanDesc scan = table_beginscan_compat(rel, GetActiveSnapshot(), 0, NULL, 0);
+
+	Assert(AttributeNumberIsValid(count_attno));
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		bool isnull;
+		Datum value = slot_getattr(slot, count_attno, &isnull);
+
+		if (isnull)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_CORRUPTED),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("Column \"%s\" is NULL.", COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
+		}
+
+		int32 count = DatumGetInt32(value);
+		if (count <= 0 || count > GLOBAL_MAX_ROWS_PER_COMPRESSION)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_CORRUPTED),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("Column \"%s\" has value %d but a value between 1 and %d was "
+							   "expected.",
+							   COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+							   count,
+							   GLOBAL_MAX_ROWS_PER_COMPRESSION)));
+		}
+	}
+
+	table_endscan(scan);
+	ExecDropSingleTupleTableSlot(slot);
+	table_close(rel, NoLock);
+}
+
+/*
  * Create compress chunk for specific table.
  *
  * If table_id is InvalidOid, create a new table.
@@ -978,9 +1032,61 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	else
 	{
 		/*
-		 * An existing table was supplied as the compressed chunk. Make sure it
-		 * has every column the settings require, otherwise a later query over
-		 * the chunk fails when a missing column is looked up.
+		 * An existing relation was supplied as the compressed chunk. It has to
+		 * be a plain table.
+		 */
+		char relkind = get_rel_relkind(table_id);
+		if (relkind != RELKIND_RELATION)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail_relkind_not_supported(relkind)));
+		}
+
+		/*
+		 * The table must not be a hypertable.
+		 */
+		if (ts_is_hypertable(table_id))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("The relation is a hypertable.")));
+		}
+
+		/*
+		 * The table must not be a chunk.
+		 */
+		if (ts_chunk_get_by_relid(table_id, false) != NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("The relation is a chunk.")));
+		}
+
+		/*
+		 * The table must not already be the compressed chunk of another
+		 * chunk.
+		 */
+		Oid owner_relid = ts_relation_get_uncompressed_relid(table_id);
+		if (OidIsValid(owner_relid) && owner_relid != src_chunk->fd.relid)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_IN_USE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("The relation is already the compressed chunk of \"%s\".",
+							   get_rel_name(owner_relid))));
+		}
+
+		/*
+		 * Make sure it has every column the settings require, otherwise a
+		 * later query over the chunk fails when a missing column is looked up.
 		 */
 		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
 		ListCell *lc;
@@ -1016,6 +1122,13 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 								   format_type_be(expected_typid))));
 			}
 		}
+
+		/*
+		 * The data comes from the outside, make sure that the batches have
+		 * sane metadata before the table is attached. Otherwise the chunk
+		 * could neither be queried nor decompressed anymore.
+		 */
+		validate_compressed_chunk_metadata(table_id);
 	}
 
 	if (!OidIsValid(table_id))

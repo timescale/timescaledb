@@ -135,3 +135,183 @@ SELECT _timescaledb_functions.create_compressed_chunk(
 );
 ERROR:  relation "badcount_compressed" is not a valid compressed chunk
 \set ON_ERROR_STOP 1
+-- create_compressed_chunk must reject relations like views and partitioned
+-- tables
+CREATE TABLE norelkind(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('norelkind', 'time');
+   create_hypertable    
+------------------------
+ (5,public,norelkind,t)
+
+ALTER TABLE norelkind SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO norelkind VALUES ('2025-01-01', 'dev1', 1.0), ('2025-01-10', 'dev1', 1.0);
+SELECT ch AS "NORELKIND_CHUNK1" FROM show_chunks('norelkind', older_than => '2025-01-05') ch \gset
+SELECT ch AS "NORELKIND_CHUNK2" FROM show_chunks('norelkind', newer_than => '2025-01-05') ch \gset
+SELECT compress_chunk(:'NORELKIND_CHUNK1');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_5_chunk
+
+SELECT compress_relid AS "NORELKIND_COMPRESSED" FROM _timescaledb_catalog.compression_settings WHERE relid = :'NORELKIND_CHUNK1'::regclass \gset
+CREATE VIEW norelkind_view AS SELECT * FROM :NORELKIND_COMPRESSED WHERE false;
+CREATE TABLE norelkind_partitioned (LIKE :NORELKIND_COMPRESSED) PARTITION BY RANGE (device);
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'NORELKIND_CHUNK2'::regclass, 'norelkind_view'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "norelkind_view" is not a valid compressed chunk
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'NORELKIND_CHUNK2'::regclass, 'norelkind_partitioned'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "norelkind_partitioned" is not a valid compressed chunk
+-- the compressed chunk of another chunk must be rejected as well, decompressing
+-- either chunk would drop the compressed data of the other one
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'NORELKIND_CHUNK2'::regclass, :'NORELKIND_COMPRESSED'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "_hyper_5_5_chunk_compressed" is not a valid compressed chunk
+\set ON_ERROR_STOP 1
+-- nothing was attached and the hypertable is still usable
+SELECT count(*) FROM _timescaledb_catalog.compression_settings WHERE relid = :'NORELKIND_CHUNK2'::regclass;
+ count 
+-------
+     0
+
+SELECT count(*) FROM norelkind;
+ count 
+-------
+     2
+
+-- create_compressed_chunk must reject hypertables and chunks as the compressed
+-- table even when they have the right columns, the relation gets dropped when
+-- the chunk is decompressed later on
+CREATE TABLE donor(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('donor', 'time');
+ create_hypertable  
+--------------------
+ (6,public,donor,t)
+
+ALTER TABLE donor SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO donor VALUES ('2025-01-01', 'dev1', 1.0), ('2025-01-10', 'dev1', 2.0);
+SELECT ch AS "DONOR_CHUNK1" FROM show_chunks('donor', older_than => '2025-01-05') ch \gset
+SELECT ch AS "DONOR_CHUNK2" FROM show_chunks('donor', newer_than => '2025-01-05') ch \gset
+SELECT compress_chunk(:'DONOR_CHUNK1');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_6_7_chunk
+
+SELECT compress_relid AS "DONOR_COMPRESSED" FROM _timescaledb_catalog.compression_settings WHERE relid = :'DONOR_CHUNK1'::regclass \gset
+-- a hypertable with the columns of a compressed chunk, and a chunk of it
+CREATE TABLE mimic (LIKE :DONOR_COMPRESSED);
+ALTER TABLE mimic ALTER COLUMN _ts_meta_min_1 SET NOT NULL;
+SELECT create_hypertable('mimic', '_ts_meta_min_1');
+ create_hypertable  
+--------------------
+ (7,public,mimic,t)
+
+INSERT INTO mimic SELECT * FROM :DONOR_COMPRESSED;
+SELECT ch AS "MIMIC_CHUNK" FROM show_chunks('mimic') ch \gset
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+-- a chunk of the same hypertable
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'DONOR_CHUNK2'::regclass, :'DONOR_CHUNK1'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "_hyper_6_7_chunk" is not a valid compressed chunk
+DETAIL:  The relation is a chunk.
+-- an uncompressed chunk of another hypertable with the right columns
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'DONOR_CHUNK2'::regclass, :'MIMIC_CHUNK'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "_hyper_7_9_chunk" is not a valid compressed chunk
+DETAIL:  The relation is a chunk.
+-- a hypertable with the right columns
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'DONOR_CHUNK2'::regclass, 'mimic'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "mimic" is not a valid compressed chunk
+DETAIL:  The relation is a hypertable.
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+-- nothing was attached and the mimic hypertable still has its chunk
+SELECT count(*) FROM _timescaledb_catalog.compression_settings WHERE relid = :'DONOR_CHUNK2'::regclass;
+ count 
+-------
+     0
+
+SELECT count(*) FROM mimic;
+ count 
+-------
+     1
+
+SELECT count(*) FROM show_chunks('mimic');
+ count 
+-------
+     1
+
+-- A table with a NULL count metadata column must be rejected: the metadata of
+-- every batch is checked when the table is attached
+CREATE TABLE nullcount(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('nullcount', 'time');
+   create_hypertable    
+------------------------
+ (8,public,nullcount,t)
+
+ALTER TABLE nullcount SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO nullcount VALUES ('2025-01-01', 'dev1', 1.0), ('2025-01-10', 'dev1', 2.0);
+SELECT ch AS "NULLCOUNT_CHUNK1" FROM show_chunks('nullcount', older_than => '2025-01-05') ch \gset
+SELECT ch AS "NULLCOUNT_CHUNK2" FROM show_chunks('nullcount', newer_than => '2025-01-05') ch \gset
+SELECT compress_chunk(:'NULLCOUNT_CHUNK1');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_10_chunk
+
+SELECT compress_relid AS "NULLCOUNT_COMPRESSED" FROM _timescaledb_catalog.compression_settings WHERE relid = :'NULLCOUNT_CHUNK1'::regclass \gset
+CREATE TABLE nullcount_compressed (LIKE :NULLCOUNT_COMPRESSED);
+INSERT INTO nullcount_compressed SELECT * FROM :NULLCOUNT_COMPRESSED;
+UPDATE nullcount_compressed SET _ts_meta_count = NULL;
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'NULLCOUNT_CHUNK2'::regclass, 'nullcount_compressed'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "nullcount_compressed" is not a valid compressed chunk
+DETAIL:  Column "_ts_meta_count" is NULL.
+-- a count outside of the valid range
+UPDATE nullcount_compressed SET _ts_meta_count = 0;
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'NULLCOUNT_CHUNK2'::regclass, 'nullcount_compressed'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "nullcount_compressed" is not a valid compressed chunk
+DETAIL:  Column "_ts_meta_count" has value 0 but a value between 1 and 32767 was expected.
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+-- nothing was attached and the hypertable is still usable
+SELECT count(*) FROM _timescaledb_catalog.compression_settings WHERE relid = :'NULLCOUNT_CHUNK2'::regclass;
+ count 
+-------
+     0
+
+SELECT * FROM nullcount ORDER BY time;
+             time             | device | value 
+------------------------------+--------+-------
+ Wed Jan 01 00:00:00 2025 PST | dev1   |     1
+ Fri Jan 10 00:00:00 2025 PST | dev1   |     2
+
+-- the same corruption inside the compressed chunk itself is reported as corrupt
+-- data instead of an internal error when the chunk is read
+UPDATE :NULLCOUNT_COMPRESSED SET _ts_meta_count = NULL;
+\set ON_ERROR_STOP 0
+SELECT * FROM nullcount ORDER BY time;
+ERROR:  the compressed data is corrupt
+SELECT decompress_chunk(:'NULLCOUNT_CHUNK1');
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
