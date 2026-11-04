@@ -942,17 +942,25 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
 	};
 
-	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, true);
-
-	/* Chunk already locked, so use NoLock */
-	srcrel = table_open(relid, NoLock);
-
-	if (srcrel->rd_rel->relkind != RELKIND_RELATION)
+	if (get_rel_relkind(relid) != RELKIND_RELATION)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split non-table relations")));
 	}
+
+	/* Only owner is allowed to split */
+	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+	{
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   OBJECT_TABLE /* only table is allowed */,
+					   get_rel_name(relid));
+	}
+
+	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, true);
+
+	/* Chunk already locked, so use NoLock */
+	srcrel = table_open(relid, NoLock);
 
 	Oid amoid = srcrel->rd_rel->relam;
 
@@ -961,14 +969,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("access method \"%s\" is not supported for split", get_am_name(amoid))));
-	}
-
-	/* Only owner is allowed to split */
-	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
-	{
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(srcrel->rd_rel->relkind),
-					   get_rel_name(relid));
 	}
 
 	/* Lock toast table to prevent it from being concurrently vacuumed */
