@@ -841,3 +841,4 @@ select count(*) from split_orderby where time < '2024-01-01 01:00+00';
 select count(*) from split_orderby where time >= '2024-01-01 01:00+00';
 select tableoid::regclass, count(*), min(time), max(time) from split_orderby group by 1 order by 1;
 drop table split_orderby;
+-- Trigger the valgrind CI run for this test.

@@ -349,3 +349,4 @@ NOTICE:  compaction policy not found for hypertable "m2", skipping
 
 DROP TABLE m2;
 DROP FUNCTION unordered_count(regclass);
+-- Trigger the valgrind CI run for this test.

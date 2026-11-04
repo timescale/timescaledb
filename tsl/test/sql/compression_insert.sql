@@ -1242,4 +1242,3 @@ SELECT * FROM i9314 ORDER BY time;
 RESET timescaledb.debug_require_batch_sorted_merge;
 
 RESET timescaledb.enable_direct_compress_insert;
--- Trigger the valgrind CI run for this test.

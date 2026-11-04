@@ -60,3 +60,4 @@ NOTICE:  Eviction test completed: 9216 evictions, 1024 slots, average lifespan 1
 -------------
  
 
+-- Trigger the valgrind CI run for this test.

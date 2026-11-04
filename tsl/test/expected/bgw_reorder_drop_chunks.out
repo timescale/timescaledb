@@ -647,3 +647,4 @@ select total_runs, total_successes, total_failures from timescaledb_information.
 ------------+-----------------+----------------
           3 |               3 |              0
 
+-- Trigger the valgrind CI run for this test.

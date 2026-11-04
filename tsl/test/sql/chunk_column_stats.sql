@@ -456,3 +456,4 @@ AND chunk_id IS NOT NULL;
 SELECT count(*) FROM chunk_skip_invalid WHERE ts > now() - interval '100 years' AND ranged = 1000;
 
 RESET timescaledb.enable_chunk_skipping;
+-- Trigger the valgrind CI run for this test.

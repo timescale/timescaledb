@@ -2252,3 +2252,4 @@ SELECT * FROM cagg_sensordata;
  id | name | bucket | avg 
 ----+------+--------+-----
 
+-- Trigger the valgrind CI run for this test.

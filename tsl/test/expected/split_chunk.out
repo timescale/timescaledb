@@ -1377,3 +1377,4 @@ select tableoid::regclass, count(*), min(time), max(time) from split_orderby gro
  _timescaledb_internal._hyper_10_33_chunk |   600 | Sun Dec 31 17:00:00 2023 PST | Sun Dec 31 17:59:00 2023 PST
 
 drop table split_orderby;
+-- Trigger the valgrind CI run for this test.

@@ -243,3 +243,4 @@ SELECT remove_compaction_policy('m2', if_exists => true);
 DROP TABLE m2;
 
 DROP FUNCTION unordered_count(regclass);
+-- Trigger the valgrind CI run for this test.

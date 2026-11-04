@@ -2370,3 +2370,4 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestampt
 -------------+-----
 
 DROP VIEW caggs_info;
+-- Trigger the valgrind CI run for this test.

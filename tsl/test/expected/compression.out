@@ -2614,3 +2614,4 @@ SELECT count(*) FROM (SELECT compress_chunk(c) FROM show_chunks('hyper_toast_del
 
 RESET timescaledb.compress_truncate_behaviour;
 DROP TABLE hyper_toast_delete;
+-- Trigger the valgrind CI run for this test.

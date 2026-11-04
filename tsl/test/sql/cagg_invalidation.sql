@@ -1362,3 +1362,4 @@ DROP TABLE merge_staging;
 DROP MATERIALIZED VIEW merge_cond_10;
 DROP TABLE merge_conditions;
 RESET timezone;
+-- Trigger the valgrind CI run for this test.

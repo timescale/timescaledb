@@ -1542,3 +1542,4 @@ CREATE MATERIALIZED VIEW cagg_sensordata WITH (tsdb.continuous) AS
 SELECT s.id, s.name,time_bucket('15 minutes', sd.time) as bucket, avg(sd.value) FROM sensordata sd JOIN sensor s USING(id) GROUP BY s.id, bucket WITH NO DATA;
 
 SELECT * FROM cagg_sensordata;
+-- Trigger the valgrind CI run for this test.

@@ -357,3 +357,4 @@ select total_runs, total_successes, total_failures from timescaledb_information.
 -- if we wait another 40s, we should see 3 runs of the job
 select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(40000);
 select total_runs, total_successes, total_failures from timescaledb_information.job_stats where job_id = :polcomp_schedint;
+-- Trigger the valgrind CI run for this test.
