@@ -320,7 +320,7 @@ BEGIN
 
 		IF EXISTS (SELECT FROM pg_inherits WHERE inhparent = relation) THEN
 		RETURN (
-        SELECT _timescaledb_functions.get_approx_row_count(relation) + COALESCE(SUM(@extschema@.approximate_row_count(i.inhrelid)),0) FROM pg_inherits i
+        SELECT _timescaledb_functions.get_approx_row_count(relation) + COALESCE(SUM(@extschema@.approximate_row_count(i.inhrelid::regclass)),0) FROM pg_inherits i
         WHERE i.inhparent = relation
      );
     END IF;
