@@ -1,0 +1,2 @@
+Fixes: #10711 Query cancel during the first statement of a session leaves the backend without TSL features
+Loader: #10711 Retry an unfinished TSL module load after a query cancel during the first statement of a session
