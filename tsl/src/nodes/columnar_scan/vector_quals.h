@@ -49,13 +49,11 @@ typedef struct VectorQualState
 	uint16 num_results;
 	uint64 *vector_qual_result;
 	MemoryContext per_vector_mcxt;
-	TupleTableSlot *slot;
 
 	/*
 	 * Interface function to be provided by scan node.
 	 *
-	 * Given a (compressed) tuple/slot, and a column reference (Var), get the
-	 * corresponding arrow array.
+	 * Given a column reference (Var), get the corresponding arrow array.
 	 *
 	 * Scan-node specific context data can be provided by wrapping this struct
 	 * in a larger one.

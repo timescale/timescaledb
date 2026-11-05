@@ -20,6 +20,7 @@ typedef struct ColumnarScanState
 	List *decompression_map;
 	List *is_segmentby_column;
 	List *bulk_decompression_column;
+	List *boundary_metadata_column;
 	List *custom_scan_tlist;
 	bool has_row_marks;
 
