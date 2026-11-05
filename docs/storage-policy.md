@@ -13,7 +13,7 @@ A policy is declarative. It states how a table is to be stored, not the calls th
 
 ## Details <a id="storage-policy-details"></a>
 
-A policy matches a schema and table name either exactly or by regular expression. Regular expressions are anchored, so `ev_.*` is matched as `^(?:ev_.*)$` and does not match `my_ev_1`. Anchors of your own do no harm, and a pattern has to be a valid expression on its own, so one like `a)|(?:` is rejected. When several policies match, an exact policy wins, and among regex policies the one with the lowest `priority` wins. Only the winner applies, and policies are not merged. [`show_storage_policy_matches`](#show_storage_policy_matches) lists every match in this order.
+A policy matches a schema and table name either exactly or by regular expression. Regular expressions are anchored, so `ev_.*` is matched as `^(?:ev_.*)$` and does not match `my_ev_1`. Anchors of your own do no harm, and a pattern has to be a valid expression on its own, so one like `a)|(?:` is rejected. When several policies match, an exact policy wins, and among regex policies the one with the lowest `priority` wins. Only the winner applies, and policies are not merged. [`lookup_storage_policy`](#lookup_storage_policy) lists every match in this order.
 
 An option given in the `WITH` clause of the statement overrides the same option from the policy, aliases included, and `WITH (tsdb.hypertable = false)` opts the table out. A statement with `WITH (tsdb.columnstore = false)` also leaves out the columnstore settings and the compression age of the policy. Temporary tables, partitions, tables created with `INHERITS` or `OF`, and tables created by an extension script never get a policy. Tables created inside `CREATE SCHEMA` get the policy that matches each of them. The setting `timescaledb.enable_storage_policies` (default `on`) turns policies off for the tables a session creates, and [`explain_storage_policy`](#explain_storage_policy) then says that none applies. [`check_storage_policy_drift`](#check_storage_policy_drift) and [`apply_storage_policy`](#apply_storage_policy) are asked for by name and ignore it. A table in the temporary schema never gets a policy, also when it is created as `pg_temp.name`.
 
@@ -91,7 +91,8 @@ Inspection
 > - [apply_storage_policy](#apply_storage_policy)
 > - [check_storage_policy_drift](#check_storage_policy_drift)
 > - [explain_storage_policy](#explain_storage_policy)
-> - [show_storage_policy_matches](#show_storage_policy_matches)
+> - [generate_storage_policy](#generate_storage_policy)
+> - [lookup_storage_policy](#lookup_storage_policy)
 > - [timescaledb_information.storage_policies](#storage_policies)
 
 ---
@@ -199,9 +200,9 @@ Removes a policy. Tables that were created under it are not changed.
 
 ---
 
-## **show_storage_policy_matches** <a id="show_storage_policy_matches"></a>
+## **lookup_storage_policy** <a id="lookup_storage_policy"></a>
 ```SQL
-show_storage_policy_matches(
+lookup_storage_policy(
     schema_name NAME,
     table_name NAME
 ) RETURNS TABLE (rank INTEGER, name NAME, match_kind TEXT, priority INTEGER, policy JSONB)
@@ -209,7 +210,7 @@ show_storage_policy_matches(
 
 Lists every enabled policy that a table name matches, in the order of precedence. Rank 1 is the policy a `CREATE TABLE` applies, and each next rank is the one that would apply if those before it were removed or disabled.
 
-### Required Arguments <a id="show_storage_policy_matches-required-arguments"></a>
+### Required Arguments <a id="lookup_storage_policy-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `schema_name` | `NAME` | Schema of the table. |
@@ -226,9 +227,9 @@ Lists every enabled policy that a table name matches, in the order of precedence
 | `policy` | `JSONB` | The policy document. |
 <br>
 
-### Sample Usages <a id="show_storage_policy_matches-examples"></a>
+### Sample Usages <a id="lookup_storage_policy-examples"></a>
 ```SQL
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
 ```
 ```
  rank |     name      | match_kind | priority
@@ -321,6 +322,39 @@ SELECT hypertable_name, setting, expected, actual FROM check_storage_policy_drif
  hypertable_name |     setting     | expected |  actual
 -----------------+-----------------+----------+-----------
  ev_1            | retention_after | 30 days  | @ 90 days
+```
+
+---
+
+## **generate_storage_policy** <a id="generate_storage_policy"></a>
+```SQL
+generate_storage_policy(
+    schema_name NAME,
+    table_name NAME
+) RETURNS JSONB
+```
+
+Describes how an existing hypertable is stored today as a policy document, which can be passed to [`add_storage_policy`](#add_storage_policy) or [`alter_storage_policy`](#alter_storage_policy). It reads the partition column and chunk interval, the columnstore `segmentby` and `orderby`, and the ages of the compression and retention policies. A setting that the table does not have is left out, so the document names only what the table has, and a policy made from it shows no drift for that table. Not captured are tiering and the schedule or other configuration of a job. A table whose compression policy has no age of its own is described with the age the policy uses, which is the chunk interval. A plain table has nothing to describe and gives an error.
+
+### Required arguments
+
+|Name|Type|Description|
+|---|---|---|
+| `schema_name` | `NAME` | Schema of the hypertable. |
+| `table_name` | `NAME` | Name of the hypertable. |
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `generate_storage_policy` | `JSONB` | The policy document. |
+<br>
+
+### Sample Usages
+Make an exact policy from a table that was set up by hand:
+
+```SQL
+SELECT add_storage_policy('ev_1', 'fhr', 'ev_1', generate_storage_policy('fhr', 'ev_1'));
 ```
 
 ---

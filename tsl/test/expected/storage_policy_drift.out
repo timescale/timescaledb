@@ -436,6 +436,60 @@ SELECT remove_storage_policy('ul');
 -----------------------
  
 
+-- generate_storage_policy describes a table, and a policy made from it shows no drift
+SELECT add_storage_policy('gen_src', 'drift', 'gen_1', '{
+  "partition_column": "ts", "chunk_interval": "2 days",
+  "columnstore": {"segmentby": "device", "orderby": "ts DESC"},
+  "compression": {"mode": "AFTER", "after": "14 days"},
+  "retention": {"mode": "AFTER", "after": "90 days"}}');
+ add_storage_policy 
+--------------------
+                 15
+
+CREATE TABLE drift.gen_1 (ts timestamptz NOT NULL, device int, v float8);
+SELECT remove_storage_policy('gen_src');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT generate_storage_policy('drift', 'gen_1');
+                                                                                                    generate_storage_policy                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"retention": {"mode": "AFTER", "after": "90 days"}, "columnstore": {"orderby": "ts DESC", "segmentby": "device"}, "compression": {"mode": "AFTER", "after": "14 days"}, "chunk_interval": "2 days", "partition_column": "ts"}
+
+SELECT add_storage_policy('gen_copy', 'drift', 'gen_1', generate_storage_policy('drift', 'gen_1'));
+ add_storage_policy 
+--------------------
+                 16
+
+SELECT count(*) AS drift_rows FROM check_storage_policy_drift('drift', 'gen_1');
+ drift_rows 
+------------
+          0
+
+SELECT remove_storage_policy('gen_copy');
+ remove_storage_policy 
+-----------------------
+ 
+
+-- a table with no compression or retention job names neither
+CREATE TABLE drift.gen_2 (ts timestamptz NOT NULL, v float8) WITH (tsdb.hypertable, tsdb.partition_column = 'ts');
+SELECT remove_compression_policy('drift.gen_2');
+ remove_compression_policy 
+---------------------------
+ t
+
+SELECT generate_storage_policy('drift', 'gen_2');
+                generate_storage_policy                 
+--------------------------------------------------------
+ {"chunk_interval": "7 days", "partition_column": "ts"}
+
+-- a plain table has nothing to describe
+CREATE TABLE drift.gen_plain (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+\set ON_ERROR_STOP 0
+SELECT generate_storage_policy('drift', 'gen_plain');
+ERROR:  "drift"."gen_plain" is not a hypertable
+\set ON_ERROR_STOP 1
 DROP SCHEMA drift CASCADE;
 DROP SCHEMA drift_other CASCADE;
 SELECT remove_storage_policy(name) FROM timescaledb_information.storage_policies WHERE name IN

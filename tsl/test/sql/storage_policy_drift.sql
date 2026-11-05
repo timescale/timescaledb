@@ -176,6 +176,28 @@ INSERT INTO drift.ul_1 VALUES (now());
 SELECT c.relpersistence FROM show_chunks('drift.ul_1') ch JOIN pg_class c ON c.oid = ch;
 SELECT remove_storage_policy('ul');
 
+-- generate_storage_policy describes a table, and a policy made from it shows no drift
+SELECT add_storage_policy('gen_src', 'drift', 'gen_1', '{
+  "partition_column": "ts", "chunk_interval": "2 days",
+  "columnstore": {"segmentby": "device", "orderby": "ts DESC"},
+  "compression": {"mode": "AFTER", "after": "14 days"},
+  "retention": {"mode": "AFTER", "after": "90 days"}}');
+CREATE TABLE drift.gen_1 (ts timestamptz NOT NULL, device int, v float8);
+SELECT remove_storage_policy('gen_src');
+SELECT generate_storage_policy('drift', 'gen_1');
+SELECT add_storage_policy('gen_copy', 'drift', 'gen_1', generate_storage_policy('drift', 'gen_1'));
+SELECT count(*) AS drift_rows FROM check_storage_policy_drift('drift', 'gen_1');
+SELECT remove_storage_policy('gen_copy');
+-- a table with no compression or retention job names neither
+CREATE TABLE drift.gen_2 (ts timestamptz NOT NULL, v float8) WITH (tsdb.hypertable, tsdb.partition_column = 'ts');
+SELECT remove_compression_policy('drift.gen_2');
+SELECT generate_storage_policy('drift', 'gen_2');
+-- a plain table has nothing to describe
+CREATE TABLE drift.gen_plain (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+\set ON_ERROR_STOP 0
+SELECT generate_storage_policy('drift', 'gen_plain');
+\set ON_ERROR_STOP 1
+
 DROP SCHEMA drift CASCADE;
 DROP SCHEMA drift_other CASCADE;
 SELECT remove_storage_policy(name) FROM timescaledb_information.storage_policies WHERE name IN

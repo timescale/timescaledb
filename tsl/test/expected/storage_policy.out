@@ -304,7 +304,7 @@ SELECT s AS schema, n AS "table", m.name, m.match_kind, m.priority
 FROM (VALUES ('fhr', 'ev_fast'), ('fhr', 'ev_slow_1'), ('fhr', 'ev_special'), ('fhr', 'my_ev_fast'),
              ('fhr', 'ev'), ('other', 'audit_log'), ('other', 'audit_log_old'),
              ('other', 'xaudit_log')) AS t(s, n)
-LEFT JOIN LATERAL show_storage_policy_matches(t.s, t.n) AS m ON m.rank = 1
+LEFT JOIN LATERAL lookup_storage_policy(t.s, t.n) AS m ON m.rank = 1
 ORDER BY s, n;
  schema |     table     |      name      | match_kind | priority 
 --------+---------------+----------------+------------+----------
@@ -325,7 +325,7 @@ WARNING:  storage policy "events_slow_2" for "fhr"."ev_slow_2" takes precedence 
 --------------------
                  16
 
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
  rank |     name      | match_kind | priority 
 ------+---------------+------------+----------
     1 | events_slow_2 | exact      |         
@@ -342,14 +342,14 @@ SELECT remove_storage_policy('events_slow_2');
 -----------------------
  
 
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
  rank |    name     | match_kind | priority 
 ------+-------------+------------+----------
     1 | events_slow | regex      |        5
     2 | events      | regex      |       10
 
 -- nothing matches
-SELECT count(*) FROM show_storage_policy_matches('fhr', 'nothing_matches');
+SELECT count(*) FROM lookup_storage_policy('fhr', 'nothing_matches');
  count 
 -------
      0
@@ -398,7 +398,7 @@ SELECT alter_storage_policy('events_slow', enabled => false);
 ----------------------
  
 
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
  rank |  name  | match_kind | priority 
 ------+--------+------------+----------
     1 | events | regex      |       10
@@ -414,7 +414,7 @@ SELECT alter_storage_policy('events', priority => 1);
 ----------------------
  
 
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
  rank |    name     | match_kind | priority 
 ------+-------------+------------+----------
     1 | events      | regex      |        1
@@ -528,12 +528,12 @@ SELECT alter_storage_policy('anchored', table_name => '^anch_.*$');
 ----------------------
  
 
-SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_anch_1 FROM show_storage_policy_matches('fhr', 'anch_1');
+SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_anch_1 FROM lookup_storage_policy('fhr', 'anch_1');
  matches_anch_1 
 ----------------
               1
 
-SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_my_anch_1 FROM show_storage_policy_matches('fhr', 'my_anch_1');
+SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_my_anch_1 FROM lookup_storage_policy('fhr', 'my_anch_1');
  matches_my_anch_1 
 -------------------
                  0

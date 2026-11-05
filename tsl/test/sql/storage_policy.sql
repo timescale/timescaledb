@@ -146,20 +146,20 @@ SELECT s AS schema, n AS "table", m.name, m.match_kind, m.priority
 FROM (VALUES ('fhr', 'ev_fast'), ('fhr', 'ev_slow_1'), ('fhr', 'ev_special'), ('fhr', 'my_ev_fast'),
              ('fhr', 'ev'), ('other', 'audit_log'), ('other', 'audit_log_old'),
              ('other', 'xaudit_log')) AS t(s, n)
-LEFT JOIN LATERAL show_storage_policy_matches(t.s, t.n) AS m ON m.rank = 1
+LEFT JOIN LATERAL lookup_storage_policy(t.s, t.n) AS m ON m.rank = 1
 ORDER BY s, n;
 
 -- all the policies a name matches, in the order of precedence: exact first, then regex by priority
 SELECT add_storage_policy('events_slow_2', 'fhr', 'ev_slow_2', '{"partition_column": "ts"}');
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
 -- rank 1 is the policy CREATE TABLE uses, as its notice says
 CREATE TABLE fhr.ev_slow_2 (ts timestamptz NOT NULL);
 DROP TABLE fhr.ev_slow_2;
 -- removing it promotes the next one
 SELECT remove_storage_policy('events_slow_2');
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
 -- nothing matches
-SELECT count(*) FROM show_storage_policy_matches('fhr', 'nothing_matches');
+SELECT count(*) FROM lookup_storage_policy('fhr', 'nothing_matches');
 
 -- the view lists the policies in the order they are matched
 SELECT name, schema_name, table_name, match_kind, priority, enabled
@@ -181,11 +181,11 @@ ORDER BY 1, 2;
 
 -- a disabled policy is skipped, so the next one that matches applies
 SELECT alter_storage_policy('events_slow', enabled => false);
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
 SELECT alter_storage_policy('events_slow', enabled => true);
 -- the priority can be changed, so the order of two policies can be swapped
 SELECT alter_storage_policy('events', priority => 1);
-SELECT rank, name, match_kind, priority FROM show_storage_policy_matches('fhr', 'ev_slow_2');
+SELECT rank, name, match_kind, priority FROM lookup_storage_policy('fhr', 'ev_slow_2');
 SELECT alter_storage_policy('events', priority => 10);
 
 \set ON_ERROR_STOP 0
@@ -241,8 +241,8 @@ SELECT alter_storage_policy('anchored', table_name => 'ev_1)|(?:');
 \set ON_ERROR_STOP 1
 -- anchors of its own are harmless
 SELECT alter_storage_policy('anchored', table_name => '^anch_.*$');
-SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_anch_1 FROM show_storage_policy_matches('fhr', 'anch_1');
-SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_my_anch_1 FROM show_storage_policy_matches('fhr', 'my_anch_1');
+SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_anch_1 FROM lookup_storage_policy('fhr', 'anch_1');
+SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_my_anch_1 FROM lookup_storage_policy('fhr', 'my_anch_1');
 SELECT remove_storage_policy('anchored');
 
 -- a table in the temporary schema never gets a policy, also when it is named pg_temp explicitly

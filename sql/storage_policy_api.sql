@@ -231,16 +231,86 @@ $$;
 -- if the ranks before it were removed or disabled. An exact policy comes before any regex
 -- policy, and the regex policies follow in order of priority, the lowest value first. The
 -- match_kind says why a policy is where it is, and the priority is NULL for an exact one.
-CREATE OR REPLACE FUNCTION @extschema@.show_storage_policy_matches(schema_name NAME, table_name NAME)
+CREATE OR REPLACE FUNCTION @extschema@.lookup_storage_policy(schema_name NAME, table_name NAME)
 RETURNS TABLE (rank INTEGER, name NAME, match_kind TEXT, priority INTEGER, policy JSONB)
 LANGUAGE sql STABLE SET search_path TO pg_catalog, pg_temp AS
 $$
     SELECT m.rank, p.name, p.match_kind, p.priority, p.policy
     -- the parameters are qualified, as the columns of p have the same names
-    FROM _timescaledb_functions.storage_policy_matches(show_storage_policy_matches.schema_name,
-                                                       show_storage_policy_matches.table_name) m
+    FROM _timescaledb_functions.storage_policy_matches(lookup_storage_policy.schema_name,
+                                                       lookup_storage_policy.table_name) m
     JOIN _timescaledb_catalog.storage_policy p ON p.id = m.id
     ORDER BY m.rank
+$$;
+
+-- A job's age as it goes in a policy: an integer stays one, and an interval has no "@" in front.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.storage_policy_age(age JSONB)
+RETURNS JSONB
+LANGUAGE sql IMMUTABLE
+AS $$
+    SELECT CASE WHEN jsonb_typeof(age) = 'string'
+                THEN to_jsonb(regexp_replace(age #>> '{}', '^@ *', ''))
+                ELSE age END
+$$;
+
+-- The policy document that describes how a hypertable is stored today: its partition column and
+-- chunk interval, the columnstore segmentby and orderby, and the ages of its compression and
+-- retention policies. A setting that the table does not have is left out, so the document names
+-- only what the table has, and a policy made from it shows no drift for that table. The result
+-- can be passed to add_storage_policy() or alter_storage_policy().
+CREATE OR REPLACE FUNCTION @extschema@.generate_storage_policy(schema_name NAME, table_name NAME)
+RETURNS JSONB
+LANGUAGE plpgsql STABLE
+SET IntervalStyle = 'postgres'
+AS $$
+DECLARE
+    dim RECORD;
+    cs RECORD;
+    cconfig JSONB;
+    rconfig JSONB;
+    result JSONB;
+BEGIN
+    SELECT d.column_name, d.time_interval, d.integer_interval INTO dim
+    FROM timescaledb_information.dimensions d
+    WHERE d.hypertable_schema = schema_name AND d.hypertable_name = table_name
+      AND d.dimension_number = 1;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '"%"."%" is not a hypertable', schema_name, table_name
+            USING HINT = 'Only a hypertable has settings to describe.';
+    END IF;
+
+    result := jsonb_build_object(
+        'partition_column', dim.column_name,
+        'chunk_interval', CASE WHEN dim.integer_interval IS NOT NULL
+                               THEN to_jsonb(dim.integer_interval)
+                               ELSE to_jsonb(dim.time_interval::text) END);
+
+    SELECT c.segmentby, c.orderby INTO cs
+    FROM timescaledb_information.hypertable_columnstore_settings c
+    WHERE c.hypertable = to_regclass(format('%I.%I', schema_name, table_name));
+    IF cs.segmentby IS NOT NULL OR cs.orderby IS NOT NULL THEN
+        result := result || jsonb_build_object('columnstore', jsonb_strip_nulls(
+            jsonb_build_object('segmentby', cs.segmentby, 'orderby', cs.orderby)));
+    END IF;
+
+    SELECT j.config INTO cconfig FROM timescaledb_information.jobs j
+    WHERE j.hypertable_schema = schema_name AND j.hypertable_name = table_name
+      AND j.proc_name = 'policy_compression';
+    IF cconfig ? 'compress_after' THEN
+        result := result || jsonb_build_object('compression',
+            jsonb_build_object('mode', 'AFTER', 'after', _timescaledb_functions.storage_policy_age(cconfig->'compress_after')));
+    END IF;
+
+    SELECT j.config INTO rconfig FROM timescaledb_information.jobs j
+    WHERE j.hypertable_schema = schema_name AND j.hypertable_name = table_name
+      AND j.proc_name = 'policy_retention';
+    IF rconfig ? 'drop_after' THEN
+        result := result || jsonb_build_object('retention',
+            jsonb_build_object('mode', 'AFTER', 'after', _timescaledb_functions.storage_policy_age(rconfig->'drop_after')));
+    END IF;
+
+    RETURN result;
+END
 $$;
 
 -- What CREATE TABLE schema_name.table_name WITH (options) would do under the current storage
@@ -525,7 +595,7 @@ BEGIN
         RAISE EXCEPTION 'no storage policy applies to "%"."%"', apply_storage_policy.schema_name,
             apply_storage_policy.table_name
             USING ERRCODE = 'undefined_object',
-                  HINT = 'Use show_storage_policy_matches() to see which policies match a name.';
+                  HINT = 'Use lookup_storage_policy() to see which policies match a name.';
     END IF;
 
     is_hypertable := EXISTS (SELECT FROM timescaledb_information.hypertables h
