@@ -141,11 +141,19 @@ copy_append_path(PlannerInfo *root, AppendPath *path, List *subpaths, PathTarget
 	newPath->subpaths = subpaths;
 	newPath->path.pathtarget = copy_pathtarget(pathtarget);
 
+	/*
+	 * Single-child append inherits its pathkeys from child, but the costing
+	 * fuction doesn't like that.
+	 */
+	newPath->path.pathkeys = NIL;
+
 #if PG19_GE
 	cost_append(newPath, root);
 #else
 	cost_append(newPath);
 #endif
+
+	newPath->path.pathkeys = path->path.pathkeys;
 
 	return newPath;
 }
