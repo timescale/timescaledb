@@ -173,7 +173,7 @@ aic_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	/* Allocate the output buffer for the values and the arrow array in one allocation. */
 	size_t arrow_data_size = sizeof(ArrowArray) + sizeof(void *) * 2;
-	ArrowArray *array = (ArrowArray *) MemoryContextAlloc(dest_mctx, arrow_data_size + values_size);
+	ArrowArray *array = (ArrowArray *) MemoryContextAllocZero(dest_mctx, arrow_data_size + values_size);
 	memset(array, 0, arrow_data_size);
 	const void **buffers = (const void **) &array[1];
 	uint8 *decompressed_values = ((uint8 *) array) + arrow_data_size;
