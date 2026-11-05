@@ -3375,16 +3375,6 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 		}
 	}
 
-	if (is_granular_refresh_tracking_column(ht, cmd->name))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-				 errmsg("cannot drop column \"%s\" used to set up granular refresh", cmd->name),
-				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
-						   "column.",
-						   get_rel_name(ht->main_table_relid))));
-	}
-
 	/* Delete dimension range entries on this column, if any.  */
 	ts_chunk_column_stats_drop(ht, cmd->name, &dropped);
 }
@@ -6559,6 +6549,31 @@ process_drop_view(EventTriggerDropView *dropped_view)
 }
 
 static void
+process_drop_table_column(EventTriggerDropObject *obj)
+{
+	EventTriggerDropTableColumn *column = (EventTriggerDropTableColumn *) obj;
+	Hypertable *ht;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE_COLUMN);
+
+	ht = ts_hypertable_get_by_name(column->schema, column->table);
+
+	if (ht != NULL && is_granular_refresh_tracking_column(ht, column->column))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot drop column \"%s\" used to set up granular refresh",
+						column->column),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   column->table),
+				 errhint("Disable granular refresh with ALTER TABLE ... SET "
+						 "(timescaledb.cagg_enable_granular_refresh = false) before dropping the "
+						 "column.")));
+	}
+}
+
+static void
 process_ddl_sql_drop(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	switch (obj->type)
@@ -6577,6 +6592,9 @@ process_ddl_sql_drop(EventTriggerDropObject *obj, DropBehavior behavior)
 			break;
 		case EVENT_TRIGGER_DROP_VIEW:
 			process_drop_view((EventTriggerDropView *) obj);
+			break;
+		case EVENT_TRIGGER_DROP_TABLE_COLUMN:
+			process_drop_table_column(obj);
 			break;
 		case EVENT_TRIGGER_DROP_FOREIGN_TABLE:
 		case EVENT_TRIGGER_DROP_FOREIGN_SERVER:
