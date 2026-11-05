@@ -143,7 +143,8 @@ copy_append_path(PlannerInfo *root, AppendPath *path, List *subpaths, PathTarget
 
 	/*
 	 * Single-child append inherits its pathkeys from child, but the costing
-	 * fuction doesn't like that.
+	 * fuction doesn't like that. We're replacing the child list as well, so
+	 * need to replace these pathkeys below.
 	 */
 	newPath->path.pathkeys = NIL;
 
@@ -153,7 +154,10 @@ copy_append_path(PlannerInfo *root, AppendPath *path, List *subpaths, PathTarget
 	cost_append(newPath);
 #endif
 
-	newPath->path.pathkeys = path->path.pathkeys;
+	if (list_length(subpaths) == 1)
+	{
+		newPath->path.pathkeys = ((Path *) linitial(subpaths))->pathkeys;
+	}
 
 	return newPath;
 }
