@@ -141,11 +141,23 @@ copy_append_path(PlannerInfo *root, AppendPath *path, List *subpaths, PathTarget
 	newPath->subpaths = subpaths;
 	newPath->path.pathtarget = copy_pathtarget(pathtarget);
 
+	/*
+	 * Single-child append inherits its pathkeys from child, but the costing
+	 * fuction doesn't like that. We're replacing the child list as well, so
+	 * need to replace these pathkeys below.
+	 */
+	newPath->path.pathkeys = NIL;
+
 #if PG19_GE
 	cost_append(newPath, root);
 #else
 	cost_append(newPath);
 #endif
+
+	if (list_length(subpaths) == 1)
+	{
+		newPath->path.pathkeys = ((Path *) linitial(subpaths))->pathkeys;
+	}
 
 	return newPath;
 }
@@ -413,11 +425,18 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		return;
 	}
 
-	if (list_length(subpaths) < 2)
+	if (top_gather == NULL && list_length(subpaths) < 2)
 	{
 		/*
-		 * Doesn't make sense to add per-chunk aggregation paths if there's
-		 * only one chunk.
+		 * If there's only one chunk, and the scan is not parallel, we don't
+		 * force partial aggregation paths. We don't know if the vectorized
+		 * aggregation will be possible, and if not, a useless partial
+		 * aggregation will cause a heavy performance regression.
+		 *
+		 * If there's only one chunk and the scan is parallel, it will have
+		 * partial aggregation as well. But Postgres puts the partial
+		 * aggregation above ParallelAppend node, which prevents vectorized
+		 * aggregation. Use our path construction in this case.
 		 */
 		return;
 	}
