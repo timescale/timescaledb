@@ -69,3 +69,4 @@ extern Const *make_const_value_for_gapfill_internal(Oid typid, int64 value);
 extern int64 gapfill_datum_get_internal(Datum, Oid);
 extern int64 gapfill_bucket_width_get_internal(Oid timetype, Oid argtype, Datum arg,
 											   Interval **interval);
+extern bool gapfill_is_integer_bucket(List *args);
