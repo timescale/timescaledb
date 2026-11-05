@@ -115,4 +115,97 @@ DROP OWNED BY ap_other;
 DROP ROLE ap_other;
 
 DROP SCHEMA ap CASCADE;
+-- a plain table converted by apply is what CREATE TABLE would have made of it: the columnstore is
+-- on and there is a compression policy at the chunk interval
 SELECT remove_storage_policy('ap');
+CREATE SCHEMA conv;
+CREATE TABLE conv.c_plain (ts timestamptz NOT NULL, dev int);
+SELECT add_storage_policy('conv', 'conv', 'c_.*', '{"partition_column": "ts", "chunk_interval": "2 days"}', match_kind => 'regex', priority => 1);
+CREATE TABLE conv.c_new (ts timestamptz NOT NULL, dev int);
+SELECT * FROM apply_storage_policy('conv', 'c_plain', dry_run => true);
+SELECT * FROM apply_storage_policy('conv', 'c_plain');
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables
+WHERE hypertable_schema = 'conv' ORDER BY 1;
+SELECT hypertable_name, proc_name, config->>'compress_after' AS compress_after FROM timescaledb_information.jobs
+WHERE hypertable_schema = 'conv' AND proc_name = 'policy_compression' ORDER BY 1;
+SELECT count(*) AS drift_rows FROM check_storage_policy_drift('conv');
+
+-- the setting is for the tables a session creates: drift and apply, which are asked for by name,
+-- still see the policy, and explain, which says what CREATE TABLE would do, does not
+CREATE TABLE conv.c_guc (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+SET timescaledb.enable_storage_policies = off;
+SELECT hypertable_name, setting, expected, actual FROM check_storage_policy_drift('conv', include_plain => true);
+SELECT * FROM apply_storage_policy('conv', 'c_guc', dry_run => true);
+SELECT setting, value, source FROM explain_storage_policy('conv', 'c_guc');
+RESET timescaledb.enable_storage_policies;
+DROP TABLE conv.c_guc;
+
+-- create_default_indexes and the columnstore index of the policy are applied, and a policy
+-- that says NEVER leaves no compression policy
+SELECT alter_storage_policy('conv', policy => '{
+    "partition_column": "ts", "chunk_interval": "2 days", "create_default_indexes": false,
+    "columnstore": {"segmentby": "dev", "orderby": "ts DESC"}, "compression": {"mode": "NEVER"}
+}');
+CREATE TABLE conv.c_plain2 (ts timestamptz NOT NULL, dev int) WITH (tsdb.hypertable = false);
+CREATE TABLE conv.c_new2 (ts timestamptz NOT NULL, dev int);
+SELECT * FROM apply_storage_policy('conv', 'c_plain2');
+SELECT t.tablename, (SELECT count(*) FROM pg_indexes i WHERE i.schemaname = 'conv' AND i.tablename = t.tablename) AS indexes
+FROM (VALUES ('c_new'), ('c_plain'), ('c_new2'), ('c_plain2')) t(tablename) ORDER BY 1;
+SELECT hypertable, segmentby, orderby FROM timescaledb_information.hypertable_columnstore_settings
+WHERE hypertable::text IN ('conv.c_new2', 'conv.c_plain2') ORDER BY 1;
+SELECT count(*) AS compression_jobs FROM timescaledb_information.jobs
+WHERE hypertable_schema = 'conv' AND hypertable_name IN ('c_new2', 'c_plain2') AND proc_name = 'policy_compression';
+
+-- a dry run says the same of retention as the real run does
+SELECT alter_storage_policy('conv', policy => '{"partition_column": "ts", "retention": {"mode": "AFTER", "after": "30 days"}}');
+CREATE TABLE conv.c_plain3 (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+SELECT * FROM apply_storage_policy('conv', 'c_plain3', dry_run => true);
+SELECT * FROM apply_storage_policy('conv', 'c_plain3');
+
+-- and does not promise what create_hypertable would refuse: a unique index without the
+-- partition column, and a type that cannot be partitioned
+CREATE TABLE conv.c_plain5 (id int PRIMARY KEY, ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+CREATE TABLE conv.c_plain6 (ts text NOT NULL) WITH (tsdb.hypertable = false);
+\set ON_ERROR_STOP 0
+SELECT * FROM apply_storage_policy('conv', 'c_plain5', dry_run => true);
+SELECT * FROM apply_storage_policy('conv', 'c_plain5');
+SELECT * FROM apply_storage_policy('conv', 'c_plain6', dry_run => true);
+\set ON_ERROR_STOP 1
+
+-- a uuid partition column takes an interval, as a time column does
+SELECT add_storage_policy('conv_uuid', 'conv', 'c_uuid', '{"partition_column": "id", "chunk_interval": "1 day"}');
+CREATE TABLE conv.c_uuid (id uuid NOT NULL) WITH (tsdb.hypertable = false);
+SELECT * FROM apply_storage_policy('conv', 'c_uuid', dry_run => true);
+SELECT * FROM apply_storage_policy('conv', 'c_uuid');
+SELECT hypertable_name, time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'c_uuid';
+SELECT remove_storage_policy('conv_uuid');
+
+-- and does not promise what the caller may not do
+CREATE TABLE conv.c_plain4 (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+CREATE ROLE conv_other LOGIN;
+GRANT USAGE ON SCHEMA conv TO conv_other;
+SET ROLE conv_other;
+\set ON_ERROR_STOP 0
+SELECT * FROM apply_storage_policy('conv', 'c_plain4', dry_run => true);
+\set ON_ERROR_STOP 1
+RESET ROLE;
+DROP OWNED BY conv_other;
+DROP ROLE conv_other;
+DROP SCHEMA conv CASCADE;
+SELECT remove_storage_policy('conv');
+
+-- chunks that are compressed already keep the settings they were compressed with, and the row says so
+CREATE SCHEMA cc;
+SELECT add_storage_policy('cc', 'cc', 'cc_.*', '{"partition_column": "ts", "columnstore": {"segmentby": "dev"}}', match_kind => 'regex', priority => 2);
+CREATE TABLE cc.cc_1 (ts timestamptz NOT NULL, dev int, site int);
+INSERT INTO cc.cc_1 VALUES (now(), 1, 1);
+SELECT count(compress_chunk(c)) AS compressed FROM show_chunks('cc.cc_1') c;
+SELECT alter_storage_policy('cc', policy => '{"partition_column": "ts", "columnstore": {"segmentby": "site"}}');
+SELECT * FROM apply_storage_policy('cc', 'cc_1', dry_run => true);
+SET client_min_messages TO warning;
+SELECT * FROM apply_storage_policy('cc', 'cc_1');
+RESET client_min_messages;
+DROP SCHEMA cc CASCADE;
+SELECT remove_storage_policy('cc');
+
+

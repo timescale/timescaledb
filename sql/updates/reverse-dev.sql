@@ -1,5 +1,20 @@
-
--- drop storage_policy
+-- drop storage_policy: the functions, the view and then the table they use
+DROP FUNCTION IF EXISTS @extschema@.apply_storage_policy(name, name, bool, bool);
+DROP FUNCTION IF EXISTS @extschema@.check_storage_policy_drift(name, name, bool, bool);
+DROP FUNCTION IF EXISTS @extschema@.explain_storage_policy(name, name, jsonb);
+DROP FUNCTION IF EXISTS @extschema@.show_storage_policy_matches(name, name);
+DROP FUNCTION IF EXISTS @extschema@.remove_storage_policy(name, bool);
+DROP FUNCTION IF EXISTS @extschema@.alter_storage_policy(name, text, text, jsonb, integer, bool);
+DROP FUNCTION IF EXISTS @extschema@.add_storage_policy(name, text, text, jsonb, text, integer, bool, bool);
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_setting(jsonb, text);
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_explain(name, name, jsonb, bool);
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_normalize_columns(text);
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_warn_overlaps(name);
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_caller();
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_matches(name, name);
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_check_owner();
+DROP FUNCTION IF EXISTS _timescaledb_functions.storage_policy_validate(jsonb);
+DROP VIEW IF EXISTS timescaledb_information.storage_policies;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.storage_policy;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.storage_policy_id_seq;
 DROP TABLE _timescaledb_catalog.storage_policy;

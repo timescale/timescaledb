@@ -77,14 +77,16 @@ SET timescaledb.enable_storage_policies = off;
 CREATE TABLE ai.ai_plain (t bigint NOT NULL, a int);
 RESET timescaledb.enable_storage_policies;
 SELECT * FROM apply_storage_policy('ai', 'ai_plain', dry_run => true);
-     setting     | expected | actual |    action     
------------------+----------+--------+---------------
- tsdb.hypertable | true     | false  | would convert
+     setting      | expected | actual |    action     
+------------------+----------+--------+---------------
+ tsdb.hypertable  | true     | false  | would convert
+ tsdb.columnstore | true     |        | would apply
 
 SELECT * FROM apply_storage_policy('ai', 'ai_plain');
-     setting     | expected | actual |  action   
------------------+----------+--------+-----------
- tsdb.hypertable | true     | false  | converted
+     setting      | expected | actual |  action   
+------------------+----------+--------+-----------
+ tsdb.hypertable  | true     | false  | converted
+ tsdb.columnstore | true     |        | applied
 
 SELECT integer_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'ai_plain';
  integer_interval 
@@ -101,9 +103,10 @@ SET timescaledb.enable_storage_policies = off;
 CREATE TABLE ai.ai_default (t bigint NOT NULL);
 RESET timescaledb.enable_storage_policies;
 SELECT * FROM apply_storage_policy('ai', 'ai_default');
-     setting     | expected | actual |  action   
------------------+----------+--------+-----------
- tsdb.hypertable | true     | false  | converted
+     setting      | expected | actual |  action   
+------------------+----------+--------+-----------
+ tsdb.hypertable  | true     | false  | converted
+ tsdb.columnstore | true     |        | applied
 
 SELECT integer_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'ai_default';
  integer_interval 

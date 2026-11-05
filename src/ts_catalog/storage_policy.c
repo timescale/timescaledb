@@ -15,7 +15,9 @@
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
 #include <nodes/value.h>
+#include <nodes/miscnodes.h>
 #include <utils/acl.h>
+#include <utils/snapmgr.h>
 #include <utils/builtins.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
@@ -52,7 +54,7 @@ storage_policy_cmp(const ListCell *a, const ListCell *b)
 	/* an exact policy before any regex one, then the lowest priority value first */
 	if (pa->is_exact != pb->is_exact)
 		return pa->is_exact ? -1 : 1;
-	return pg_cmp_s32(pa->priority, pb->priority);
+	return (pa->priority > pb->priority) - (pa->priority < pb->priority);
 }
 
 /*
@@ -66,6 +68,14 @@ ts_storage_policy_find_all(const char *schema_name, const char *table_name)
 	List *matches = NIL;
 	ScanIterator iterator =
 		ts_scan_iterator_create(STORAGE_POLICY, AccessShareLock, CurrentMemoryContext);
+
+	/*
+	 * The scanner's default is an instant snapshot, which can miss both the old and the new row
+	 * of a policy that is changed at the same time, and then the table silently gets no policy.
+	 * A snapshot of the committed state sees one of the two.
+	 */
+	Snapshot snapshot = RegisterSnapshot(GetLatestSnapshot());
+	iterator.ctx.snapshot = snapshot;
 
 	/* The table is small and rows are matched by pattern, so scan it all. */
 	ts_scanner_foreach(&iterator)
@@ -119,6 +129,7 @@ ts_storage_policy_find_all(const char *schema_name, const char *table_name)
 			heap_freetuple(tuple);
 	}
 	ts_scan_iterator_close(&iterator);
+	UnregisterSnapshot(snapshot);
 
 	list_sort(matches, storage_policy_cmp);
 	return matches;
@@ -205,6 +216,25 @@ policy_foreach_key(JsonbContainer *container, const char *path, PolicyKeyFn fn, 
 	}
 }
 
+/* The text of a column name or a column list, which cannot be empty. */
+static char *
+policy_value_to_column_text(const char *path, const JsonbValue *value)
+{
+	char *text;
+
+	if (value->type != jbvString)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid storage policy: \"%s\" must be a string", path)));
+
+	text = pnstrdup(value->val.string.val, value->val.string.len);
+	if (strspn(text, " \t\n") == strlen(text))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid storage policy: \"%s\" cannot be empty", path)));
+	return text;
+}
+
 static void
 columnstore_key(const char *key, JsonbValue *value, StoragePolicyOptions *out)
 {
@@ -212,10 +242,9 @@ columnstore_key(const char *key, JsonbValue *value, StoragePolicyOptions *out)
 	{
 		char path[64];
 		snprintf(path, sizeof(path), "columnstore.%s", key);
-		out->with_options = lappend(out->with_options,
-						   make_tsdb_option(key,
-											(Node *) makeString(
-												policy_value_to_string(path, value))));
+		out->with_options =
+			lappend(out->with_options,
+					make_tsdb_option(key, (Node *) makeString(policy_value_to_column_text(path, value))));
 		return;
 	}
 
@@ -247,6 +276,28 @@ age_key(const char *key, JsonbValue *value, StoragePolicyOptions *out)
 				 errhint("Valid keys are \"mode\" and \"after\".")));
 }
 
+/* Parse interval input without raising the error, which is a soft error where Postgres allows it. */
+static bool
+interval_input_ok(const char *str, Datum *result)
+{
+	ErrorSaveContext escontext = { .type = T_ErrorSaveContext };
+
+	return DirectInputFunctionCallSafe(interval_in,
+									   (char *) str,
+									   InvalidOid,
+									   -1,
+									   (Node *) &escontext,
+									   result);
+}
+
+static bool
+int8_input_ok(const char *str, Datum *result)
+{
+	ErrorSaveContext escontext = { .type = T_ErrorSaveContext };
+
+	return DirectInputFunctionCallSafe(int8in, (char *) str, InvalidOid, -1, (Node *) &escontext, result);
+}
+
 /*
  * An age must be a positive interval, or a positive integer for an integer time column. An
  * integer is also valid interval input, so one check covers both. Whether it fits the time column
@@ -257,25 +308,8 @@ validate_age(const char *path, const char *after)
 {
 	static const Interval zero = { 0 };
 	Datum age = 0;
-	bool valid = true;
-	MemoryContext oldcontext = CurrentMemoryContext;
 
-	PG_TRY();
-	{
-		age = DirectFunctionCall3(interval_in,
-								  CStringGetDatum(after),
-								  ObjectIdGetDatum(InvalidOid),
-								  Int32GetDatum(-1));
-	}
-	PG_CATCH();
-	{
-		MemoryContextSwitchTo(oldcontext);
-		FlushErrorState();
-		valid = false;
-	}
-	PG_END_TRY();
-
-	if (!valid)
+	if (!interval_input_ok(after, &age))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid storage policy: \"%s\" of \"%s\" is not a valid age", after, path),
@@ -288,6 +322,44 @@ validate_age(const char *path, const char *after)
 				 errmsg("invalid storage policy: \"%s\" of \"%s\" must be greater than zero",
 						after,
 						path)));
+}
+
+/*
+ * A chunk interval is a positive interval for a time column, or a positive integer for an integer
+ * column. Whether it fits the column can only be checked when a table is created.
+ */
+static void
+validate_chunk_interval(const char *chunk_interval)
+{
+	static const Interval zero = { 0 };
+	Datum value = 0;
+
+	if (int8_input_ok(chunk_interval, &value))
+	{
+		if (DatumGetInt64(value) <= 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid storage policy: \"chunk_interval\" of \"%s\" must be greater "
+							"than zero",
+							chunk_interval)));
+		return;
+	}
+
+	if (!interval_input_ok(chunk_interval, &value))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid storage policy: \"chunk_interval\" of \"%s\" is not a valid "
+						"interval",
+						chunk_interval),
+				 errhint("Use an interval such as '1 day', or an integer for an integer time "
+						 "column.")));
+
+	if (DatumGetBool(DirectFunctionCall2(interval_le, value, IntervalPGetDatum(&zero))))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid storage policy: \"chunk_interval\" of \"%s\" must be greater than "
+						"zero",
+						chunk_interval)));
 }
 
 /*
@@ -349,11 +421,12 @@ compression_key(const char *name, JsonbValue *value, StoragePolicyOptions *out)
 				make_tsdb_option("compress_after", (Node *) makeString(after ? after : pstrdup("never"))));
 }
 
-/* NEVER and an absent key are the same, no retention job is scheduled. */
+/* NEVER and an absent key both schedule no retention job, but only NEVER is something to compare. */
 static void
 retention_key(const char *name, JsonbValue *value, StoragePolicyOptions *out)
 {
 	out->retention_after = parse_age_object(name, value, out);
+	out->retention_never = (out->retention_after == NULL);
 }
 
 /*
@@ -376,12 +449,25 @@ require_timescale_license(const char *key)
 static void
 top_level_key(const char *key, JsonbValue *value, StoragePolicyOptions *out)
 {
-	if (strcmp(key, "partition_column") == 0 || strcmp(key, "chunk_interval") == 0)
+	if (strcmp(key, "partition_column") == 0)
 	{
-		out->with_options = lappend(out->with_options,
-						   make_tsdb_option(key,
-											(Node *) makeString(
-												policy_value_to_string(key, value))));
+		char *column = policy_value_to_column_text(key, value);
+
+		if (strlen(column) >= NAMEDATALEN)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid storage policy: \"partition_column\" is longer than %d bytes",
+							NAMEDATALEN - 1)));
+		out->with_options =
+			lappend(out->with_options, make_tsdb_option(key, (Node *) makeString(column)));
+	}
+	else if (strcmp(key, "chunk_interval") == 0)
+	{
+		char *chunk_interval = policy_value_to_string(key, value);
+
+		validate_chunk_interval(chunk_interval);
+		out->with_options =
+			lappend(out->with_options, make_tsdb_option(key, (Node *) makeString(chunk_interval)));
 	}
 	else if (strcmp(key, "create_default_indexes") == 0)
 	{
@@ -467,6 +553,18 @@ ts_storage_policy_check_owner(PG_FUNCTION_ARGS)
 						get_database_name(MyDatabaseId))));
 
 	PG_RETURN_VOID();
+}
+
+TS_FUNCTION_INFO_V1(ts_storage_policy_caller);
+
+/* The role the session runs as, which is who made a change, and not the function owner. */
+Datum
+ts_storage_policy_caller(PG_FUNCTION_ARGS)
+{
+	Name name = (Name) palloc0(NAMEDATALEN);
+
+	namestrcpy(name, GetUserNameFromId(GetOuterUserId(), false));
+	PG_RETURN_NAME(name);
 }
 
 TS_FUNCTION_INFO_V1(ts_storage_policy_matches);
@@ -585,7 +683,13 @@ ts_storage_policy_explain(PG_FUNCTION_ARGS)
 			statement = ts_create_table_with_clause_parse(list);
 	}
 
-	if (!ts_guc_enable_storage_policies)
+	/*
+	 * Drift and apply ask with the fourth argument true, as they are asked for by name and the
+	 * setting is for the tables a session creates.
+	 */
+	bool ignore_guc = PG_NARGS() > 3 && !PG_ARGISNULL(3) && PG_GETARG_BOOL(3);
+
+	if (!ts_guc_enable_storage_policies && !ignore_guc)
 		none_reason = "timescaledb.enable_storage_policies is off";
 	else if (statement != NULL && !statement[CreateTableFlagHypertable].is_default &&
 			 !DatumGetBool(statement[CreateTableFlagHypertable].parsed))
@@ -632,11 +736,11 @@ ts_storage_policy_explain(PG_FUNCTION_ARGS)
 	{
 		StoragePolicyOptions *options = ts_storage_policy_to_options(policy.policy);
 
-		if (options->retention_after != NULL)
+		if (options->retention_after != NULL || options->retention_never)
 			explain_put_row(rsinfo->setResult,
 							rsinfo->setDesc,
 							"retention_after",
-							options->retention_after,
+							options->retention_after != NULL ? options->retention_after : "never",
 							"policy");
 	}
 

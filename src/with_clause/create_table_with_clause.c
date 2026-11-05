@@ -54,5 +54,19 @@ ts_create_table_with_clause_overlay(const WithClauseResult *explicit_clauses,
 						explicit_clauses[i] :
 						policy_clauses[i];
 
+	/*
+	 * A statement that turns the columnstore off also does without what the policy says about it.
+	 * Left in, the age of the compression policy and the columnstore settings would be an error,
+	 * as they need the columnstore. An option of the statement itself is still taken as written.
+	 */
+	if (explicit_clauses != NULL && !explicit_clauses[CreateTableFlagColumnstore].is_default &&
+		!DatumGetBool(explicit_clauses[CreateTableFlagColumnstore].parsed))
+	{
+		result[CreateTableFlagCompressAfter] = explicit_clauses[CreateTableFlagCompressAfter];
+		result[CreateTableFlagSegmentBy] = explicit_clauses[CreateTableFlagSegmentBy];
+		result[CreateTableFlagOrderBy] = explicit_clauses[CreateTableFlagOrderBy];
+		result[CreateTableFlagIndex] = explicit_clauses[CreateTableFlagIndex];
+	}
+
 	return result;
 }

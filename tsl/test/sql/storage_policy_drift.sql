@@ -113,7 +113,70 @@ RESET ROLE;
 DROP OWNED BY drift_reader;
 DROP ROLE drift_reader;
 
+-- retention NEVER is compared too: a retention policy added by hand is drift, and apply removes it
+SELECT add_storage_policy('no_ret', 'drift', 'no_ret', '{"partition_column": "ts", "retention": {"mode": "NEVER"}}');
+CREATE TABLE drift.no_ret (ts timestamptz NOT NULL);
+SELECT setting, value, source FROM explain_storage_policy('drift', 'no_ret') WHERE setting = 'retention_after';
+SELECT hypertable_name, setting, expected FROM check_storage_policy_drift('drift', 'no_ret');
+SELECT add_retention_policy('drift.no_ret', INTERVAL '30 days') IS NOT NULL AS added;
+SELECT hypertable_name, setting, expected, actual FROM check_storage_policy_drift('drift', 'no_ret');
+SELECT * FROM apply_storage_policy('drift', 'no_ret', dry_run => true);
+SELECT count(*) AS jobs FROM timescaledb_information.jobs WHERE hypertable_name = 'no_ret' AND proc_name = 'policy_retention';
+-- removing a policy deletes nothing, so allow_retention is not needed
+SELECT * FROM apply_storage_policy('drift', 'no_ret');
+SELECT count(*) AS jobs FROM timescaledb_information.jobs WHERE hypertable_name = 'no_ret' AND proc_name = 'policy_retention';
+SELECT count(*) AS drift_rows FROM check_storage_policy_drift('drift', 'no_ret');
+SELECT remove_storage_policy('no_ret');
+
+-- the time column is added to the order when a list leaves it out, so that is not drift
+SELECT add_storage_policy('ob', 'drift', 'ob_.*', '{"partition_column": "ts", "columnstore": {"segmentby": "dev", "orderby": "v"}}', match_kind => 'regex', priority => 901);
+CREATE TABLE drift.ob_1 (ts timestamptz NOT NULL, dev int, v int);
+SELECT orderby FROM timescaledb_information.hypertable_columnstore_settings WHERE hypertable = 'drift.ob_1'::regclass;
+SELECT count(*) AS drift_rows FROM check_storage_policy_drift('drift', 'ob_1');
+SELECT remove_storage_policy('ob');
+-- spellings of the same list: the defaults of a direction are not a difference, a quoted name keeps its case
+SELECT s, _timescaledb_functions.storage_policy_normalize_columns(s) AS normalised FROM (VALUES
+    ('ts DESC NULLS FIRST'), ('ts ASC NULLS LAST'), ('ts ASC NULLS FIRST'), ('ts DESC NULLS LAST'),
+    ('TS  ,  Dev DESC'), ('"Dev", dev'), (NULL)) v(s);
+
+-- plain tables that a policy matches: made before the policy, or opted out with
+-- tsdb.hypertable = false, and so not hypertables
+CREATE TABLE drift.pl_old (ts timestamptz NOT NULL, v int);
+INSERT INTO drift.pl_old VALUES (now(), 1);
+SELECT add_storage_policy('pl', 'drift', 'pl_.*', '{"partition_column": "ts", "chunk_interval": "1 day"}', match_kind => 'regex', priority => 900);
+CREATE TABLE drift.pl_optout (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+CREATE TABLE drift.pl_new (ts timestamptz NOT NULL);
+CREATE UNLOGGED TABLE drift.pl_unlogged (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+-- a plain table no policy matches, a partition, a child and a temporary table are not listed
+CREATE TABLE drift.other_plain (ts timestamptz NOT NULL);
+CREATE TABLE drift.pl_part (ts timestamptz NOT NULL) PARTITION BY RANGE (ts);
+CREATE TABLE drift.pl_part_1 PARTITION OF drift.pl_part FOR VALUES FROM ('2020-01-01') TO ('2021-01-01');
+CREATE TEMP TABLE pl_temp (ts timestamptz NOT NULL);
+CREATE TABLE drift.pl_child () INHERITS (drift.other_plain);
+SELECT hypertable_name, policy_name, setting, expected, actual, in_sync
+FROM check_storage_policy_drift('drift', include_plain => true)
+WHERE hypertable_name LIKE 'pl\_%' OR hypertable_name = 'other_plain'
+ORDER BY 1, 3;
+-- off by default
+SELECT count(*) AS plain_rows_by_default FROM check_storage_policy_drift('drift')
+WHERE hypertable_name LIKE 'pl\_%' OR hypertable_name = 'other_plain';
+-- apply agrees: the empty one converts and the one with rows is an error
+SELECT * FROM apply_storage_policy('drift', 'pl_optout', dry_run => true);
+\set ON_ERROR_STOP 0
+SELECT * FROM apply_storage_policy('drift', 'pl_old', dry_run => true);
+\set ON_ERROR_STOP 1
+SELECT * FROM apply_storage_policy('drift', 'pl_optout');
+SELECT hypertable_name, setting FROM check_storage_policy_drift('drift', 'pl_optout', include_plain => true);
+SELECT remove_storage_policy('pl');
+
+-- an unlogged table gets a policy too, and so do its chunks
+SELECT add_storage_policy('ul', 'drift', 'ul_1', '{"partition_column": "ts"}');
+CREATE UNLOGGED TABLE drift.ul_1 (ts timestamptz NOT NULL);
+INSERT INTO drift.ul_1 VALUES (now());
+SELECT c.relpersistence FROM show_chunks('drift.ul_1') ch JOIN pg_class c ON c.oid = ch;
+SELECT remove_storage_policy('ul');
+
 DROP SCHEMA drift CASCADE;
 DROP SCHEMA drift_other CASCADE;
 SELECT remove_storage_policy(name) FROM timescaledb_information.storage_policies WHERE name IN
-  ('sp_plain', 'sp_desc', 'sp_asc', 'never', 'full', 'int', 'wide', 'sp2', 'quoted');
+  ('sp_plain', 'sp_desc', 'sp_asc', 'never', 'full', 'int', 'wide', 'sp2', 'quoted', 'pl');

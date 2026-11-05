@@ -13,24 +13,26 @@ A policy is declarative. It states how a table is to be stored, not the calls th
 
 ## Details <a id="storage-policy-details"></a>
 
-A policy matches a schema and table name either exactly or by regular expression. Regular expressions are anchored, so `ev_.*` is matched as `^(?:ev_.*)$` and does not match `my_ev_1`. When several policies match, an exact policy wins, and among regex policies the one with the lowest `priority` wins. Only the winner applies, and policies are not merged. [`show_storage_policy_matches`](#show_storage_policy_matches) lists every match in this order.
+A policy matches a schema and table name either exactly or by regular expression. Regular expressions are anchored, so `ev_.*` is matched as `^(?:ev_.*)$` and does not match `my_ev_1`. Anchors of your own do no harm, and a pattern has to be a valid expression on its own, so one like `a)|(?:` is rejected. When several policies match, an exact policy wins, and among regex policies the one with the lowest `priority` wins. Only the winner applies, and policies are not merged. [`show_storage_policy_matches`](#show_storage_policy_matches) lists every match in this order.
 
-An option given in the `WITH` clause of the statement overrides the same option from the policy, aliases included, and `WITH (tsdb.hypertable = false)` opts the table out. Temporary tables, partitions, tables created with `INHERITS` or `OF`, and tables created by an extension script never get a policy. The setting `timescaledb.enable_storage_policies` (default `on`) turns policies off for a session.
+An option given in the `WITH` clause of the statement overrides the same option from the policy, aliases included, and `WITH (tsdb.hypertable = false)` opts the table out. A statement with `WITH (tsdb.columnstore = false)` also leaves out the columnstore settings and the compression age of the policy. Temporary tables, partitions, tables created with `INHERITS` or `OF`, and tables created by an extension script never get a policy. Tables created inside `CREATE SCHEMA` get the policy that matches each of them. The setting `timescaledb.enable_storage_policies` (default `on`) turns policies off for the tables a session creates, and [`explain_storage_policy`](#explain_storage_policy) then says that none applies. [`check_storage_policy_drift`](#check_storage_policy_drift) and [`apply_storage_policy`](#apply_storage_policy) are asked for by name and ignore it. A table in the temporary schema never gets a policy, also when it is created as `pg_temp.name`.
 
 A policy that matches but cannot be applied fails the `CREATE TABLE` and names the policy, as a table that silently stayed plain would be found only after it had grown too large to convert. A policy applies only when a table is created. A table keeps its settings when the policy is later changed, and [`check_storage_policy_drift`](#check_storage_policy_drift) and [`apply_storage_policy`](#apply_storage_policy) find and fix the difference.
 
-Only the database owner or a superuser can add, alter or remove a policy, as a policy decides how other roles' tables are stored. The policy applies as the role that runs `CREATE TABLE`, so it grants nothing that role doesn't have. Policies are included in a dump and are not applied again when it is restored.
+Only the database owner or a superuser can add, alter or remove a policy, as a policy decides how other roles' tables are stored. The policy applies as the role that runs `CREATE TABLE`, so it grants nothing that role doesn't have, and `updated_by` records the role that made the change. Policies are included in a dump and are not applied again when it is restored.
 
-The policy is a JSON document. Unknown keys are rejected when the policy is stored.
+The policy is a JSON document. Unknown keys are rejected when the policy is stored, and so are a `chunk_interval` or an age that is not a positive interval or integer, and a `partition_column` or a `columnstore` list that is not a non-empty string. Whether the columns exist, and whether the chunk interval fits the type of the column, can only be checked when a table is created, and then a failure names the policy.
 
 | Key | Description |
 |---|---|
 | `partition_column` | Column to partition by. |
 | `chunk_interval` | Chunk interval, as an interval for a time column or an integer for an integer column. |
 | `create_default_indexes` | `true` or `false`. |
-| `columnstore` | An object with `segmentby`, `orderby` and `index`, each a string. |
+| `columnstore` | An object with `segmentby`, `orderby` and `index`, each a string. When `orderby` leaves out the time column, TimescaleDB adds it at the end, descending, and this is not reported as drift. |
 | `compression` | An object with `mode` (`AFTER` or `NEVER`) and, for `AFTER`, `after`, a positive interval. |
 | `retention` | The same form as `compression`. A retention policy drops chunks older than `after`. |
+
+With `NEVER`, a table is expected to have no compression or retention policy, so [`check_storage_policy_drift`](#check_storage_policy_drift) reports one that was added by hand and [`apply_storage_policy`](#apply_storage_policy) removes it.
 
 `columnstore`, `compression` and `retention` need the Timescale License, and a policy that sets them is rejected under the Apache license. `compression.after` and `retention` do not work on integer time columns, as the compression and retention policies there need an integer and an `integer_now` function. A `tiering` key is not supported yet.
 
@@ -281,12 +283,13 @@ SELECT * FROM explain_storage_policy('public', 'sensor_data', '{"chunk_interval"
 check_storage_policy_drift(
     schema_name NAME = NULL,
     table_name NAME = NULL,
-    only_drift BOOL = true
+    only_drift BOOL = true,
+    include_plain BOOL = false
 ) RETURNS TABLE (hypertable_schema NAME, hypertable_name NAME, policy_name NAME,
                  setting TEXT, expected TEXT, actual TEXT, in_sync BOOL)
 ```
 
-Compares existing hypertables with what [`explain_storage_policy`](#explain_storage_policy) gives a new table of the same name, and returns the settings that differ. This finds tables that were created before a policy changed, were changed by hand, or were created with their own options. The settings compared are the partition column, chunk interval, columnstore `segmentby` and `orderby`, and the ages of the compression and retention policies. Only what the policy declares is compared, and a hypertable that no policy matches is not listed. It changes nothing.
+Compares existing hypertables with what [`explain_storage_policy`](#explain_storage_policy) gives a new table of the same name, and returns the settings that differ. This finds tables that were created before a policy changed, were changed by hand, or were created with their own options. The settings compared are the partition column, chunk interval, columnstore `segmentby` and `orderby`, and the ages of the compression and retention policies. Only what the policy declares is compared, and a hypertable that no policy matches is not listed. With `include_plain => true` a plain table that a policy matches is listed too, with one row, `tsdb.hypertable`, expected `true` and actual `false`. Such a table was created before the policy, or with `tsdb.hypertable = false`, and the check cannot tell the two apart, so plain tables are off by default. Temporary tables, partitions, tables that inherit or are typed, and tables of an extension never get a policy and are not listed. Unlogged tables do get a policy, and so are listed. A policy that is changed while the check runs may give anomalous results. It changes nothing.
 
 ### Optional Arguments <a id="check_storage_policy_drift-optional-arguments"></a>
 |Name| Type |Description|
@@ -294,16 +297,17 @@ Compares existing hypertables with what [`explain_storage_policy`](#explain_stor
 | `schema_name` | `NAME` | Only this schema. By default every hypertable is checked. |
 | `table_name` | `NAME` | Only this table, or with no schema, tables of this name in any schema. |
 | `only_drift` | `BOOL` | With `false`, every compared setting is returned and `in_sync` says whether it matches. Default `true`. |
+| `include_plain` | `BOOL` | With `true`, plain tables that a policy matches are listed too. Default `false`. |
 
 ### Returns
 
 |Column|Type|Description|
 |---|---|---|
-| `hypertable_schema`, `hypertable_name` | `NAME` | The hypertable. |
+| `hypertable_schema`, `hypertable_name` | `NAME` | The table: a hypertable, or with `include_plain` a plain table. |
 | `policy_name` | `NAME` | The policy that applies to it today. |
 | `setting` | `TEXT` | The setting, as in [`explain_storage_policy`](#explain_storage_policy). |
 | `expected` | `TEXT` | The value in the policy. |
-| `actual` | `TEXT` | The value on the hypertable, `NULL` if there is none. |
+| `actual` | `TEXT` | The value on the table, `NULL` if there is none. Intervals are shown in PostgreSQL's output form, such as `@ 90 days`. |
 | `in_sync` | `BOOL` | Whether the two match. |
 <br>
 
@@ -331,9 +335,9 @@ apply_storage_policy(
 ) RETURNS TABLE (setting TEXT, expected TEXT, actual TEXT, action TEXT)
 ```
 
-Brings an existing table up to its policy, by applying what [`check_storage_policy_drift`](#check_storage_policy_drift) reports. A hypertable gets the chunk interval, columnstore settings and compression and retention policies of the policy. An empty plain table is converted to a hypertable. A plain table with rows is an error, as converting it has to move the data, so use `create_hypertable(..., migrate_data => true)` and apply again. The partition column of a hypertable cannot be changed and is an error.
+Brings an existing table up to its policy, by applying what [`check_storage_policy_drift`](#check_storage_policy_drift) reports. A hypertable gets the chunk interval, columnstore settings and compression and retention policies of the policy. An empty plain table is converted to a hypertable as `CREATE TABLE` would make it, with the columnstore enabled and a compression policy at the chunk interval unless the policy says otherwise. `create_default_indexes` and the columnstore `index` of the policy are applied. A plain table with rows is an error, as converting it has to move the data, so use `create_hypertable(..., migrate_data => true)` and apply again. The partition column of a hypertable cannot be changed and is an error.
 
-A new chunk interval only applies to chunks created from now on, and existing chunks keep their size. Retention can delete data that is already there, so it is only applied with `allow_retention => true`, and otherwise its row says it was skipped. The function runs with the privileges of the caller, who must own the table, as if the changes were made by hand. If a step fails, the steps before it are undone.
+A new chunk interval only applies to chunks created from now on, and existing chunks keep their size. In the same way, chunks that are compressed already keep the columnstore settings they were compressed with, and the rows of those settings say so. Retention can delete data that is already there, so it is only applied with `allow_retention => true`, and otherwise its row says it was skipped. Removing a retention policy, when the policy says `NEVER`, deletes nothing and needs no flag. `dry_run => true` lists the same steps as the real run, and fails for a caller who does not own the table, for a partition column of a type that cannot be partitioned, and for a primary key or unique index without the partition column. A policy that is changed while it runs may give anomalous results. The function runs with the privileges of the caller, who must own the table, as if the changes were made by hand. If a step fails, the steps before it are undone.
 
 ### Required Arguments <a id="apply_storage_policy-required-arguments"></a>
 |Name| Type |Description|

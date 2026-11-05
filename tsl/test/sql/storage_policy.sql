@@ -106,9 +106,26 @@ SELECT add_storage_policy('bad', 'fhr', 'x', '{"retention": {"mode": "AFTER", "a
 SELECT add_storage_policy('bad', 'fhr', 'x', '{"retention": {"mode": "AFTER", "after": "-1 day"}}');
 SELECT add_storage_policy('bad', 'fhr', 'x', '{"compression": {"mode": "AFTER", "after": "-7 days"}}');
 SELECT add_storage_policy('bad', 'fhr', 'x', '{"columnstore": {"segmnetby": "a"}}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"chunk_interval": "banana"}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"chunk_interval": "0"}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"chunk_interval": 0}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"chunk_interval": "0 days"}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"chunk_interval": "-1 day"}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"chunk_interval": true}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"partition_column": ""}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"partition_column": 7}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"columnstore": {"segmentby": ""}}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"columnstore": {"orderby": 5}}');
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"create_default_indexes": "yes"}');
 SELECT add_storage_policy('bad', 'fhr', 'x', '"ts"');
 SELECT add_storage_policy('bad', 'fhr', 'x', '{}', 'glob');
 SELECT add_storage_policy('bad', 'fhr', 'x', '{}', priority => 1);
+-- an interval or an integer, as a string or a number, is a valid chunk interval and age
+\set ON_ERROR_STOP 1
+SELECT p, _timescaledb_functions.storage_policy_validate(p)::text = '' AS accepted
+FROM (VALUES ('{"chunk_interval": "1 day"}'::jsonb), ('{"chunk_interval": 1000}'), ('{"chunk_interval": "1000"}'),
+             ('{"retention": {"mode": "AFTER", "after": 100000}}')) v(p);
+\set ON_ERROR_STOP 0
 -- duplicates
 SELECT add_storage_policy('gas', 'fhr', 'other_table', '{}');
 SELECT add_storage_policy('gas_again', 'fhr', 'g_data_site42', '{}');
@@ -201,6 +218,82 @@ CREATE TABLE fhr.ret_never (ts timestamptz NOT NULL, v int);
 SELECT count(*) FROM timescaledb_information.jobs
 WHERE hypertable_name = 'ret_never' AND proc_name = 'policy_retention';
 
+-- a stored policy that is not valid any more names itself, as one that cannot be applied does.
+-- The API does not store one, so it is damaged in the catalog.
+SELECT add_storage_policy('damaged', 'fhr', 'dmg_1', '{"partition_column": "ts"}');
+UPDATE _timescaledb_catalog.storage_policy SET policy = '{"chunk_interval": "banana"}' WHERE name = 'damaged';
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+CREATE TABLE fhr.dmg_1 (ts timestamptz NOT NULL);
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+SELECT remove_storage_policy('damaged');
+
+-- a pattern has to compile on its own, as one like 'a)|(?:' only compiles inside the anchoring
+-- and then matches every name
+\set ON_ERROR_STOP 0
+SELECT add_storage_policy('escape', 'fhr', 'ev_1)|(?:', '{"partition_column": "ts"}', match_kind => 'regex', priority => 44);
+SELECT add_storage_policy('escape', 'fhr)|(?:', 'ev_1', '{"partition_column": "ts"}', match_kind => 'regex', priority => 44);
+\set ON_ERROR_STOP 1
+SELECT add_storage_policy('anchored', 'fhr', 'ev_9', '{"partition_column": "ts"}', match_kind => 'regex', priority => 44);
+\set ON_ERROR_STOP 0
+SELECT alter_storage_policy('anchored', table_name => 'ev_1)|(?:');
+\set ON_ERROR_STOP 1
+-- anchors of its own are harmless
+SELECT alter_storage_policy('anchored', table_name => '^anch_.*$');
+SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_anch_1 FROM show_storage_policy_matches('fhr', 'anch_1');
+SELECT count(*) FILTER (WHERE name = 'anchored') AS matches_my_anch_1 FROM show_storage_policy_matches('fhr', 'my_anch_1');
+SELECT remove_storage_policy('anchored');
+
+-- a table in the temporary schema never gets a policy, also when it is named pg_temp explicitly
+SELECT add_storage_policy('any_schema', '.*', 'tmp_.*', '{"partition_column": "ts"}', match_kind => 'regex', priority => 42);
+CREATE TABLE pg_temp.tmp_explicit (ts timestamptz NOT NULL);
+CREATE TEMP TABLE tmp_plain (ts timestamptz NOT NULL);
+SET search_path = pg_temp, public;
+CREATE TABLE tmp_first (ts timestamptz NOT NULL);
+RESET search_path;
+SELECT count(*) AS hypertables FROM timescaledb_information.hypertables WHERE hypertable_name LIKE 'tmp\_%';
+DROP TABLE pg_temp.tmp_explicit, pg_temp.tmp_plain, pg_temp.tmp_first;
+SELECT remove_storage_policy('any_schema');
+
+-- tables created inside CREATE SCHEMA get their own policy, and one no policy matches stays plain
+SELECT add_storage_policy('in_schema', 'cs_schema', 'a_.*', '{"partition_column": "ts", "chunk_interval": "1 day"}', match_kind => 'regex', priority => 41);
+SELECT add_storage_policy('in_schema_b', 'cs_schema', 'a_b', '{"partition_column": "ts", "chunk_interval": "3 days"}');
+CREATE SCHEMA cs_schema
+    CREATE TABLE a_a (ts timestamptz NOT NULL)
+    CREATE TABLE a_b (ts timestamptz NOT NULL)
+    CREATE TABLE plain_one (ts timestamptz NOT NULL)
+    CREATE TABLE explicit_one (ts timestamptz NOT NULL) WITH (tsdb.hypertable, tsdb.partition_column = 'ts');
+SELECT hypertable_name, time_interval FROM timescaledb_information.dimensions
+WHERE hypertable_schema = 'cs_schema' ORDER BY 1;
+SELECT count(*) AS plain_tables FROM pg_tables WHERE schemaname = 'cs_schema' AND tablename = 'plain_one';
+DROP SCHEMA cs_schema CASCADE;
+SELECT remove_storage_policy('in_schema');
+SELECT remove_storage_policy('in_schema_b');
+
+-- a statement that turns the columnstore off does without the columnstore settings of the policy,
+-- and the age of its compression policy
+SELECT add_storage_policy('cs_off', 'fhr', 'cs_off_.*', '{
+    "partition_column": "ts", "columnstore": {"segmentby": "dev"}, "compression": {"mode": "AFTER", "after": "2 days"}
+}', match_kind => 'regex', priority => 40);
+SELECT setting, value, source FROM explain_storage_policy('fhr', 'cs_off_1', '{"columnstore": false}') ORDER BY 1;
+CREATE TABLE fhr.cs_off_1 (ts timestamptz NOT NULL, dev int) WITH (tsdb.columnstore = false);
+CREATE TABLE fhr.cs_off_2 (ts timestamptz NOT NULL, dev int) WITH (tsdb.compress = false);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables
+WHERE hypertable_name LIKE 'cs_off\_%' ORDER BY 1;
+SELECT count(*) AS jobs FROM timescaledb_information.jobs
+WHERE hypertable_name LIKE 'cs_off\_%' AND proc_name = 'policy_compression';
+-- the same with a policy that says NEVER
+SELECT alter_storage_policy('cs_off', policy => '{"partition_column": "ts", "compression": {"mode": "NEVER"}}');
+CREATE TABLE fhr.cs_off_3 (ts timestamptz NOT NULL, dev int) WITH (tsdb.columnstore = false);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 'cs_off_3';
+-- an option the statement gives itself is still its own, and needs the columnstore
+\set ON_ERROR_STOP 0
+CREATE TABLE fhr.cs_off_4 (ts timestamptz NOT NULL, dev int) WITH (tsdb.columnstore = false, tsdb.compress_after = '1 day');
+\set ON_ERROR_STOP 1
+SELECT remove_storage_policy('cs_off');
+DROP TABLE fhr.cs_off_1, fhr.cs_off_2, fhr.cs_off_3;
+
 -- an integer time column needs an integer_now function for a retention policy, which a table that
 -- is only being created cannot have yet, so the policy cannot be applied, the same as for
 -- add_retention_policy
@@ -242,7 +335,10 @@ CREATE ROLE storage_policy_dbowner NOSUPERUSER;
 ALTER DATABASE :"TEST_DBNAME" OWNER TO storage_policy_dbowner;
 SET ROLE storage_policy_dbowner;
 SELECT add_storage_policy('owned', 'fhr', 'z', '{"partition_column": "ts"}');
+-- it is recorded who did it, and not the owner of the functions
+SELECT updated_by FROM timescaledb_information.storage_policies WHERE name = 'owned';
 SELECT alter_storage_policy('owned', enabled => false);
+SELECT updated_by FROM timescaledb_information.storage_policies WHERE name = 'owned';
 SELECT remove_storage_policy('owned');
 -- and a role that is not the owner still cannot
 RESET ROLE;

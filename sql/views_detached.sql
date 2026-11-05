@@ -237,3 +237,16 @@ BEGIN
       NULL::timestamptz AS last_update;
   END IF;
 END $$;
+
+CREATE OR REPLACE VIEW timescaledb_information.storage_policies AS
+SELECT
+  NULL::name AS name,
+  NULL::text AS schema_name,
+  NULL::text AS table_name,
+  NULL::text AS match_kind,
+  NULL::integer AS priority,
+  NULL::jsonb AS policy,
+  NULL::boolean AS enabled,
+  NULL::timestamptz AS created_at,
+  NULL::timestamptz AS updated_at,
+  NULL::name AS updated_by;

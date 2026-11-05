@@ -45,6 +45,8 @@ typedef struct StoragePolicyOptions
 	List *with_options;
 	/* the age for the retention policy, or NULL for none. It has no WITH equivalent. */
 	char *retention_after;
+	/* the policy says there is to be no retention policy, which is not the same as saying nothing */
+	bool retention_never;
 } StoragePolicyOptions;
 
 extern TSDLLEXPORT StoragePolicyOptions *ts_storage_policy_to_options(const Jsonb *policy);

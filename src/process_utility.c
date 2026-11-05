@@ -4297,6 +4297,19 @@ typedef struct CreateTableInfo
 static CreateTableInfo create_table_info = { 0 };
 
 /*
+ * The tables of one statement that are to be hypertables. CREATE SCHEMA can create several, and
+ * the event trigger runs once at the end, so what each one needs is kept with its name.
+ */
+typedef struct PendingCreateTable
+{
+	char *schema_name;
+	char *table_name;
+	CreateTableInfo info;
+} PendingCreateTable;
+
+static List *pending_create_tables = NIL;
+
+/*
  * Scan the table for a suitable default partitioning column.
  *
  * The default partitioning column is the first timestamp column
@@ -4541,12 +4554,86 @@ process_create_table_end_impl(Node *parsetree)
 /*
  * When a storage policy applies to the table, an error caused by the table or the policy is
  * reported with the name of the policy, as the person who created the table did not ask for any
- * of this and would otherwise have no hint where it comes from.
+ * of this and would otherwise have no hint where it comes from. The original message and detail
+ * are kept as the detail, and the original hint where there was one.
+ *
+ * To be called from the handler of PG_CATCH, with the context to continue in. Anything that is
+ * not caused by the table or the policy, such as a cancellation, is passed on unchanged.
  */
+static pg_noreturn void
+report_storage_policy_error(const char *policy_name, const char *schema_name, const char *table_name,
+							MemoryContext oldcontext)
+{
+	MemoryContextSwitchTo(oldcontext);
+	ErrorData *edata = CopyErrorData();
+	int category = ERRCODE_TO_CATEGORY(edata->sqlerrcode);
+	bool caused_by_table_or_policy =
+		category == ERRCODE_TO_CATEGORY(ERRCODE_FEATURE_NOT_SUPPORTED) ||
+		category == ERRCODE_TO_CATEGORY(ERRCODE_DATA_EXCEPTION) ||
+		category == ERRCODE_TO_CATEGORY(ERRCODE_INTEGRITY_CONSTRAINT_VIOLATION) ||
+		category == ERRCODE_TO_CATEGORY(ERRCODE_SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION) ||
+		edata->sqlerrcode == ERRCODE_INVALID_PARAMETER_VALUE ||
+		edata->sqlerrcode == ERRCODE_TS_OPERATION_NOT_SUPPORTED ||
+		edata->sqlerrcode == ERRCODE_TS_BAD_HYPERTABLE_DEFINITION ||
+		edata->sqlerrcode == ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION ||
+		edata->sqlerrcode == ERRCODE_TS_HYPERTABLE_EXISTS ||
+		edata->sqlerrcode == ERRCODE_TS_DUPLICATE_DIMENSION;
+
+	/*
+	 * Cancellations, deadlocks, resource limits and internal errors are passed on unchanged.
+	 */
+	if (!caused_by_table_or_policy)
+	{
+		FreeErrorData(edata);
+		PG_RE_THROW();
+	}
+
+	FlushErrorState();
+	ereport(ERROR,
+			(errcode(edata->sqlerrcode),
+			 errmsg("cannot apply storage policy \"%s\" to \"%s\".\"%s\"",
+					policy_name,
+					schema_name,
+					table_name),
+			 errdetail("%s",
+					   edata->detail != NULL ? psprintf("%s %s", edata->message, edata->detail) :
+											   edata->message),
+			 errhint("%s",
+					 edata->hint != NULL ?
+						 psprintf("%s Alternatively, create the table WITH (tsdb.hypertable = "
+								  "false) to skip storage policies.",
+								  edata->hint) :
+						 "Create the table WITH (tsdb.hypertable = false) to skip storage "
+						 "policies, or adjust the policy.")));
+}
+
 static void
 process_create_table_end(Node *parsetree)
 {
 	CreateStmt *stmt = (CreateStmt *) parsetree;
+
+	/*
+	 * Take what was kept for this table, as the one in the variable may be another's. A table that
+	 * was not kept is not to be a hypertable.
+	 */
+	{
+		const char *schema_name = get_namespace_name(RangeVarGetCreationNamespace(stmt->relation));
+		ListCell *lc;
+		CreateTableInfo found = { 0 };
+
+		foreach (lc, pending_create_tables)
+		{
+			PendingCreateTable *pending = lfirst(lc);
+
+			if (strcmp(pending->table_name, stmt->relation->relname) == 0 &&
+				strcmp(pending->schema_name, schema_name) == 0)
+			{
+				found = pending->info;
+				break;
+			}
+		}
+		create_table_info = found;
+	}
 
 	if (create_table_info.storage_policy_name == NULL)
 	{
@@ -4562,44 +4649,10 @@ process_create_table_end(Node *parsetree)
 	}
 	PG_CATCH();
 	{
-		MemoryContextSwitchTo(oldcontext);
-		ErrorData *edata = CopyErrorData();
-		int category = ERRCODE_TO_CATEGORY(edata->sqlerrcode);
-		bool caused_by_table_or_policy =
-			category == ERRCODE_TO_CATEGORY(ERRCODE_FEATURE_NOT_SUPPORTED) ||
-			category == ERRCODE_TO_CATEGORY(ERRCODE_DATA_EXCEPTION) ||
-			category == ERRCODE_TO_CATEGORY(ERRCODE_INTEGRITY_CONSTRAINT_VIOLATION) ||
-			category == ERRCODE_TO_CATEGORY(ERRCODE_SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION) ||
-			edata->sqlerrcode == ERRCODE_TS_OPERATION_NOT_SUPPORTED ||
-			edata->sqlerrcode == ERRCODE_TS_BAD_HYPERTABLE_DEFINITION ||
-			edata->sqlerrcode == ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION ||
-			edata->sqlerrcode == ERRCODE_TS_HYPERTABLE_EXISTS ||
-			edata->sqlerrcode == ERRCODE_TS_DUPLICATE_DIMENSION;
-
-		/*
-		 * Cancellations, deadlocks, resource limits and internal errors are passed on unchanged.
-		 */
-		if (!caused_by_table_or_policy)
-		{
-			FreeErrorData(edata);
-			PG_RE_THROW();
-		}
-
-		FlushErrorState();
-		ereport(ERROR,
-				(errcode(edata->sqlerrcode),
-				 errmsg("cannot apply storage policy \"%s\" to \"%s\".\"%s\"",
-						create_table_info.storage_policy_name,
-						get_namespace_name(RangeVarGetCreationNamespace(stmt->relation)),
-						stmt->relation->relname),
-				 errdetail("%s", edata->message),
-				 errhint("%s",
-						 edata->hint != NULL ?
-							 psprintf("%s Alternatively, create the table WITH (tsdb.hypertable = "
-									  "false) to skip storage policies.",
-									  edata->hint) :
-							 "Create the table WITH (tsdb.hypertable = false) to skip storage "
-							 "policies, or adjust the policy.")));
+		report_storage_policy_error(create_table_info.storage_policy_name,
+									get_namespace_name(RangeVarGetCreationNamespace(stmt->relation)),
+									stmt->relation->relname,
+									oldcontext);
 	}
 	PG_END_TRY();
 }
@@ -6087,21 +6140,70 @@ apply_storage_policy(CreateStmt *stmt, WithClauseResult *explicit_clauses)
 	Oid nspid = RangeVarGetCreationNamespace(stmt->relation);
 	const char *schema_name = get_namespace_name(nspid);
 
-	if (schema_name == NULL ||
+	/* an explicit pg_temp, or a search_path with it first, makes the table temporary as well */
+	if (schema_name == NULL || isAnyTempNamespace(nspid) ||
 		!ts_storage_policy_find(schema_name, stmt->relation->relname, &policy))
 		return explicit_clauses;
 
-	StoragePolicyOptions *options = ts_storage_policy_to_options(policy.policy);
-	WithClauseResult *policy_clauses = ts_create_table_with_clause_parse(options->with_options);
+	/*
+	 * A stored policy can stop being valid, for one thing when the license changes, and then the
+	 * error names the policy as one from the end of the statement does.
+	 */
+	StoragePolicyOptions *volatile options = NULL;
+	WithClauseResult *volatile result = NULL;
+	MemoryContext oldcontext = CurrentMemoryContext;
+
+	PG_TRY();
+	{
+		options = ts_storage_policy_to_options(policy.policy);
+		result = ts_create_table_with_clause_overlay(explicit_clauses,
+													 ts_create_table_with_clause_parse(
+														 options->with_options));
+	}
+	PG_CATCH();
+	{
+		report_storage_policy_error(NameStr(policy.name),
+									schema_name,
+									stmt->relation->relname,
+									oldcontext);
+	}
+	PG_END_TRY();
 
 	create_table_info.storage_policy_name = pstrdup(NameStr(policy.name));
 	create_table_info.storage_policy_retention_after = options->retention_after;
 
-	return ts_create_table_with_clause_overlay(explicit_clauses, policy_clauses);
+	return result;
 }
+
+static DDLResult process_create_stmt_impl(ProcessUtilityArgs *args);
 
 static DDLResult
 process_create_stmt(ProcessUtilityArgs *args)
+{
+	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
+
+	/* a statement of its own starts over, a table in CREATE SCHEMA adds to the others */
+	if (args->context != PROCESS_UTILITY_SUBCOMMAND)
+		pending_create_tables = NIL;
+
+	DDLResult result = process_create_stmt_impl(args);
+
+	if (create_table_info.hypertable)
+	{
+		PendingCreateTable *pending = palloc(sizeof(PendingCreateTable));
+		Oid nspid = RangeVarGetCreationNamespace(stmt->relation);
+
+		pending->schema_name = pstrdup(get_namespace_name(nspid));
+		pending->table_name = pstrdup(stmt->relation->relname);
+		pending->info = create_table_info;
+		pending_create_tables = lappend(pending_create_tables, pending);
+	}
+
+	return result;
+}
+
+static DDLResult
+process_create_stmt_impl(ProcessUtilityArgs *args)
 {
 	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
 	ListCell *lc;
@@ -6798,6 +6900,7 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 		case T_AlterTableStmt:
 		case T_CreateTrigStmt:
 		case T_CreateStmt:
+		case T_CreateSchemaStmt:
 		case T_IndexStmt:
 		case T_CreatePublicationStmt:
 			foreach (lc, ts_event_trigger_ddl_commands())

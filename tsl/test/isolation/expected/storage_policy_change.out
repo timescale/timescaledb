@@ -1,0 +1,23 @@
+Parsed test spec with 3 sessions
+
+starting permutation: a_begin a_alter b_create_1 a_commit b_create_2 check
+step a_begin: BEGIN;
+step a_alter: SELECT alter_storage_policy('sp_chg', policy => jsonb_build_object('partition_column', 'ts', 'chunk_interval', '3 days'));
+alter_storage_policy
+--------------------
+                    
+
+B: NOTICE:  applied storage policy "sp_chg" to "public"."sp_c_1"
+step b_create_1: CREATE TABLE sp_c_1 (ts timestamptz NOT NULL, v int);
+step a_commit: COMMIT;
+B: NOTICE:  applied storage policy "sp_chg" to "public"."sp_c_2"
+step b_create_2: CREATE TABLE sp_c_2 (ts timestamptz NOT NULL, v int);
+step check: 
+    SELECT hypertable_name, time_interval FROM timescaledb_information.dimensions
+    WHERE hypertable_name IN ('sp_c_1', 'sp_c_2') ORDER BY 1;
+
+hypertable_name|time_interval
+---------------+-------------
+sp_c_1         |@ 1 day      
+sp_c_2         |@ 3 days     
+
