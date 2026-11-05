@@ -1,0 +1,1 @@
+Fixes: #10925 Keep per-column opclass options on chunk indexes

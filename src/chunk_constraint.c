@@ -4,10 +4,12 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/genam.h>
 #include <access/heapam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
+#include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_constraint.h>
@@ -24,6 +26,7 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
+#include "chunk_index.h"
 #include "constraint.h"
 #include "debug_assert.h"
 #include "dimension.h"
@@ -193,36 +196,63 @@ chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 }
 
 /*
- * Add a single non-dimensional chunk-side constraint by replicating the
- * hypertable's definition. Delegates to a PL/pgSQL helper that pulls the
- * constraint definition with pg_get_constraintdef and runs ALTER TABLE.
+ * Create a PK, UNIQUE or EXCLUSION constraint on a chunk from the hypertable
+ * constraint. The backing index is created directly from the hypertable
+ * constraint's index, so no privilege on the chunk schema is needed.
  */
-static Oid
-create_non_dimensional_constraint(int32 chunk_id, const char *chunk_constraint_name,
-								  const char *hypertable_constraint_name, Oid chunk_oid)
+static void
+create_non_dimensional_constraint(const Hypertable *ht, const Chunk *chunk,
+								  const char *chunk_constraint_name, Form_pg_constraint con)
 {
-	NameData chunk_name_data;
-	NameData hypertable_name_data;
-	CatalogSecurityContext sec_ctx;
+	Relation htrel;
+	Relation chunkrel;
+	Relation ht_idxrel;
+	uint16 constr_flags = 0;
 
-	if (ConstraintNameIsUsed(CONSTRAINT_RELATION, chunk_oid, chunk_constraint_name))
+	if (ConstraintNameIsUsed(CONSTRAINT_RELATION, chunk->fd.relid, chunk_constraint_name))
 	{
-		return get_relation_constraint_oid(chunk_oid, chunk_constraint_name, true);
+		return;
 	}
 
-	namestrcpy(&chunk_name_data, chunk_constraint_name);
-	namestrcpy(&hypertable_name_data, hypertable_constraint_name);
+	/* Constraint triggers are copied together with the other triggers */
+	if (con->contype == CONSTRAINT_TRIGGER)
+	{
+		return;
+	}
 
-	ts_process_utility_set_expect_chunk_modification(true);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	CatalogInternalCall3(DDL_ADD_CHUNK_CONSTRAINT,
-						 Int32GetDatum(chunk_id),
-						 NameGetDatum(&chunk_name_data),
-						 NameGetDatum(&hypertable_name_data));
-	ts_catalog_restore_user(&sec_ctx);
-	ts_process_utility_set_expect_chunk_modification(false);
+	Assert(con->contype == CONSTRAINT_PRIMARY || con->contype == CONSTRAINT_UNIQUE ||
+		   con->contype == CONSTRAINT_EXCLUSION);
+	Assert(OidIsValid(con->conindid));
 
-	return get_relation_constraint_oid(chunk_oid, chunk_constraint_name, true);
+	if (con->condeferrable)
+	{
+		constr_flags |= INDEX_CONSTR_CREATE_DEFERRABLE;
+	}
+	if (con->condeferred)
+	{
+		constr_flags |= INDEX_CONSTR_CREATE_INIT_DEFERRED;
+	}
+#if PG18_GE
+	if (con->conperiod)
+	{
+		constr_flags |= INDEX_CONSTR_CREATE_WITHOUT_OVERLAPS;
+	}
+#endif
+
+	htrel = table_open(ht->main_table_relid, AccessShareLock);
+	/* CreateTrigger needs ShareRowExclusiveLock for deferrable constraints */
+	chunkrel = table_open(chunk->fd.relid, ShareRowExclusiveLock);
+	ht_idxrel = index_open(con->conindid, AccessShareLock);
+
+	ts_chunk_index_create_constraint(htrel,
+									 ht_idxrel,
+									 chunkrel,
+									 chunk_constraint_name,
+									 constr_flags);
+
+	index_close(ht_idxrel, NoLock);
+	table_close(chunkrel, NoLock);
+	table_close(htrel, NoLock);
 }
 
 typedef struct InheritableContext
@@ -233,8 +263,8 @@ typedef struct InheritableContext
 
 /*
  * Callback invoked for each hypertable constraint. For non-dim constraints
- * that need replication on the chunk side, create them via the PL/pgSQL
- * helper.
+ * that need replication on the chunk side, create them from the hypertable
+ * constraint.
  */
 static ConstraintProcessStatus
 inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
@@ -272,10 +302,7 @@ inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
 	ts_chunk_constraint_choose_name(chunk_constraint_name,
 									ctx->chunk->fd.id,
 									hypertable_constraint_name);
-	create_non_dimensional_constraint(ctx->chunk->fd.id,
-									  chunk_constraint_name,
-									  hypertable_constraint_name,
-									  ctx->chunk->fd.relid);
+	create_non_dimensional_constraint(ctx->ht, ctx->chunk, chunk_constraint_name, constraint);
 	return CONSTR_PROCESSED;
 }
 
@@ -408,10 +435,7 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 			ts_chunk_constraint_choose_name(chunk_constraint_name,
 											chunk->fd.id,
 											NameStr(con->conname));
-			create_non_dimensional_constraint(chunk->fd.id,
-											  chunk_constraint_name,
-											  NameStr(con->conname),
-											  chunk->fd.relid);
+			create_non_dimensional_constraint(ht, chunk, chunk_constraint_name, con);
 		}
 	}
 
