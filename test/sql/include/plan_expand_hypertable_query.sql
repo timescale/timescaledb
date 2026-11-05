@@ -125,6 +125,12 @@ SELECT * FROM cte ORDER BY value;
 \qecho Time dimension chunk filtering works for ALL with single argument
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ALL(ARRAY[1]) ORDER BY value;
 
+\qecho Time dimension chunk exclusion with empty array
+:PREFIX SELECT * FROM hyper WHERE time < ALL(ARRAY[]::bigint[]) ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE time < ALL(ARRAY[]::bigint[]) AND time = 1 ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE time < ANY(ARRAY[]::bigint[]) ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE time < ANY(ARRAY[]::bigint[]) AND time = 1 ORDER BY value;
+
 \qecho Time dimension chunk filtering works for ALL with multiple arguments
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ALL(ARRAY[1,10,20,30]) ORDER BY value;
 
