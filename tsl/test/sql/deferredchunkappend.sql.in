@@ -346,6 +346,10 @@ SELECT kind::text FROM enum_metrics WHERE kind::text = 'Val2' LIMIT 1;
 SELECT kind::text FROM enum_metrics WHERE kind::text = (ROW(1,2)::dca_row)::text LIMIT 1;
 -- NULL input
 SELECT kind::text FROM enum_metrics WHERE kind = CAST(NULL::text AS dca_enum) LIMIT 1;
+
+-- NULL constraint handling
+EXPLAIN (COSTS OFF) SELECT * FROM enum_metrics WHERE seen IS NULL ORDER BY time LIMIT 1;
+
 RESET timescaledb.debug_require_deferred_chunk_append;
 
 -- float literals under a lossy extra_float_digits
@@ -356,6 +360,11 @@ SET extra_float_digits = 0;
 SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 SELECT time FROM float_metrics WHERE val = '1.0000000000000002'::float8 ORDER BY time LIMIT 1;
 SELECT val FROM float_metrics WHERE val = 0.30000000000000004::float8 ORDER BY time LIMIT 1;
+
+-- NULL constraint handling
+EXPLAIN (COSTS OFF) SELECT * FROM float_metrics WHERE val IS NOT NULL ORDER BY time LIMIT 1;
+EXPLAIN (COSTS OFF) SELECT * FROM float_metrics WHERE time IS NOT NULL ORDER BY time LIMIT 1;
+
 RESET timescaledb.debug_require_deferred_chunk_append;
 RESET extra_float_digits;
 
