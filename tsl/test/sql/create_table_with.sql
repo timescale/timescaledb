@@ -364,3 +364,67 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes') as next_start, config
 FROM timescaledb_information.jobs WHERE hypertable_name = 'events' AND proc_name = 'policy_compression';
 ROLLBACK;
+
+-- tsdb.compress_after sets the age of the compression policy
+BEGIN;
+CREATE TABLE ca_interval(time timestamptz NOT NULL, device text, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.chunk_interval='1 day', tsdb.compress_after='7 days');
+SELECT config FROM timescaledb_information.jobs
+WHERE hypertable_name = 'ca_interval' AND proc_name = 'policy_compression';
+ROLLBACK;
+
+-- integer partition column
+BEGIN;
+CREATE TABLE ca_int(time bigint NOT NULL, device text, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.chunk_interval='1000', tsdb.compress_after='5000');
+SELECT config FROM timescaledb_information.jobs
+WHERE hypertable_name = 'ca_int' AND proc_name = 'policy_compression';
+ROLLBACK;
+
+-- an age in months or years is fine, as it is for add_compression_policy
+BEGIN;
+CREATE TABLE ca_month(time timestamptz NOT NULL, device text, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.compress_after='1 month');
+CREATE TABLE ca_year(time timestamptz NOT NULL, device text, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.compress_after='1 year');
+SELECT hypertable_name, config FROM timescaledb_information.jobs
+WHERE hypertable_name IN ('ca_month', 'ca_year') AND proc_name = 'policy_compression' ORDER BY 1;
+ROLLBACK;
+
+-- 'never' enables the columnstore without scheduling a compression job
+BEGIN;
+CREATE TABLE ca_never(time timestamptz NOT NULL, device text, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.compress_after='never');
+SELECT compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 'ca_never';
+SELECT count(*) FROM timescaledb_information.jobs
+WHERE hypertable_name = 'ca_never' AND proc_name = 'policy_compression';
+ROLLBACK;
+
+-- errors
+\set ON_ERROR_STOP 0
+CREATE TABLE ca_err1(time timestamptz NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.columnstore=false, tsdb.compress_after='7 days');
+CREATE TABLE ca_err2(time timestamptz NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.direct_compress, tsdb.compress_after='never');
+CREATE TABLE ca_err3(time timestamptz NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.compress_after='not an interval');
+CREATE TABLE ca_err4(time timestamptz NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.compress_after='0 days');
+CREATE TABLE ca_err5(time timestamptz NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.compress_after='-1 day');
+CREATE TABLE ca_err6(time bigint NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.chunk_interval='1000', tsdb.compress_after='0');
+CREATE TABLE ca_err7(value float) WITH (tsdb.compress_after='7 days');
+\set ON_ERROR_STOP 1
+
+-- compress_after together with direct_compress, and a date partition column
+BEGIN;
+CREATE TABLE ca_direct(time timestamptz NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.direct_compress, tsdb.compress_after='3 days');
+SELECT config FROM timescaledb_information.jobs
+WHERE hypertable_name = 'ca_direct' AND proc_name = 'policy_compression';
+CREATE TABLE ca_date(day date NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='day', tsdb.chunk_interval='7 days', tsdb.compress_after='30 days');
+SELECT config FROM timescaledb_information.jobs
+WHERE hypertable_name = 'ca_date' AND proc_name = 'policy_compression';
+ROLLBACK;

@@ -4506,6 +4506,12 @@ process_create_table_end(Node *parsetree)
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
 				ts_cm_functions->columnstore_setup(ht, create_table_info.with_clauses);
 			}
+			else if (!create_table_info.with_clauses[CreateTableFlagCompressAfter].is_default)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("\"compress_after\" requires the columnstore to be enabled")));
+			}
 		}
 	}
 }

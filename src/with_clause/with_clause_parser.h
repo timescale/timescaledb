@@ -41,3 +41,10 @@ extern TSDLLEXPORT char *ts_with_clause_result_deparse_value(const WithClauseRes
 
 extern TSDLLEXPORT Datum ts_create_table_parse_interval_value(WithClauseResult option,
 															  Oid column_type, Oid *interval_type);
+
+/*
+ * Whether a value returned by ts_create_table_parse_interval_value is greater than zero. An
+ * interval is compared as it is, as converting it to a number of microseconds is not possible for
+ * months and years.
+ */
+extern TSDLLEXPORT bool ts_create_table_interval_value_is_positive(Datum value, Oid value_type);

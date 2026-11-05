@@ -25,6 +25,7 @@ static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagIndex] = { .arg_names = {"compress_index", "compress_sparse_index", "index", "sparse_index", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagDirectCompress] = { .arg_names = {"direct_compress", NULL}, .type_id = BOOLOID, .default_val = (Datum)false,},
 	[CreateTableFlagDirectCompressScheduleInterval] = { .arg_names = {"direct_compress_schedule_interval", NULL}, .type_id = INTERVALOID,},
+	[CreateTableFlagCompressAfter] = { .arg_names = {"compress_after", NULL}, .type_id = TEXTOID,},
 };
 
 WithClauseResult *

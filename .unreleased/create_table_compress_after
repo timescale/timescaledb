@@ -1,0 +1,1 @@
+Implements: #NNNNN Add tsdb.compress_after option to CREATE TABLE ... WITH to set the compression policy age

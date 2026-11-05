@@ -17,6 +17,7 @@
 
 #include "debug_assert.h"
 #include "extension_constants.h"
+#include "utils.h"
 #include "with_clause_parser.h"
 
 /*
@@ -296,4 +297,17 @@ ts_create_table_parse_interval_value(WithClauseResult option, Oid column_type, O
 	}
 	*interval_type = InvalidOid;
 	return UnassignedDatum;
+}
+
+bool
+ts_create_table_interval_value_is_positive(Datum value, Oid value_type)
+{
+	if (value_type == INTERVALOID)
+	{
+		static const Interval zero = { 0 };
+
+		return DatumGetBool(DirectFunctionCall2(interval_gt, value, IntervalPGetDatum(&zero)));
+	}
+
+	return ts_interval_value_to_internal(value, value_type) > 0;
 }

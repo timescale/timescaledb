@@ -2775,34 +2775,66 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 	compression_settings_set_manually_for_create(ht, settings, with_clause_options);
 	ts_hypertable_set_compression(ht);
 
-	/* Add default compression policy when compression is enabled via CREATE TABLE WITH */
-	/* Use the chunk interval as the compression interval */
+	/*
+	 * Add a compression policy when compression is enabled via CREATE TABLE WITH. The age
+	 * defaults to the chunk interval. tsdb.compress_after overrides it, and 'never' enables the
+	 * columnstore without scheduling a compression job.
+	 */
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
 	Datum compress_after_datum = 0;
 	Oid compress_after_type = InvalidOid;
+	bool compress_never = false;
+	const WithClauseResult *compress_after_opt = &with_clause_options[CreateTableFlagCompressAfter];
+
 	if (time_dim != NULL)
 	{
-		compress_after_type = ts_dimension_get_partition_type(time_dim);
-		if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
+		Oid partition_type = ts_dimension_get_partition_type(time_dim);
+
+		if (!compress_after_opt->is_default)
 		{
-			compress_after_type = INTERVALOID;
+			if (pg_strcasecmp(TextDatumGetCString(compress_after_opt->parsed), "never") == 0)
+				compress_never = true;
+			else
+			{
+				compress_after_datum =
+					ts_create_table_parse_interval_value(*compress_after_opt,
+														 partition_type,
+														 &compress_after_type);
+
+				if (!ts_create_table_interval_value_is_positive(compress_after_datum,
+															   compress_after_type))
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("\"compress_after\" must be greater than zero")));
+			}
+		}
+		else
+		{
+			compress_after_type = partition_type;
+			if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
+			{
+				compress_after_type = INTERVALOID;
+			}
+
+			compress_after_datum =
+				ts_internal_to_interval_value(time_dim->fd.interval_length, compress_after_type);
 		}
 
-		compress_after_datum =
-			ts_internal_to_interval_value(time_dim->fd.interval_length, compress_after_type);
-
-		policy_compression_add_internal(
-			ht->main_table_relid,
-			compress_after_datum,
-			compress_after_type,
-			NULL,								   /* created_before */
-			DEFAULT_COMPRESSION_SCHEDULE_INTERVAL, /* default_schedule_interval
-													*/
-			true,								   /* user_defined_schedule_interval */
-			true,								   /* if_not_exists */
-			false,								   /* fixed_schedule */
-			GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
-			NULL /* timezone */);
+		if (!compress_never)
+		{
+			policy_compression_add_internal(
+				ht->main_table_relid,
+				compress_after_datum,
+				compress_after_type,
+				NULL,								   /* created_before */
+				DEFAULT_COMPRESSION_SCHEDULE_INTERVAL, /* default_schedule_interval
+														*/
+				true,								   /* user_defined_schedule_interval */
+				true,								   /* if_not_exists */
+				false,								   /* fixed_schedule */
+				GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
+				NULL /* timezone */);
+		}
 	}
 
 	if (!with_clause_options[CreateTableFlagDirectCompressScheduleInterval].is_default &&
@@ -2822,6 +2854,12 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 				DatumGetIntervalP(
 					with_clause_options[CreateTableFlagDirectCompressScheduleInterval].parsed) :
 				direct_compress_default_schedule_interval();
+
+		if (compress_never)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("\"compress_after\" cannot be \"never\" with \"direct_compress\""),
+					 errhint("Direct compress relies on the compression policy.")));
 
 		ts_hypertable_set_direct_compress(ht);
 		enable_direct_compress_policies(ht,
