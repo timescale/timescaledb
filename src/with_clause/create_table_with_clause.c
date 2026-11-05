@@ -36,6 +36,12 @@ ts_create_table_with_clause_parse(const List *defelems)
 								 TS_ARRAY_LEN(create_table_with_clauses_def));
 }
 
+Size
+ts_create_table_with_clause_count(void)
+{
+	return TS_ARRAY_LEN(create_table_with_clauses_def);
+}
+
 WithClauseResult *
 ts_create_table_with_clause_overlay(const WithClauseResult *explicit_clauses,
 									const WithClauseResult *policy_clauses)

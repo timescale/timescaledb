@@ -16,13 +16,21 @@ typedef struct StoragePolicy
 	int32 id;
 	NameData name;
 	Jsonb *policy;
+	bool is_exact;
+	/* the priority of a regex policy, 0 for an exact one */
+	int32 priority;
 } StoragePolicy;
 
 /*
- * Find the enabled policy that applies to a new table named schema_name.table_name. An exact
- * match wins. Otherwise, of the regex policies matching both names, the one with the lowest
- * priority wins. Regexes are anchored, so they have to match the whole name.
+ * The enabled policies that apply to a new table named schema_name.table_name, a list of
+ * StoragePolicy in the order of precedence: the exact policy, if there is one, and then the
+ * regex policies by ascending priority. Regexes are anchored, so they have to match the whole
+ * name.
  */
+extern TSDLLEXPORT List *ts_storage_policy_find_all(const char *schema_name,
+													const char *table_name);
+
+/* The first of ts_storage_policy_find_all(), the policy a new table gets. */
 extern TSDLLEXPORT bool ts_storage_policy_find(const char *schema_name, const char *table_name,
 											   StoragePolicy *policy);
 

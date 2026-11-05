@@ -14,6 +14,68 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.storage_policy_check_owner()
 RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_storage_policy_check_owner'
 LANGUAGE C STABLE STRICT;
 
+-- The ids of the enabled policies a new table with this name matches, ranked in the order of
+-- precedence: 1 is the policy it would get. This is the lookup CREATE TABLE does, and everything
+-- that shows or compares policies is built on it.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.storage_policy_matches(schema_name NAME, table_name NAME)
+RETURNS TABLE (rank INTEGER, id INTEGER)
+AS '@MODULE_PATHNAME@', 'ts_storage_policy_matches'
+LANGUAGE C STABLE STRICT;
+
+-- Warn when the policy called policy_name overlaps with a policy of the other kind. A name an
+-- exact policy covers is never given to a regex policy, so an exact policy always wins over a
+-- regex one. This is easy to miss when either is added, so both directions are reported. Two
+-- regex policies are not compared, as whether two patterns overlap cannot be decided from the
+-- patterns alone. The priority settles those. A disabled policy applies to nothing, so it neither
+-- warns nor is warned about.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.storage_policy_warn_overlaps(policy_name NAME)
+RETURNS VOID
+LANGUAGE plpgsql STABLE SET search_path TO pg_catalog, pg_temp AS
+$$
+DECLARE
+    this _timescaledb_catalog.storage_policy;
+    other RECORD;
+BEGIN
+    SELECT * INTO this FROM _timescaledb_catalog.storage_policy p
+    WHERE p.name = policy_name AND p.enabled;
+    IF NOT FOUND THEN
+        RETURN;
+    END IF;
+
+    IF this.match_kind = 'regex' THEN
+        -- the exact policies this one is also a match for
+        FOR other IN
+            SELECT p.name, p.schema_name, p.table_name
+            FROM _timescaledb_catalog.storage_policy p
+            WHERE p.match_kind = 'exact' AND p.enabled
+              AND EXISTS (SELECT FROM _timescaledb_functions.storage_policy_matches(
+                                         p.schema_name, p.table_name) m
+                          WHERE m.id = this.id)
+            ORDER BY p.schema_name, p.table_name
+        LOOP
+            RAISE WARNING 'storage policy "%" also matches "%"."%", which has its own policy "%"',
+                this.name, other.schema_name, other.table_name, other.name
+                USING DETAIL = format('The exact policy wins, so "%s" does not apply to that table.',
+                                      this.name);
+        END LOOP;
+    ELSE
+        -- the regex policies that also match this name
+        FOR other IN
+            SELECT p.name, p.priority
+            FROM _timescaledb_functions.storage_policy_matches(this.schema_name, this.table_name) m
+            JOIN _timescaledb_catalog.storage_policy p ON p.id = m.id
+            WHERE p.match_kind = 'regex'
+            ORDER BY m.rank
+        LOOP
+            RAISE WARNING 'storage policy "%" for "%"."%" takes precedence over the regex policy "%" (priority %)',
+                this.name, this.schema_name, this.table_name, other.name, other.priority
+                USING DETAIL = format('New tables with this name get "%s", not "%s".',
+                                      this.name, other.name);
+        END LOOP;
+    END IF;
+END
+$$;
+
 CREATE OR REPLACE FUNCTION @extschema@.add_storage_policy(
     name NAME,
     schema_name TEXT,
@@ -63,6 +125,8 @@ BEGIN
         (name, schema_name, table_name, match_kind, priority, policy, enabled)
     VALUES (name, schema_name, table_name, match_kind, priority, policy, enabled)
     RETURNING id INTO new_id;
+
+    PERFORM _timescaledb_functions.storage_policy_warn_overlaps(name);
 
     RETURN new_id;
 END
@@ -118,6 +182,11 @@ BEGIN
         updated_at = now(),
         updated_by = current_user
     WHERE p.name = alter_storage_policy.name;
+
+    -- only a change of what the policy matches, or switching it on, can create an overlap
+    IF schema_name IS NOT NULL OR table_name IS NOT NULL OR enabled IS TRUE THEN
+        PERFORM _timescaledb_functions.storage_policy_warn_overlaps(name);
+    END IF;
 END
 $$;
 
@@ -144,21 +213,29 @@ BEGIN
 END
 $$;
 
--- The id of the policy a new table with this name would get, or NULL if there is none. This is
--- the lookup CREATE TABLE does, so the answer is the same as what a new table would get.
-CREATE OR REPLACE FUNCTION _timescaledb_functions.storage_policy_match_id(schema_name NAME, table_name NAME)
-RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_storage_policy_match_id'
-LANGUAGE C STABLE STRICT;
-
--- Which policy a new table named schema_name.table_name would get, and why: the match_kind is
--- "exact", or "regex" together with the priority that made it the winner.
+-- Every enabled policy a new table named schema_name.table_name matches, in the order of
+-- precedence: rank 1 is the policy it would get, and each next rank is the one that would apply
+-- if the ranks before it were removed or disabled. An exact policy comes before any regex
+-- policy, and the regex policies follow in order of priority, the lowest value first. The
+-- match_kind says why a policy is where it is, and the priority is NULL for an exact one.
 CREATE OR REPLACE FUNCTION @extschema@.storage_policy_match(schema_name NAME, table_name NAME)
-RETURNS TABLE (name NAME, match_kind TEXT, priority INTEGER, policy JSONB)
+RETURNS TABLE (rank INTEGER, name NAME, match_kind TEXT, priority INTEGER, policy JSONB)
 LANGUAGE sql STABLE SET search_path TO pg_catalog, pg_temp AS
 $$
-    SELECT p.name, p.match_kind, p.priority, p.policy
-    FROM _timescaledb_catalog.storage_policy p
+    SELECT m.rank, p.name, p.match_kind, p.priority, p.policy
     -- the parameters are qualified, as the columns of p have the same names
-    WHERE p.id = _timescaledb_functions.storage_policy_match_id(storage_policy_match.schema_name,
-                                                                storage_policy_match.table_name)
+    FROM _timescaledb_functions.storage_policy_matches(storage_policy_match.schema_name,
+                                                       storage_policy_match.table_name) m
+    JOIN _timescaledb_catalog.storage_policy p ON p.id = m.id
+    ORDER BY m.rank
 $$;
+
+-- What CREATE TABLE schema_name.table_name WITH (options) would do under the current storage
+-- policies, one row per setting and where it comes from: "policy" or "statement". The options
+-- are the statement's tsdb.* options as a JSON object, for example '{"chunk_interval": "1 day"}',
+-- and win over the policy as they do in CREATE TABLE. Nothing is created.
+CREATE OR REPLACE FUNCTION @extschema@.storage_policy_explain(
+    schema_name NAME, table_name NAME, options JSONB DEFAULT NULL)
+RETURNS TABLE (setting TEXT, value TEXT, source TEXT)
+AS '@MODULE_PATHNAME@', 'ts_storage_policy_explain'
+LANGUAGE C STABLE;

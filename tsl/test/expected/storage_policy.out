@@ -255,6 +255,7 @@ SELECT add_storage_policy('events_slow', 'fhr', 'ev_slow_.*', '{"partition_colum
                  13
 
 SELECT add_storage_policy('events_special', 'fhr', 'ev_special', '{"partition_column": "ts", "chunk_interval": "3 days"}');
+WARNING:  storage policy "events_special" for "fhr"."ev_special" takes precedence over the regex policy "events" (priority 10)
  add_storage_policy 
 --------------------
                  14
@@ -268,7 +269,7 @@ SELECT s AS schema, n AS "table", m.name, m.match_kind, m.priority
 FROM (VALUES ('fhr', 'ev_fast'), ('fhr', 'ev_slow_1'), ('fhr', 'ev_special'), ('fhr', 'my_ev_fast'),
              ('fhr', 'ev'), ('other', 'audit_log'), ('other', 'audit_log_old'),
              ('other', 'xaudit_log')) AS t(s, n)
-LEFT JOIN LATERAL storage_policy_match(t.s, t.n) AS m ON true
+LEFT JOIN LATERAL storage_policy_match(t.s, t.n) AS m ON m.rank = 1
 ORDER BY s, n;
  schema |     table     |      name      | match_kind | priority 
 --------+---------------+----------------+------------+----------
@@ -280,6 +281,43 @@ ORDER BY s, n;
  other  | audit_log     | audit          | regex      |       20
  other  | audit_log_old |                |            |         
  other  | xaudit_log    |                |            |         
+
+-- all the policies a name matches, in the order of precedence: exact first, then regex by priority
+SELECT add_storage_policy('events_slow_2', 'fhr', 'ev_slow_2', '{"partition_column": "ts"}');
+WARNING:  storage policy "events_slow_2" for "fhr"."ev_slow_2" takes precedence over the regex policy "events_slow" (priority 5)
+WARNING:  storage policy "events_slow_2" for "fhr"."ev_slow_2" takes precedence over the regex policy "events" (priority 10)
+ add_storage_policy 
+--------------------
+                 16
+
+SELECT rank, name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
+ rank |     name      | match_kind | priority 
+------+---------------+------------+----------
+    1 | events_slow_2 | exact      |         
+    2 | events_slow   | regex      |        5
+    3 | events        | regex      |       10
+
+-- rank 1 is the policy CREATE TABLE uses, as its notice says
+CREATE TABLE fhr.ev_slow_2 (ts timestamptz NOT NULL);
+NOTICE:  applied storage policy "events_slow_2" to "fhr"."ev_slow_2"
+DROP TABLE fhr.ev_slow_2;
+-- removing it promotes the next one
+SELECT remove_storage_policy('events_slow_2');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT rank, name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
+ rank |    name     | match_kind | priority 
+------+-------------+------------+----------
+    1 | events_slow | regex      |        5
+    2 | events      | regex      |       10
+
+-- nothing matches
+SELECT count(*) FROM storage_policy_match('fhr', 'nothing_matches');
+ count 
+-------
+     0
 
 -- the view lists the policies in the order they are matched
 SELECT name, schema_name, table_name, match_kind, priority, enabled
@@ -325,10 +363,10 @@ SELECT alter_storage_policy('events_slow', enabled => false);
 ----------------------
  
 
-SELECT name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
-  name  | match_kind | priority 
---------+------------+----------
- events | regex      |       10
+SELECT rank, name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
+ rank |  name  | match_kind | priority 
+------+--------+------------+----------
+    1 | events | regex      |       10
 
 SELECT alter_storage_policy('events_slow', enabled => true);
  alter_storage_policy 
@@ -341,10 +379,11 @@ SELECT alter_storage_policy('events', priority => 1);
 ----------------------
  
 
-SELECT name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
-  name  | match_kind | priority 
---------+------------+----------
- events | regex      |        1
+SELECT rank, name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
+ rank |    name     | match_kind | priority 
+------+-------------+------------+----------
+    1 | events      | regex      |        1
+    2 | events_slow | regex      |        5
 
 SELECT alter_storage_policy('events', priority => 10);
  alter_storage_policy 
@@ -385,7 +424,7 @@ SELECT add_storage_policy('retained', 'fhr', 'ret_t', '{
 }');
  add_storage_policy 
 --------------------
-                 17
+                 18
 
 CREATE TABLE fhr.ret_t (ts timestamptz NOT NULL, v int);
 NOTICE:  applied storage policy "retained" to "fhr"."ret_t"
@@ -393,14 +432,14 @@ SELECT proc_name, config, schedule_interval FROM timescaledb_information.jobs
 WHERE hypertable_name = 'ret_t' AND proc_name IN ('policy_compression', 'policy_retention') ORDER BY proc_name;
      proc_name      |                       config                        | schedule_interval 
 --------------------+-----------------------------------------------------+-------------------
- policy_compression | {"hypertable_id": 11, "compress_after": "@ 7 days"} | @ 1 day
- policy_retention   | {"drop_after": "@ 2 years", "hypertable_id": 11}    | @ 1 day
+ policy_compression | {"hypertable_id": 12, "compress_after": "@ 7 days"} | @ 1 day
+ policy_retention   | {"drop_after": "@ 2 years", "hypertable_id": 12}    | @ 1 day
 
 -- NEVER is the same as no retention
 SELECT add_storage_policy('retain_never', 'fhr', 'ret_never', '{"partition_column": "ts", "retention": {"mode": "NEVER"}}');
  add_storage_policy 
 --------------------
-                 18
+                 19
 
 CREATE TABLE fhr.ret_never (ts timestamptz NOT NULL, v int);
 NOTICE:  applied storage policy "retain_never" to "fhr"."ret_never"
@@ -418,7 +457,7 @@ SELECT add_storage_policy('retain_int', 'fhr', 'ret_int', '{
 }');
  add_storage_policy 
 --------------------
-                 19
+                 20
 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
@@ -437,7 +476,7 @@ SELECT count(*) FROM pg_class WHERE relname = 'ret_int';
 SELECT add_storage_policy('retain_wrong', 'fhr', 'ret_wrong', '{"partition_column": "ts", "retention": {"mode": "AFTER", "after": "2 years"}}');
  add_storage_policy 
 --------------------
-                 20
+                 21
 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
@@ -489,7 +528,7 @@ SET ROLE storage_policy_dbowner;
 SELECT add_storage_policy('owned', 'fhr', 'z', '{"partition_column": "ts"}');
  add_storage_policy 
 --------------------
-                 21
+                 22
 
 SELECT alter_storage_policy('owned', enabled => false);
  alter_storage_policy 
@@ -552,6 +591,183 @@ SELECT remove_storage_policy('badseg');
  
 
 SELECT remove_storage_policy('badpk');
+ remove_storage_policy 
+-----------------------
+ 
+
+-- storage_policy_explain shows what CREATE TABLE would do, and creates nothing
+SELECT add_storage_policy('ex_exact', 'fhr', 'ex_a', '{
+    "partition_column": "ts",
+    "chunk_interval": "1 day",
+    "columnstore": {"segmentby": "sensor_id"},
+    "compression": {"mode": "AFTER", "after": "7 days"},
+    "retention": {"mode": "AFTER", "after": "90 days"}
+}');
+ add_storage_policy 
+--------------------
+                 23
+
+SELECT add_storage_policy('ex_regex', 'fhr', 'ex_.*', '{"partition_column": "ts"}', match_kind => 'regex', priority => 7);
+WARNING:  storage policy "ex_regex" also matches "fhr"."ex_a", which has its own policy "ex_exact"
+ add_storage_policy 
+--------------------
+                 24
+
+SELECT * FROM storage_policy_explain('fhr', 'ex_a');
+        setting        |   value   |   source    
+-----------------------+-----------+-------------
+ storage_policy        | ex_exact  | exact match
+ tsdb.hypertable       | t         | policy
+ tsdb.partition_column | ts        | policy
+ tsdb.chunk_interval   | 1 day     | policy
+ tsdb.segmentby        | sensor_id | policy
+ tsdb.compress_after   | 7 days    | policy
+ retention_after       | 90 days   | policy
+
+-- the regex policy, with its priority
+SELECT * FROM storage_policy_explain('fhr', 'ex_b');
+        setting        |  value   |         source          
+-----------------------+----------+-------------------------
+ storage_policy        | ex_regex | regex match, priority 7
+ tsdb.hypertable       | t        | policy
+ tsdb.partition_column | ts       | policy
+
+-- statement options win, also when spelled with an alias, and are listed as such
+SELECT * FROM storage_policy_explain('fhr', 'ex_a',
+    jsonb_build_object('segment_by', 'dev', 'compress_after', '3 days'));
+        setting        |  value   |   source    
+-----------------------+----------+-------------
+ storage_policy        | ex_exact | exact match
+ tsdb.hypertable       | t        | policy
+ tsdb.partition_column | ts       | policy
+ tsdb.chunk_interval   | 1 day    | policy
+ tsdb.segmentby        | dev      | statement
+ tsdb.compress_after   | 3 days   | statement
+ retention_after       | 90 days  | policy
+
+-- no match, with and without statement options
+SELECT * FROM storage_policy_explain('fhr', 'nothing');
+    setting     | value |         source          
+----------------+-------+-------------------------
+ storage_policy |       | none: no policy matches
+
+SELECT * FROM storage_policy_explain('fhr', 'nothing', jsonb_build_object('hypertable', true, 'partition_column', 'ts'));
+        setting        | value |         source          
+-----------------------+-------+-------------------------
+ storage_policy        |       | none: no policy matches
+ tsdb.hypertable       | t     | statement
+ tsdb.partition_column | ts    | statement
+
+-- the opt-out and the GUC
+SELECT * FROM storage_policy_explain('fhr', 'ex_a', jsonb_build_object('hypertable', false));
+     setting     | value |                      source                      
+-----------------+-------+--------------------------------------------------
+ storage_policy  |       | none: the statement sets tsdb.hypertable = false
+ tsdb.hypertable | f     | statement
+
+SET timescaledb.enable_storage_policies = off;
+SELECT * FROM storage_policy_explain('fhr', 'ex_a');
+    setting     | value |                      source                      
+----------------+-------+--------------------------------------------------
+ storage_policy |       | none: timescaledb.enable_storage_policies is off
+
+RESET timescaledb.enable_storage_policies;
+-- the answer is what CREATE TABLE does
+CREATE TABLE fhr.ex_a (ts timestamptz NOT NULL, sensor_id int);
+NOTICE:  applied storage policy "ex_exact" to "fhr"."ex_a"
+SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name IN ('ex_a', 'ex_b');
+ hypertable_name 
+-----------------
+ ex_a
+
+-- bad input
+\set ON_ERROR_STOP 0
+SELECT * FROM storage_policy_explain('fhr', 'ex_a', '[]');
+ERROR:  options must be a JSON object
+SELECT * FROM storage_policy_explain('fhr', 'ex_a', jsonb_build_object('no_such_option', 1));
+ERROR:  unrecognized parameter "tsdb.no_such_option"
+\set ON_ERROR_STOP 1
+SELECT remove_storage_policy('ex_exact');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('ex_regex');
+ remove_storage_policy 
+-----------------------
+ 
+
+-- adding a policy warns when it overlaps with one of the other kind
+SELECT add_storage_policy('ov_exact', 'fhr', 'ov_a', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                 25
+
+-- a regex policy that covers an existing exact one: the exact policy wins
+SELECT add_storage_policy('ov_regex', 'fhr', 'ov_.*', '{"partition_column": "ts"}', match_kind => 'regex', priority => 11);
+WARNING:  storage policy "ov_regex" also matches "fhr"."ov_a", which has its own policy "ov_exact"
+ add_storage_policy 
+--------------------
+                 26
+
+-- an exact policy for a name a regex policy covers: the exact policy wins
+SELECT add_storage_policy('ov_exact2', 'fhr', 'ov_b', '{"partition_column": "ts"}');
+WARNING:  storage policy "ov_exact2" for "fhr"."ov_b" takes precedence over the regex policy "ov_regex" (priority 11)
+ add_storage_policy 
+--------------------
+                 27
+
+-- no overlap, and a disabled policy does not warn
+SELECT add_storage_policy('ov_exact3', 'fhr', 'other_c', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                 28
+
+SELECT add_storage_policy('ov_exact4', 'fhr', 'ov_d', '{"partition_column": "ts"}', enabled => false);
+ add_storage_policy 
+--------------------
+                 29
+
+-- enabling it, or changing what a policy matches, warns
+SELECT alter_storage_policy('ov_exact4', enabled => true);
+WARNING:  storage policy "ov_exact4" for "fhr"."ov_d" takes precedence over the regex policy "ov_regex" (priority 11)
+ alter_storage_policy 
+----------------------
+ 
+
+SELECT alter_storage_policy('ov_exact3', table_name => 'ov_e');
+WARNING:  storage policy "ov_exact3" for "fhr"."ov_e" takes precedence over the regex policy "ov_regex" (priority 11)
+ alter_storage_policy 
+----------------------
+ 
+
+-- changing only the policy does not
+SELECT alter_storage_policy('ov_exact3', policy => '{"partition_column": "ts", "chunk_interval": "1 day"}');
+ alter_storage_policy 
+----------------------
+ 
+
+SELECT remove_storage_policy('ov_exact');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('ov_exact2');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('ov_exact3');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('ov_exact4');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('ov_regex');
  remove_storage_policy 
 -----------------------
  

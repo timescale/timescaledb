@@ -34,3 +34,6 @@ WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);
  */
 WithClauseResult *ts_create_table_with_clause_overlay(const WithClauseResult *explicit_clauses,
 													  const WithClauseResult *policy_clauses);
+
+/* The number of WITH options, which is the length of the array ts_create_table_with_clause_parse returns. */
+Size ts_create_table_with_clause_count(void);

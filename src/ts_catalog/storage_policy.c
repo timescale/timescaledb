@@ -8,14 +8,18 @@
 #include <catalog/pg_collation.h>
 #include <catalog/pg_database.h>
 #include <commands/dbcommands.h>
+#include <common/int.h>
 #include <commands/defrem.h>
 #include <miscadmin.h>
 #include <fmgr.h>
+#include <funcapi.h>
 #include <nodes/makefuncs.h>
 #include <nodes/value.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/jsonb.h>
+#include <utils/lsyscache.h>
+#include <utils/tuplestore.h>
 
 #include "export.h"
 #include "guc.h"
@@ -24,6 +28,7 @@
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/storage_policy.h"
+#include "with_clause/create_table_with_clause.h"
 
 #define STORAGE_POLICY_MATCH_EXACT "exact"
 
@@ -38,12 +43,27 @@ regex_matches(const char *pattern, const char *value)
 												CStringGetTextDatum(anchored)));
 }
 
-bool
-ts_storage_policy_find(const char *schema_name, const char *table_name, StoragePolicy *policy)
+static int
+storage_policy_cmp(const ListCell *a, const ListCell *b)
 {
-	bool found = false;
-	bool found_exact = false;
-	int32 best_priority = 0;
+	const StoragePolicy *pa = lfirst(a);
+	const StoragePolicy *pb = lfirst(b);
+
+	/* an exact policy before any regex one, then the lowest priority value first */
+	if (pa->is_exact != pb->is_exact)
+		return pa->is_exact ? -1 : 1;
+	return pg_cmp_s32(pa->priority, pb->priority);
+}
+
+/*
+ * This is the one definition of which storage policies apply to a name and in which order.
+ * CREATE TABLE uses the first, and the SQL functions that show the order or look for overlaps
+ * are built on this too, so they cannot disagree with it.
+ */
+List *
+ts_storage_policy_find_all(const char *schema_name, const char *table_name)
+{
+	List *matches = NIL;
 	ScanIterator iterator =
 		ts_scan_iterator_create(STORAGE_POLICY, AccessShareLock, CurrentMemoryContext);
 
@@ -55,14 +75,10 @@ ts_storage_policy_find(const char *schema_name, const char *table_name, StorageP
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 		Datum values[Natts_storage_policy];
 		bool nulls[Natts_storage_policy];
-		bool is_candidate = false;
-		bool is_exact = false;
-		int32 priority = 0;
 
 		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
-		if (DatumGetBool(values[AttrNumberGetAttrOffset(Anum_storage_policy_enabled)]) &&
-			!found_exact)
+		if (DatumGetBool(values[AttrNumberGetAttrOffset(Anum_storage_policy_enabled)]))
 		{
 			const char *kind =
 				TextDatumGetCString(values[AttrNumberGetAttrOffset(Anum_storage_policy_match_kind)]);
@@ -70,35 +86,33 @@ ts_storage_policy_find(const char *schema_name, const char *table_name, StorageP
 				values[AttrNumberGetAttrOffset(Anum_storage_policy_schema_name)]);
 			const char *table_pattern = TextDatumGetCString(
 				values[AttrNumberGetAttrOffset(Anum_storage_policy_table_name)]);
+			bool is_exact = strcmp(kind, STORAGE_POLICY_MATCH_EXACT) == 0;
+			bool is_match;
 
-			if (strcmp(kind, STORAGE_POLICY_MATCH_EXACT) == 0)
-			{
-				is_exact = strcmp(schema_pattern, schema_name) == 0 &&
+			if (is_exact)
+				is_match = strcmp(schema_pattern, schema_name) == 0 &&
 						   strcmp(table_pattern, table_name) == 0;
-				is_candidate = is_exact;
-			}
-			else if (!nulls[AttrNumberGetAttrOffset(Anum_storage_policy_priority)] &&
-					 regex_matches(schema_pattern, schema_name) &&
-					 regex_matches(table_pattern, table_name))
-			{
-				priority =
-					DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_storage_policy_priority)]);
-				/* Priorities are unique, so there are no ties. */
-				is_candidate = !found || priority < best_priority;
-			}
-		}
+			else
+				is_match = !nulls[AttrNumberGetAttrOffset(Anum_storage_policy_priority)] &&
+						   regex_matches(schema_pattern, schema_name) &&
+						   regex_matches(table_pattern, table_name);
 
-		if (is_candidate)
-		{
-			policy->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_storage_policy_id)]);
-			namestrcpy(&policy->name,
-					   NameStr(*DatumGetName(
-						   values[AttrNumberGetAttrOffset(Anum_storage_policy_name)])));
-			policy->policy = DatumGetJsonbPCopy(
-				values[AttrNumberGetAttrOffset(Anum_storage_policy_policy)]);
-			found = true;
-			found_exact = is_exact;
-			best_priority = priority;
+			if (is_match)
+			{
+				StoragePolicy *policy = palloc0(sizeof(StoragePolicy));
+
+				policy->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_storage_policy_id)]);
+				namestrcpy(&policy->name,
+						   NameStr(*DatumGetName(
+							   values[AttrNumberGetAttrOffset(Anum_storage_policy_name)])));
+				policy->policy = DatumGetJsonbPCopy(
+					values[AttrNumberGetAttrOffset(Anum_storage_policy_policy)]);
+				policy->is_exact = is_exact;
+				if (!is_exact)
+					policy->priority = DatumGetInt32(
+						values[AttrNumberGetAttrOffset(Anum_storage_policy_priority)]);
+				matches = lappend(matches, policy);
+			}
 		}
 
 		if (should_free)
@@ -106,7 +120,20 @@ ts_storage_policy_find(const char *schema_name, const char *table_name, StorageP
 	}
 	ts_scan_iterator_close(&iterator);
 
-	return found;
+	list_sort(matches, storage_policy_cmp);
+	return matches;
+}
+
+bool
+ts_storage_policy_find(const char *schema_name, const char *table_name, StoragePolicy *policy)
+{
+	List *matches = ts_storage_policy_find_all(schema_name, table_name);
+
+	if (matches == NIL)
+		return false;
+
+	*policy = *(StoragePolicy *) linitial(matches);
+	return true;
 }
 
 static DefElem *
@@ -442,16 +469,176 @@ ts_storage_policy_check_owner(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-TS_FUNCTION_INFO_V1(ts_storage_policy_match_id);
+TS_FUNCTION_INFO_V1(ts_storage_policy_matches);
 
-/* The id of the policy a new table with this name would get, or NULL if there is none. */
+/* The ids of the policies a new table with this name matches, with the rank in the order. */
 Datum
-ts_storage_policy_match_id(PG_FUNCTION_ARGS)
+ts_storage_policy_matches(PG_FUNCTION_ARGS)
 {
-	StoragePolicy policy;
+	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	int32 rank = 0;
+	ListCell *lc;
 
-	if (!ts_storage_policy_find(NameStr(*PG_GETARG_NAME(0)), NameStr(*PG_GETARG_NAME(1)), &policy))
+	InitMaterializedSRF(fcinfo, 0);
+
+	foreach (lc, ts_storage_policy_find_all(NameStr(*PG_GETARG_NAME(0)),
+											NameStr(*PG_GETARG_NAME(1))))
+	{
+		Datum values[2] = { Int32GetDatum(++rank), Int32GetDatum(((StoragePolicy *) lfirst(lc))->id) };
+		bool nulls[2] = { false, false };
+
+		tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc, values, nulls);
+	}
+
+	PG_RETURN_NULL();
+}
+
+TS_FUNCTION_INFO_V1(ts_storage_policy_explain);
+
+static void
+explain_put_row(Tuplestorestate *store, TupleDesc tupdesc, const char *setting, const char *value,
+				const char *source)
+{
+	Datum values[3] = { CStringGetTextDatum(setting),
+						value ? CStringGetTextDatum(value) : (Datum) 0,
+						CStringGetTextDatum(source) };
+	bool nulls[3] = { false, value == NULL, false };
+
+	tuplestore_putvalues(store, tupdesc, values, nulls);
+}
+
+/* The options a statement would give as WITH (tsdb.<key> = <value>, ...). */
+static List *
+explain_statement_options(const Jsonb *options)
+{
+	List *list = NIL;
+	JsonbIterator *it = JsonbIteratorInit((JsonbContainer *) &options->root);
+	JsonbValue v;
+	JsonbIteratorToken tok = JsonbIteratorNext(&it, &v, false);
+
+	if (tok != WJB_BEGIN_OBJECT)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("options must be a JSON object"),
+				 errhint("Pass the WITH options as a JSON object, for example "
+						 "'{\"chunk_interval\": \"1 day\"}'.")));
+
+	while ((tok = JsonbIteratorNext(&it, &v, true)) != WJB_END_OBJECT)
+	{
+		char *key = pnstrdup(v.val.string.val, v.val.string.len);
+		Node *arg;
+
+		JsonbIteratorNext(&it, &v, true);
+		if (v.type == jbvBool)
+			arg = (Node *) makeBoolean(v.val.boolean);
+		else if (v.type == jbvString || v.type == jbvNumeric)
+			arg = (Node *) makeString(policy_value_to_string(key, &v));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("option \"%s\" must be a string, a number or true or false", key)));
+		list = lappend(list, make_tsdb_option(key, arg));
+	}
+
+	return list;
+}
+
+static char *
+explain_value_to_string(const WithClauseResult *clause)
+{
+	Oid outfunc;
+	bool is_varlena;
+
+	getTypeOutputInfo(clause->definition->type_id, &outfunc, &is_varlena);
+	return OidOutputFunctionCall(outfunc, clause->parsed);
+}
+
+/*
+ * What CREATE TABLE <schema_name>.<table_name> WITH (<options>) would do, as one row per setting
+ * and where it comes from. The lookup and the merge are the ones CREATE TABLE uses. What cannot
+ * be known from a name alone is not covered: temporary tables, partitions and tables created
+ * with INHERITS or OF never get a policy.
+ */
+Datum
+ts_storage_policy_explain(PG_FUNCTION_ARGS)
+{
+	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	StoragePolicy policy;
+	WithClauseResult *statement = NULL;
+	WithClauseResult *result;
+	const char *none_reason = NULL;
+	Size count = ts_create_table_with_clause_count();
+
+	InitMaterializedSRF(fcinfo, 0);
+
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_NULL();
 
-	PG_RETURN_INT32(policy.id);
+	const char *schema_name = NameStr(*PG_GETARG_NAME(0));
+	const char *table_name = NameStr(*PG_GETARG_NAME(1));
+
+	if (!PG_ARGISNULL(2))
+	{
+		List *list = explain_statement_options(PG_GETARG_JSONB_P(2));
+
+		if (list != NIL)
+			statement = ts_create_table_with_clause_parse(list);
+	}
+
+	if (!ts_guc_enable_storage_policies)
+		none_reason = "timescaledb.enable_storage_policies is off";
+	else if (statement != NULL && !statement[CreateTableFlagHypertable].is_default &&
+			 !DatumGetBool(statement[CreateTableFlagHypertable].parsed))
+		none_reason = "the statement sets tsdb.hypertable = false";
+	else if (!ts_storage_policy_find(schema_name, table_name, &policy))
+		none_reason = "no policy matches";
+
+	if (none_reason != NULL)
+	{
+		explain_put_row(rsinfo->setResult,
+						rsinfo->setDesc,
+						"storage_policy",
+						NULL,
+						psprintf("none: %s", none_reason));
+		result = statement;
+	}
+	else
+	{
+		StoragePolicyOptions *options = ts_storage_policy_to_options(policy.policy);
+		WithClauseResult *from_policy = ts_create_table_with_clause_parse(options->with_options);
+
+		explain_put_row(rsinfo->setResult,
+						rsinfo->setDesc,
+						"storage_policy",
+						NameStr(policy.name),
+						policy.is_exact ? "exact match" :
+										  psprintf("regex match, priority %d", policy.priority));
+		result = ts_create_table_with_clause_overlay(statement, from_policy);
+	}
+
+	for (Size i = 0; result != NULL && i < count; i++)
+	{
+		if (result[i].is_default)
+			continue;
+
+		explain_put_row(rsinfo->setResult,
+						rsinfo->setDesc,
+						psprintf("tsdb.%s", result[i].definition->arg_names[0]),
+						explain_value_to_string(&result[i]),
+						(statement != NULL && !statement[i].is_default) ? "statement" : "policy");
+	}
+
+	if (none_reason == NULL)
+	{
+		StoragePolicyOptions *options = ts_storage_policy_to_options(policy.policy);
+
+		if (options->retention_after != NULL)
+			explain_put_row(rsinfo->setResult,
+							rsinfo->setDesc,
+							"retention_after",
+							options->retention_after,
+							"policy");
+	}
+
+	PG_RETURN_NULL();
 }
