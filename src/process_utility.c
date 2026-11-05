@@ -868,20 +868,35 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+static void
+ts_copy_execute_in_tss_scope(CopyStmt *stmt, const char *query_string, uint64 *processed,
+							 Hypertable *ht, volatile TsTssStatementScope *tss_scope)
+{
+	ts_tss_statement_scope_enter(tss_scope);
+	PG_TRY();
+	{
+		timescaledb_DoCopy(stmt, query_string, processed, ht);
+	}
+	PG_FINALLY();
+	{
+		ts_tss_statement_scope_exit(tss_scope);
+	}
+	PG_END_TRY();
+}
+
 static DDLResult
 process_copy(ProcessUtilityArgs *args)
 {
 	CopyStmt *stmt = (CopyStmt *) args->parsetree;
+	volatile TsTssStatementScope tss_scope = TS_TSS_STATEMENT_SCOPE_INIT;
 
-	ts_begin_tss_store_callback();
-
-	/*
-	 * Needed to add the appropriate number of tuples to the completion tag
-	 */
+	/* Needed to add the appropriate number of tuples to the completion tag. */
 	uint64 processed;
 	Hypertable *ht = NULL;
 	Cache *hcache = NULL;
 	Oid relid;
+
+	ts_begin_tss_store_callback(&tss_scope);
 
 	if (stmt->relation)
 	{
@@ -955,14 +970,15 @@ process_copy(ProcessUtilityArgs *args)
 	PreventCommandIfReadOnly("COPY FROM");
 
 	/* Performs acl check in here inside `copy_security_check` */
-	timescaledb_DoCopy(stmt, args->query_string, &processed, ht);
+	ts_copy_execute_in_tss_scope(stmt, args->query_string, &processed, ht, &tss_scope);
 
 	args->completion_tag->commandTag = CMDTAG_COPY;
 	args->completion_tag->nprocessed = processed;
 
 	ts_cache_release(&hcache);
 
-	ts_end_tss_store_callback(args->query_string,
+	ts_end_tss_store_callback(&tss_scope,
+							  args->query_string,
 							  args->pstmt->stmt_location,
 							  args->pstmt->stmt_len,
 							  args->pstmt->queryId,
