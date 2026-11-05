@@ -1392,7 +1392,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	Relation rel;
 	TupleDesc desc;
 	Datum values[Natts_bgw_job] = { 0 };
-	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_bgw_job] = { false };
 	int32 job_id;
 	NameData app_name = { 0 };
@@ -1473,8 +1472,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = CStringGetTextDatum(timezone);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
 	name_len =
 		snprintf(NameStr(app_name), NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
@@ -1488,7 +1485,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(&app_name);
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	/* This is where we would add a call to recordDependencyOnOwner, but it
 	 * cannot support dependencies on anything but built-in classes since

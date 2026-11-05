@@ -549,7 +549,6 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 	Oid tspc_oid;
 	Oid ownerid;
 	AclResult aclresult;
-	CatalogSecurityContext sec_ctx;
 
 	if (NULL == tspcname)
 	{
@@ -626,9 +625,7 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 	}
 	else
 	{
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		tablespace_insert(ht->fd.id, NameStr(*tspcname));
-		ts_catalog_restore_user(&sec_ctx);
 	}
 
 	ts_cache_release(&hcache);
