@@ -413,11 +413,18 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		return;
 	}
 
-	if (list_length(subpaths) < 2)
+	if (top_gather == NULL && list_length(subpaths) < 2)
 	{
 		/*
-		 * Doesn't make sense to add per-chunk aggregation paths if there's
-		 * only one chunk.
+		 * If there's only one chunk, and the scan is not parallel, we don't
+		 * force partial aggregation paths. We don't know if the vectorized
+		 * aggregation will be possible, and if not, a useless partial
+		 * aggregation will cause a heavy performance regression.
+		 *
+		 * If there's only one chunk and the scan is parallel, it will have
+		 * partial aggregation as well. But Postgres puts the partial
+		 * aggregation above ParallelAppend node, which prevents vectorized
+		 * aggregation. Use our path construction in this case.
 		 */
 		return;
 	}
