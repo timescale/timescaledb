@@ -2095,6 +2095,16 @@ from onechunkbucket group by b order by b;
  Thu Jan 01 04:00:00 2026 PST |   360 |  720
  Thu Jan 01 10:00:00 2026 PST |   360 | 1080
 
+select sum(case when ts < now() then 1 end) from onechunkbucket;
+ sum  
+------
+ 1440
+
+select count(*) from onechunkbucket group by case when ts < now() then 1 end order by 1;
+ count 
+-------
+  1440
+
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 -- Sorted grouping by a computed expression on a single chunk.
