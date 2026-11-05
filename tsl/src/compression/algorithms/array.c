@@ -537,6 +537,7 @@ tsl_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext
 		case BOOLOID:
 			return tsl_bool_array_decompress_all(compressed_array, element_type, dest_mctx);
 		case TEXTOID:
+		case BYTEAOID:
 			return tsl_text_array_decompress_all(compressed_array, element_type, dest_mctx);
 		case UUIDOID:
 			return tsl_uuid_array_decompress_all(compressed_array, element_type, dest_mctx);
@@ -703,13 +704,13 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 static ArrowArray *
 tsl_text_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
 {
-	Assert(element_type == TEXTOID);
+	Assert(element_type == TEXTOID || element_type == BYTEAOID);
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
-	CheckCompressedData(header->element_type == TEXTOID);
+	CheckCompressedData(header->element_type == element_type);
 
 	return text_array_decompress_all_serialized_no_header(&si, header->has_nulls, dest_mctx);
 }
