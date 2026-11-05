@@ -2576,7 +2576,7 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   315 | XX001       | XX001
+   318 | XX001       | XX001
     24 | 08P01       | 08P01
      1 | false       | false
      1 | true        | true
