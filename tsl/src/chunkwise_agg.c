@@ -310,7 +310,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 	 * its own row count and statistics.
 	 */
 	double d_num_groups;
-	if (root->parse->groupClause)
+	if (root->processed_groupClause)
 	{
 		List *group_exprs = NIL;
 		ListCell *lc;
