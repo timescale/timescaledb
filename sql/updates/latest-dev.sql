@@ -23,6 +23,9 @@ CREATE TABLE _timescaledb_catalog.storage_policy (
 CREATE UNIQUE INDEX storage_policy_exact_key ON _timescaledb_catalog.storage_policy (schema_name, table_name) WHERE match_kind = 'exact';
 CREATE UNIQUE INDEX storage_policy_priority_key ON _timescaledb_catalog.storage_policy (priority) WHERE match_kind = 'regex';
 
+-- a fresh install grants this to PUBLIC in pre_install/tables.sql, the table is covered by views_compat.sql
+GRANT SELECT ON SEQUENCE _timescaledb_catalog.storage_policy_id_seq TO PUBLIC;
+
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.storage_policy', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.storage_policy', 'id'), '');
 

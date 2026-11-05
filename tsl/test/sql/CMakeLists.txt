@@ -79,6 +79,9 @@ set(TEST_FILES
     move_to_columnstore.sql
     plan_skip_scan_pg_partition.sql
     storage_policy.sql
+    storage_policy_drift.sql
+    storage_policy_apply.sql
+    storage_policy_apply_int.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
     rebuild_sparse_index.sql
