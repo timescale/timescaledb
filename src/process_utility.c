@@ -16,6 +16,7 @@
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_proc.h>
 #include <catalog/pg_publication.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
@@ -59,6 +60,7 @@
 
 #include "compat/compat.h"
 #include "annotations.h"
+#include "bgw/job.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"
@@ -579,11 +581,42 @@ process_drop_schema_start(DropStmt *stmt)
 static void
 process_drop_procedure_start(DropStmt *stmt)
 {
+	List *target_oids = NIL;
+	List *target_objs = NIL;
+	ListCell *lc;
+
+	Assert(stmt->removeType == OBJECT_PROCEDURE || stmt->removeType == OBJECT_FUNCTION ||
+		   stmt->removeType == OBJECT_ROUTINE);
+
+	foreach (lc, stmt->objects)
+	{
+		Node *object = lfirst(lc);
+		Relation relation = NULL;
+		ObjectAddress address = get_object_address(stmt->removeType,
+												   object,
+												   &relation,
+												   AccessExclusiveLock,
+												   stmt->missing_ok);
+
+		if (!OidIsValid(address.objectId))
+		{
+			continue;
+		}
+
+		target_oids = lappend_oid(target_oids, address.objectId);
+		target_objs = lappend(target_objs, object);
+	}
+
+	if (target_oids == NIL)
+	{
+		return;
+	}
+
 	ScanIterator iterator =
 		ts_scan_iterator_create(BGW_JOB, RowExclusiveLock, CurrentMemoryContext);
 	ts_scanner_foreach(&iterator)
 	{
-		ListCell *cell;
+		ListCell *lc_oid, *lc_obj;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		bool schema_isnull, name_isnull, job_id_isnull;
 		Name proc_schema =
@@ -597,32 +630,43 @@ process_drop_procedure_start(DropStmt *stmt)
 					 job_id,
 					 NameStr(*proc_schema),
 					 NameStr(*proc_name));
-		foreach (cell, stmt->objects)
+
+		/*
+		 * Match on the function OID so that only the routine the job actually
+		 * runs can block or cascade the drop.
+		 */
+		Oid job_funcid = ts_bgw_job_get_funcid_from_catalog(proc_schema, proc_name);
+		if (!OidIsValid(job_funcid))
 		{
-			ObjectWithArgs *object = castNode(ObjectWithArgs, lfirst(cell));
-			RangeVar *rel = makeRangeVarFromNameList(object->objname);
-			if (namestrcmp(proc_schema, rel->schemaname) == 0 &&
-				namestrcmp(proc_name, rel->relname) == 0)
+			continue;
+		}
+
+		forboth (lc_oid, target_oids, lc_obj, target_objs)
+		{
+			if (lfirst_oid(lc_oid) != job_funcid)
 			{
-				Assert(stmt->removeType == OBJECT_PROCEDURE || stmt->removeType == OBJECT_FUNCTION);
-				if (stmt->behavior == DROP_RESTRICT)
-				{
-					ereport(ERROR,
-							errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
-							errmsg("cannot drop %s because background job %d depends on it",
-								   NameListToString(object->objname),
-								   job_id),
-							errhint("Use delete_job() to drop the job first."));
-				}
-				else
-				{
-					CatalogSecurityContext sec_ctx;
-					ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-					ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
-					ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-					ts_catalog_restore_user(&sec_ctx);
-				}
+				continue;
 			}
+
+			ObjectWithArgs *object = castNode(ObjectWithArgs, lfirst(lc_obj));
+			if (stmt->behavior == DROP_RESTRICT)
+			{
+				ereport(ERROR,
+						errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+						errmsg("cannot drop %s because background job %d depends on it",
+							   NameListToString(object->objname),
+							   job_id),
+						errhint("Use delete_job() to drop the job first."));
+			}
+			else
+			{
+				CatalogSecurityContext sec_ctx;
+				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
+				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+				ts_catalog_restore_user(&sec_ctx);
+			}
+			break;
 		}
 	}
 }
@@ -712,11 +756,14 @@ ts_bgw_job_rename_proc(ObjectAddress address, const char *newschema, const char 
 			DatumGetName(slot_getattr(ti->slot, Anum_bgw_job_proc_schema, &curr_schema_isnull));
 		Name curr_proc_name =
 			DatumGetName(slot_getattr(ti->slot, Anum_bgw_job_proc_name, &curr_name_isnull));
-		const char *old_proc_schema = get_namespace_name(get_func_namespace(address.objectId));
-		const char *old_proc_name = get_func_name(address.objectId);
+		/*
+		 * Match on the function OID rather than on the name: a different
+		 * overload with the same schema-qualified name must not retarget
+		 * this job.
+		 */
 		if (!curr_schema_isnull && !curr_name_isnull &&
-			namestrcmp(curr_proc_name, old_proc_name) == 0 &&
-			namestrcmp(curr_proc_schema, old_proc_schema) == 0)
+			ts_bgw_job_get_funcid_from_catalog(curr_proc_schema, curr_proc_name) ==
+				address.objectId)
 		{
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 			ts_bgw_job_update_proc(ti->scanrel,
@@ -740,7 +787,8 @@ process_alterprocedureschema(ProcessUtilityArgs *args)
 	AlterObjectSchemaStmt *stmt = (AlterObjectSchemaStmt *) args->parsetree;
 	Relation relation;
 
-	Assert(stmt->objectType == OBJECT_PROCEDURE || stmt->objectType == OBJECT_FUNCTION);
+	Assert(stmt->objectType == OBJECT_PROCEDURE || stmt->objectType == OBJECT_FUNCTION ||
+		   stmt->objectType == OBJECT_ROUTINE);
 	ObjectAddress address =
 		get_object_address(stmt->objectType, stmt->object, &relation, AccessExclusiveLock, false);
 	ts_bgw_job_rename_proc(address, stmt->newschema, NULL);
@@ -860,6 +908,7 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_alterprocedureschema(args);
 			break;
 		default:
@@ -2240,6 +2289,7 @@ process_drop_start(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_drop_procedure_start(stmt);
 			break;
 		case OBJECT_SCHEMA:
@@ -2845,6 +2895,7 @@ process_rename(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_rename_procedure(args);
 			break;
 		default:
