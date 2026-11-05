@@ -172,6 +172,13 @@ columnstore_setup_default(Hypertable *ht, WithClauseResult *with_clause_options)
 	pg_unreachable();
 }
 
+static void
+storage_policy_retention_setup_default(Hypertable *ht, const char *after)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 static Datum
 error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 {
@@ -424,6 +431,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.init_decompress_state_for_insert = error_no_default_fn_chunk_insert_state_community,
 
 	.columnstore_setup = columnstore_setup_default,
+	.storage_policy_retention_setup = storage_policy_retention_setup_default,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,

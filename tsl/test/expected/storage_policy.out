@@ -1,0 +1,558 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA fhr;
+SELECT add_storage_policy('gas', 'fhr', 'g_data_site42', '{
+    "partition_column": "ts",
+    "chunk_interval": "1 day",
+    "columnstore": {"segmentby": "sensor_id", "orderby": "ts DESC"},
+    "compression": {"mode": "AFTER", "after": "7 days"}
+}');
+ add_storage_policy 
+--------------------
+                  1
+
+-- plain DDL without any WITH clause, as a pipeline or ORM would issue it
+CREATE TABLE IF NOT EXISTS fhr.g_data_site42 (ts timestamptz NOT NULL, sensor_id int, value float8);
+NOTICE:  applied storage policy "gas" to "fhr"."g_data_site42"
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables
+WHERE hypertable_name = 'g_data_site42';
+ hypertable_name | compression_enabled 
+-----------------+---------------------
+ g_data_site42   | t
+
+SELECT config FROM timescaledb_information.jobs
+WHERE hypertable_name = 'g_data_site42' AND proc_name = 'policy_compression';
+                       config                       
+----------------------------------------------------
+ {"hypertable_id": 1, "compress_after": "@ 7 days"}
+
+SELECT segmentby, orderby FROM timescaledb_information.hypertable_columnstore_settings
+WHERE hypertable = 'fhr.g_data_site42'::regclass;
+ segmentby | orderby 
+-----------+---------
+ sensor_id | ts DESC
+
+-- an existing table is left alone
+CREATE TABLE IF NOT EXISTS fhr.g_data_site42 (ts timestamptz NOT NULL, sensor_id int, value float8);
+NOTICE:  relation "g_data_site42" already exists, skipping
+-- a name that matches no policy gives a plain table
+CREATE TABLE fhr.other (ts timestamptz NOT NULL);
+SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'other';
+ count 
+-------
+     0
+
+-- options in the statement override the policy, also when spelled with an alias
+SELECT add_storage_policy('override', 'fhr', 't2', '{
+    "partition_column": "ts",
+    "columnstore": {"segmentby": "sensor_id"},
+    "compression": {"mode": "AFTER", "after": "7 days"}
+}');
+ add_storage_policy 
+--------------------
+                  2
+
+CREATE TABLE fhr.t2 (ts timestamptz NOT NULL, sensor_id int, dev int)
+WITH (tsdb.segment_by = 'dev', tsdb.compress_after = '3 days');
+NOTICE:  applied storage policy "override" to "fhr"."t2"
+SELECT config FROM timescaledb_information.jobs
+WHERE hypertable_name = 't2' AND proc_name = 'policy_compression';
+                       config                       
+----------------------------------------------------
+ {"hypertable_id": 2, "compress_after": "@ 3 days"}
+
+SELECT segmentby FROM timescaledb_information.hypertable_columnstore_settings
+WHERE hypertable = 'fhr.t2'::regclass;
+ segmentby 
+-----------
+ dev
+
+-- opting out
+SELECT add_storage_policy('optout', 'fhr', 't3', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                  3
+
+CREATE TABLE fhr.t3 (ts timestamptz NOT NULL) WITH (tsdb.hypertable = false);
+SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 't3';
+ count 
+-------
+     0
+
+-- the GUC turns policies off
+SELECT add_storage_policy('guc', 'fhr', 't4', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                  4
+
+SET timescaledb.enable_storage_policies = off;
+CREATE TABLE fhr.t4 (ts timestamptz NOT NULL);
+RESET timescaledb.enable_storage_policies;
+SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 't4';
+ count 
+-------
+     0
+
+DROP TABLE fhr.t4;
+CREATE TABLE fhr.t4 (ts timestamptz NOT NULL);
+NOTICE:  applied storage policy "guc" to "fhr"."t4"
+SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 't4';
+ count 
+-------
+     1
+
+-- a disabled policy does not apply
+SELECT add_storage_policy('disabled', 'fhr', 't5', '{"partition_column": "ts"}', enabled => false);
+ add_storage_policy 
+--------------------
+                  5
+
+CREATE TABLE fhr.t5 (ts timestamptz NOT NULL);
+SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 't5';
+ count 
+-------
+     0
+
+SELECT alter_storage_policy('disabled', enabled => true);
+ alter_storage_policy 
+----------------------
+ 
+
+DROP TABLE fhr.t5;
+CREATE TABLE fhr.t5 (ts timestamptz NOT NULL);
+NOTICE:  applied storage policy "disabled" to "fhr"."t5"
+SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 't5';
+ count 
+-------
+     1
+
+-- a table without a time column cannot get the policy
+SELECT add_storage_policy('notime', 'fhr', 'nots', '{"chunk_interval": "1 day"}');
+ add_storage_policy 
+--------------------
+                  6
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+CREATE TABLE fhr.nots (a int, b text);
+ERROR:  cannot apply storage policy "notime" to "fhr"."nots"
+DETAIL:  partition column could not be determined
+HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column. Alternatively, create the table WITH (tsdb.hypertable = false) to skip storage policies.
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM pg_class WHERE relname = 'nots';
+ count 
+-------
+     0
+
+-- the error names the policy, whatever the reason the policy cannot be applied
+SELECT add_storage_policy('badcol', 'fhr', 'nocol', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                  7
+
+SELECT add_storage_policy('badseg', 'fhr', 'noseg', '{"partition_column": "ts", "columnstore": {"segmentby": "device"}}');
+ add_storage_policy 
+--------------------
+                  8
+
+SELECT add_storage_policy('badpk', 'fhr', 'badpk', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                  9
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+CREATE TABLE fhr.nocol (time timestamptz NOT NULL, v int);
+ERROR:  cannot apply storage policy "badcol" to "fhr"."nocol"
+DETAIL:  column "ts" does not exist
+HINT:  Create the table WITH (tsdb.hypertable = false) to skip storage policies, or adjust the policy.
+CREATE TABLE fhr.noseg (ts timestamptz NOT NULL, v int);
+ERROR:  cannot apply storage policy "badseg" to "fhr"."noseg"
+DETAIL:  column "device" does not exist
+HINT:  The timescaledb.compress_segmentby option must reference a valid column. Alternatively, create the table WITH (tsdb.hypertable = false) to skip storage policies.
+CREATE TABLE fhr.badpk (ts timestamptz NOT NULL, id int PRIMARY KEY);
+ERROR:  cannot apply storage policy "badpk" to "fhr"."badpk"
+DETAIL:  cannot create a unique index without the column "ts" (used in partitioning)
+HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key. Alternatively, create the table WITH (tsdb.hypertable = false) to skip storage policies.
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- and the table is not left behind
+SELECT count(*) FROM pg_class WHERE relname IN ('nots', 'nocol', 'noseg', 'badpk');
+ count 
+-------
+     0
+
+-- the opt-out named in the hint works
+CREATE TABLE fhr.nocol (time timestamptz NOT NULL, v int) WITH (tsdb.hypertable = false);
+DROP TABLE fhr.nocol;
+\set ON_ERROR_STOP 0
+-- invalid policies are rejected when they are stored
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"partion_column": "ts"}');
+ERROR:  invalid storage policy: unknown key "partion_column"
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"compression": {"mode": "NEVER", "after": "1 day"}}');
+ERROR:  invalid storage policy: "compression" mode NEVER cannot have "after"
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"compression": {"mode": "AFTER"}}');
+ERROR:  invalid storage policy: "compression" mode AFTER requires "after"
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"compression": {"mode": "SOMETIMES"}}');
+ERROR:  invalid storage policy: unknown mode "SOMETIMES" for "compression"
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"tiering": {"mode": "AFTER", "after": "90 days"}}');
+ERROR:  invalid storage policy: "tiering" is not supported yet
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"retention": {"mode": "AFTER"}}');
+ERROR:  invalid storage policy: "retention" mode AFTER requires "after"
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"retention": {"mode": "NEVER", "after": "1 day"}}');
+ERROR:  invalid storage policy: "retention" mode NEVER cannot have "after"
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"retention": {"mode": "AFTER", "after": "a week ago"}}');
+ERROR:  invalid storage policy: "a week ago" of "retention" is not a valid age
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"retention": {"mode": "AFTER", "after": "0 days"}}');
+ERROR:  invalid storage policy: "0 days" of "retention" must be greater than zero
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"retention": {"mode": "AFTER", "after": "-1 day"}}');
+ERROR:  invalid storage policy: "-1 day" of "retention" must be greater than zero
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"compression": {"mode": "AFTER", "after": "-7 days"}}');
+ERROR:  invalid storage policy: "-7 days" of "compression" must be greater than zero
+SELECT add_storage_policy('bad', 'fhr', 'x', '{"columnstore": {"segmnetby": "a"}}');
+ERROR:  invalid storage policy: unknown key "columnstore.segmnetby"
+SELECT add_storage_policy('bad', 'fhr', 'x', '"ts"');
+ERROR:  invalid storage policy: "policy" must be a JSON object
+SELECT add_storage_policy('bad', 'fhr', 'x', '{}', 'glob');
+ERROR:  invalid match_kind "glob"
+SELECT add_storage_policy('bad', 'fhr', 'x', '{}', priority => 1);
+ERROR:  priority must be NULL for exact matches
+-- duplicates
+SELECT add_storage_policy('gas', 'fhr', 'other_table', '{}');
+ERROR:  duplicate key value violates unique constraint "storage_policy_name_key"
+SELECT add_storage_policy('gas_again', 'fhr', 'g_data_site42', '{}');
+ERROR:  duplicate key value violates unique constraint "storage_policy_exact_key"
+SELECT remove_storage_policy('nonexistent');
+ERROR:  storage policy "nonexistent" does not exist
+SELECT alter_storage_policy('nonexistent', enabled => true);
+ERROR:  storage policy "nonexistent" does not exist
+\set ON_ERROR_STOP 1
+SELECT add_storage_policy('gas', 'fhr', 'other_table', '{}', if_not_exists => true);
+NOTICE:  storage policy "gas" already exists, skipping
+ add_storage_policy 
+--------------------
+                   
+
+SELECT remove_storage_policy('nonexistent', if_exists => true);
+NOTICE:  storage policy "nonexistent" does not exist, skipping
+ remove_storage_policy 
+-----------------------
+ 
+
+-- regex policies: the lowest priority value wins, an exact match beats any regex, and a regex has
+-- to match the whole name
+SELECT add_storage_policy('events', 'fhr', 'ev_.*', '{"partition_column": "ts", "chunk_interval": "1 day"}', 'regex', 10);
+ add_storage_policy 
+--------------------
+                 12
+
+SELECT add_storage_policy('events_slow', 'fhr', 'ev_slow_.*', '{"partition_column": "ts", "chunk_interval": "1 week"}', 'regex', 5);
+ add_storage_policy 
+--------------------
+                 13
+
+SELECT add_storage_policy('events_special', 'fhr', 'ev_special', '{"partition_column": "ts", "chunk_interval": "3 days"}');
+ add_storage_policy 
+--------------------
+                 14
+
+SELECT add_storage_policy('audit', '.*', 'audit_log', '{"partition_column": "ts", "chunk_interval": "2 days"}', 'regex', 20);
+ add_storage_policy 
+--------------------
+                 15
+
+SELECT s AS schema, n AS "table", m.name, m.match_kind, m.priority
+FROM (VALUES ('fhr', 'ev_fast'), ('fhr', 'ev_slow_1'), ('fhr', 'ev_special'), ('fhr', 'my_ev_fast'),
+             ('fhr', 'ev'), ('other', 'audit_log'), ('other', 'audit_log_old'),
+             ('other', 'xaudit_log')) AS t(s, n)
+LEFT JOIN LATERAL storage_policy_match(t.s, t.n) AS m ON true
+ORDER BY s, n;
+ schema |     table     |      name      | match_kind | priority 
+--------+---------------+----------------+------------+----------
+ fhr    | ev            |                |            |         
+ fhr    | ev_fast       | events         | regex      |       10
+ fhr    | ev_slow_1     | events_slow    | regex      |        5
+ fhr    | ev_special    | events_special | exact      |         
+ fhr    | my_ev_fast    |                |            |         
+ other  | audit_log     | audit          | regex      |       20
+ other  | audit_log_old |                |            |         
+ other  | xaudit_log    |                |            |         
+
+-- the view lists the policies in the order they are matched
+SELECT name, schema_name, table_name, match_kind, priority, enabled
+FROM timescaledb_information.storage_policies
+WHERE name IN ('events', 'events_slow', 'events_special', 'audit');
+      name      | schema_name | table_name | match_kind | priority | enabled 
+----------------+-------------+------------+------------+----------+---------
+ events_special | fhr         | ev_special | exact      |          | t
+ events_slow    | fhr         | ev_slow_.* | regex      |        5 | t
+ events         | fhr         | ev_.*      | regex      |       10 | t
+ audit          | .*          | audit_log  | regex      |       20 | t
+
+SELECT name, policy->>'chunk_interval' AS chunk_interval, updated_by = current_user AS updated_by_me,
+       created_at <= now() AS created_before_now
+FROM timescaledb_information.storage_policies WHERE name = 'events_special';
+      name      | chunk_interval | updated_by_me | created_before_now 
+----------------+----------------+---------------+--------------------
+ events_special | 3 days         | t             | t
+
+CREATE SCHEMA other;
+CREATE TABLE fhr.ev_fast (ts timestamptz NOT NULL);
+NOTICE:  applied storage policy "events" to "fhr"."ev_fast"
+CREATE TABLE fhr.ev_slow_1 (ts timestamptz NOT NULL);
+NOTICE:  applied storage policy "events_slow" to "fhr"."ev_slow_1"
+CREATE TABLE fhr.ev_special (ts timestamptz NOT NULL);
+NOTICE:  applied storage policy "events_special" to "fhr"."ev_special"
+CREATE TABLE fhr.my_ev_fast (ts timestamptz NOT NULL);
+CREATE TABLE other.audit_log (ts timestamptz NOT NULL);
+NOTICE:  applied storage policy "audit" to "other"."audit_log"
+SELECT hypertable_schema, hypertable_name, time_interval FROM timescaledb_information.dimensions
+WHERE hypertable_schema IN ('fhr', 'other') AND hypertable_name IN ('ev_fast', 'ev_slow_1', 'ev_special', 'my_ev_fast', 'audit_log')
+ORDER BY 1, 2;
+ hypertable_schema | hypertable_name | time_interval 
+-------------------+-----------------+---------------
+ fhr               | ev_fast         | @ 1 day
+ fhr               | ev_slow_1       | @ 7 days
+ fhr               | ev_special      | @ 3 days
+ other             | audit_log       | @ 2 days
+
+-- a disabled policy is skipped, so the next one that matches applies
+SELECT alter_storage_policy('events_slow', enabled => false);
+ alter_storage_policy 
+----------------------
+ 
+
+SELECT name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
+  name  | match_kind | priority 
+--------+------------+----------
+ events | regex      |       10
+
+SELECT alter_storage_policy('events_slow', enabled => true);
+ alter_storage_policy 
+----------------------
+ 
+
+-- the priority can be changed, so the order of two policies can be swapped
+SELECT alter_storage_policy('events', priority => 1);
+ alter_storage_policy 
+----------------------
+ 
+
+SELECT name, match_kind, priority FROM storage_policy_match('fhr', 'ev_slow_2');
+  name  | match_kind | priority 
+--------+------------+----------
+ events | regex      |        1
+
+SELECT alter_storage_policy('events', priority => 10);
+ alter_storage_policy 
+----------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT add_storage_policy('bad_regex', 'fhr', 'ev_(', '{"partition_column": "ts"}', 'regex', 30);
+ERROR:  invalid regular expression: parentheses () not balanced
+SELECT add_storage_policy('bad_schema', '[', 'x', '{"partition_column": "ts"}', 'regex', 30);
+ERROR:  invalid regular expression: brackets [] not balanced
+SELECT add_storage_policy('no_priority', 'fhr', 'x.*', '{"partition_column": "ts"}', 'regex');
+ERROR:  priority is required for regex matches
+SELECT add_storage_policy('same_priority', 'fhr', 'x.*', '{"partition_column": "ts"}', 'regex', 10);
+ERROR:  duplicate key value violates unique constraint "storage_policy_priority_key"
+SELECT alter_storage_policy('events', table_name => 'ev_(');
+ERROR:  invalid regular expression: parentheses () not balanced
+SELECT alter_storage_policy('events_special', priority => 3);
+ERROR:  priority must be NULL for exact matches
+\set ON_ERROR_STOP 1
+SELECT remove_storage_policy(name) FROM _timescaledb_catalog.storage_policy
+WHERE name IN ('events', 'events_slow', 'events_special', 'audit');
+ remove_storage_policy 
+-----------------------
+ 
+ 
+ 
+ 
+
+DROP TABLE fhr.ev_fast, fhr.ev_slow_1, fhr.ev_special, fhr.my_ev_fast, other.audit_log;
+DROP SCHEMA other;
+-- retention
+SELECT add_storage_policy('retained', 'fhr', 'ret_t', '{
+    "partition_column": "ts",
+    "chunk_interval": "1 day",
+    "compression": {"mode": "AFTER", "after": "7 days"},
+    "retention": {"mode": "AFTER", "after": "2 years"}
+}');
+ add_storage_policy 
+--------------------
+                 17
+
+CREATE TABLE fhr.ret_t (ts timestamptz NOT NULL, v int);
+NOTICE:  applied storage policy "retained" to "fhr"."ret_t"
+SELECT proc_name, config, schedule_interval FROM timescaledb_information.jobs
+WHERE hypertable_name = 'ret_t' AND proc_name IN ('policy_compression', 'policy_retention') ORDER BY proc_name;
+     proc_name      |                       config                        | schedule_interval 
+--------------------+-----------------------------------------------------+-------------------
+ policy_compression | {"hypertable_id": 11, "compress_after": "@ 7 days"} | @ 1 day
+ policy_retention   | {"drop_after": "@ 2 years", "hypertable_id": 11}    | @ 1 day
+
+-- NEVER is the same as no retention
+SELECT add_storage_policy('retain_never', 'fhr', 'ret_never', '{"partition_column": "ts", "retention": {"mode": "NEVER"}}');
+ add_storage_policy 
+--------------------
+                 18
+
+CREATE TABLE fhr.ret_never (ts timestamptz NOT NULL, v int);
+NOTICE:  applied storage policy "retain_never" to "fhr"."ret_never"
+SELECT count(*) FROM timescaledb_information.jobs
+WHERE hypertable_name = 'ret_never' AND proc_name = 'policy_retention';
+ count 
+-------
+     0
+
+-- an integer time column needs an integer_now function for a retention policy, which a table that
+-- is only being created cannot have yet, so the policy cannot be applied, the same as for
+-- add_retention_policy
+SELECT add_storage_policy('retain_int', 'fhr', 'ret_int', '{
+    "partition_column": "ts", "chunk_interval": "1000", "retention": {"mode": "AFTER", "after": "100000"}
+}');
+ add_storage_policy 
+--------------------
+                 19
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+CREATE TABLE fhr.ret_int (ts bigint NOT NULL, v int);
+ERROR:  cannot apply storage policy "retain_int" to "fhr"."ret_int"
+DETAIL:  invalid value for parameter drop_after
+HINT:  Integer duration in "drop_after" with valid "integer_now" function or interval time duration in "drop_created_before" is required for hypertables with integer time dimension. Alternatively, create the table WITH (tsdb.hypertable = false) to skip storage policies.
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM pg_class WHERE relname = 'ret_int';
+ count 
+-------
+     0
+
+-- an age that does not fit the time column fails when the table is created, and no table is left
+SELECT add_storage_policy('retain_wrong', 'fhr', 'ret_wrong', '{"partition_column": "ts", "retention": {"mode": "AFTER", "after": "2 years"}}');
+ add_storage_policy 
+--------------------
+                 20
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+CREATE TABLE fhr.ret_wrong (ts bigint NOT NULL);
+ERROR:  cannot apply storage policy "retain_wrong" to "fhr"."ret_wrong"
+DETAIL:  invalid input syntax for type bigint: "2 years"
+HINT:  Create the table WITH (tsdb.hypertable = false) to skip storage policies, or adjust the policy.
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM pg_class WHERE relname = 'ret_wrong';
+ count 
+-------
+     0
+
+SELECT remove_storage_policy('retained');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('retain_never');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('retain_int');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('retain_wrong');
+ remove_storage_policy 
+-----------------------
+ 
+
+DROP TABLE fhr.ret_t, fhr.ret_never;
+-- only the database owner or a superuser may manage policies
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+SELECT add_storage_policy('nope', 'fhr', 'y', '{}');
+ERROR:  must be owner of database "db_storage_policy" or a superuser to manage storage policies
+SELECT remove_storage_policy('gas');
+ERROR:  must be owner of database "db_storage_policy" or a superuser to manage storage policies
+\set ON_ERROR_STOP 1
+RESET ROLE;
+-- a role that owns the database without being a superuser can manage policies
+CREATE ROLE storage_policy_dbowner NOSUPERUSER;
+ALTER DATABASE :"TEST_DBNAME" OWNER TO storage_policy_dbowner;
+SET ROLE storage_policy_dbowner;
+SELECT add_storage_policy('owned', 'fhr', 'z', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                 21
+
+SELECT alter_storage_policy('owned', enabled => false);
+ alter_storage_policy 
+----------------------
+ 
+
+SELECT remove_storage_policy('owned');
+ remove_storage_policy 
+-----------------------
+ 
+
+-- and a role that is not the owner still cannot
+RESET ROLE;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+SELECT add_storage_policy('nope', 'fhr', 'y', '{}');
+ERROR:  must be owner of database "db_storage_policy" or a superuser to manage storage policies
+\set ON_ERROR_STOP 1
+RESET ROLE;
+ALTER DATABASE :"TEST_DBNAME" OWNER TO :ROLE_SUPERUSER;
+DROP ROLE storage_policy_dbowner;
+SELECT remove_storage_policy('gas');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('override');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('optout');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('guc');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('disabled');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('notime');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('badcol');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('badseg');
+ remove_storage_policy 
+-----------------------
+ 
+
+SELECT remove_storage_policy('badpk');
+ remove_storage_policy 
+-----------------------
+ 
+

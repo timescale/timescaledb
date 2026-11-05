@@ -49,6 +49,7 @@
 #include <utils/elog.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
+#include <commands/extension.h>
 #include <utils/lsyscache.h>
 #include <utils/palloc.h>
 #include <utils/regproc.h>
@@ -93,6 +94,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "ts_catalog/hypertable_cagg_settings.h"
+#include "ts_catalog/storage_policy.h"
 #include "ts_stats/ts_stats_record.h"
 #include "tss_callbacks.h"
 #include "utils.h"
@@ -4286,6 +4288,10 @@ typedef struct CreateTableInfo
 {
 	bool hypertable;
 	WithClauseResult *with_clauses;
+	/* Name of the storage policy applied to this statement, if any */
+	char *storage_policy_name;
+	/* Age for the retention policy of the storage policy, if it has one */
+	char *storage_policy_retention_after;
 } CreateTableInfo;
 
 static CreateTableInfo create_table_info = { 0 };
@@ -4335,7 +4341,7 @@ get_default_partition_column(Oid relid)
  * trigger or by running parse analysis manually).
  */
 static void
-process_create_table_end(Node *parsetree)
+process_create_table_end_impl(Node *parsetree)
 {
 	CreateStmt *stmt = (CreateStmt *) parsetree;
 	ListCell *lc;
@@ -4512,8 +4518,90 @@ process_create_table_end(Node *parsetree)
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("\"compress_after\" requires the columnstore to be enabled")));
 			}
+
+			if (create_table_info.storage_policy_retention_after != NULL)
+			{
+				ts_cm_functions->storage_policy_retention_setup(ts_hypertable_get_by_id(ht_id),
+																create_table_info
+																	.storage_policy_retention_after);
+			}
+
+			if (create_table_info.storage_policy_name != NULL)
+			{
+				ereport(NOTICE,
+						(errmsg("applied storage policy \"%s\" to \"%s\".\"%s\"",
+								create_table_info.storage_policy_name,
+								get_namespace_name(RangeVarGetCreationNamespace(stmt->relation)),
+								stmt->relation->relname)));
+			}
 		}
 	}
+}
+
+/*
+ * When a storage policy applies to the table, an error caused by the table or the policy is
+ * reported with the name of the policy, as the person who created the table did not ask for any
+ * of this and would otherwise have no hint where it comes from.
+ */
+static void
+process_create_table_end(Node *parsetree)
+{
+	CreateStmt *stmt = (CreateStmt *) parsetree;
+
+	if (create_table_info.storage_policy_name == NULL)
+	{
+		process_create_table_end_impl(parsetree);
+		return;
+	}
+
+	MemoryContext oldcontext = CurrentMemoryContext;
+
+	PG_TRY();
+	{
+		process_create_table_end_impl(parsetree);
+	}
+	PG_CATCH();
+	{
+		MemoryContextSwitchTo(oldcontext);
+		ErrorData *edata = CopyErrorData();
+		int category = ERRCODE_TO_CATEGORY(edata->sqlerrcode);
+		bool caused_by_table_or_policy =
+			category == ERRCODE_TO_CATEGORY(ERRCODE_FEATURE_NOT_SUPPORTED) ||
+			category == ERRCODE_TO_CATEGORY(ERRCODE_DATA_EXCEPTION) ||
+			category == ERRCODE_TO_CATEGORY(ERRCODE_INTEGRITY_CONSTRAINT_VIOLATION) ||
+			category == ERRCODE_TO_CATEGORY(ERRCODE_SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION) ||
+			edata->sqlerrcode == ERRCODE_TS_OPERATION_NOT_SUPPORTED ||
+			edata->sqlerrcode == ERRCODE_TS_BAD_HYPERTABLE_DEFINITION ||
+			edata->sqlerrcode == ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION ||
+			edata->sqlerrcode == ERRCODE_TS_HYPERTABLE_EXISTS ||
+			edata->sqlerrcode == ERRCODE_TS_DUPLICATE_DIMENSION;
+
+		/*
+		 * Cancellations, deadlocks, resource limits and internal errors are passed on unchanged.
+		 */
+		if (!caused_by_table_or_policy)
+		{
+			FreeErrorData(edata);
+			PG_RE_THROW();
+		}
+
+		FlushErrorState();
+		ereport(ERROR,
+				(errcode(edata->sqlerrcode),
+				 errmsg("cannot apply storage policy \"%s\" to \"%s\".\"%s\"",
+						create_table_info.storage_policy_name,
+						get_namespace_name(RangeVarGetCreationNamespace(stmt->relation)),
+						stmt->relation->relname),
+				 errdetail("%s", edata->message),
+				 errhint("%s",
+						 edata->hint != NULL ?
+							 psprintf("%s Alternatively, create the table WITH (tsdb.hypertable = "
+									  "false) to skip storage policies.",
+									  edata->hint) :
+							 "Create the table WITH (tsdb.hypertable = false) to skip storage "
+							 "policies, or adjust the policy.")));
+	}
+	PG_END_TRY();
 }
 
 static inline const char *
@@ -5975,6 +6063,43 @@ get_default_partition_column_by_definitions(List *definitions)
 	return column_name;
 }
 
+/*
+ * Apply the storage policy matching a new table, if there is one. The policy's options are
+ * overlaid with those of the statement, so an option given in the statement overrides the
+ * policy. A matching policy always means a hypertable, also for a statement without any
+ * tsdb.* option, such as one issued by a client that only speaks plain DDL.
+ */
+static WithClauseResult *
+apply_storage_policy(CreateStmt *stmt, WithClauseResult *explicit_clauses)
+{
+	StoragePolicy policy;
+
+	if (!ts_guc_enable_storage_policies || creating_extension ||
+		stmt->relation->relpersistence == RELPERSISTENCE_TEMP || stmt->partbound != NULL ||
+		stmt->partspec != NULL || stmt->inhRelations != NIL || stmt->ofTypename != NULL)
+		return explicit_clauses;
+
+	/* tsdb.hypertable = false is an explicit opt-out */
+	if (explicit_clauses != NULL && !explicit_clauses[CreateTableFlagHypertable].is_default &&
+		!DatumGetBool(explicit_clauses[CreateTableFlagHypertable].parsed))
+		return explicit_clauses;
+
+	Oid nspid = RangeVarGetCreationNamespace(stmt->relation);
+	const char *schema_name = get_namespace_name(nspid);
+
+	if (schema_name == NULL ||
+		!ts_storage_policy_find(schema_name, stmt->relation->relname, &policy))
+		return explicit_clauses;
+
+	StoragePolicyOptions *options = ts_storage_policy_to_options(policy.policy);
+	WithClauseResult *policy_clauses = ts_create_table_with_clause_parse(options->with_options);
+
+	create_table_info.storage_policy_name = pstrdup(NameStr(policy.name));
+	create_table_info.storage_policy_retention_after = options->retention_after;
+
+	return ts_create_table_with_clause_overlay(explicit_clauses, policy_clauses);
+}
+
 static DDLResult
 process_create_stmt(ProcessUtilityArgs *args)
 {
@@ -6000,15 +6125,23 @@ process_create_stmt(ProcessUtilityArgs *args)
 
 	create_table_info.hypertable = false;
 	create_table_info.with_clauses = NULL;
+	create_table_info.storage_policy_name = NULL;
+	create_table_info.storage_policy_retention_after = NULL;
+
+	WithClauseResult *with_clauses = NULL;
+	if (hypertable_options)
+		with_clauses = ts_create_table_with_clause_parse(hypertable_options);
+	with_clauses = apply_storage_policy(stmt, with_clauses);
+
 	/*
 	 * We can only convert the table into a hypertable after postgres has created
 	 * the initial table so we store the information passed in the WITH clause
 	 * and do some initial sanity check and do the actual work of creating the hypertable
 	 * in process_create_table_end.
 	 */
-	if (hypertable_options)
+	if (with_clauses)
 	{
-		create_table_info.with_clauses = ts_create_table_with_clause_parse(hypertable_options);
+		create_table_info.with_clauses = with_clauses;
 		create_table_info.hypertable =
 			DatumGetBool(create_table_info.with_clauses[CreateTableFlagHypertable].parsed);
 

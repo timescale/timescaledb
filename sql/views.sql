@@ -433,6 +433,23 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable_granular_refresh_setti
 	FROM _timescaledb_catalog.hypertable ht
 	INNER JOIN _timescaledb_catalog.hypertable_cagg_settings s ON (s.hypertable_id = ht.id);
 
+-- Storage policies, in the order they are matched: exact matches first, then regex matches by
+-- priority. Which policy a given table name would get is answered by storage_policy_match().
+CREATE OR REPLACE VIEW timescaledb_information.storage_policies AS
+SELECT
+    p.name,
+    p.schema_name,
+    p.table_name,
+    p.match_kind,
+    p.priority,
+    p.policy,
+    p.enabled,
+    p.created_at,
+    p.updated_at,
+    p.updated_by
+FROM _timescaledb_catalog.storage_policy p
+ORDER BY (p.match_kind = 'exact') DESC, p.priority, p.name;
+
 -- chunk statistics view
 CREATE OR REPLACE VIEW timescaledb_information.stat_chunk_activity AS
 SELECT

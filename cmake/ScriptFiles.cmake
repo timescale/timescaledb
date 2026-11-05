@@ -54,6 +54,7 @@ set(SOURCE_FILES
     job_api.sql
     policy_api.sql
     policy_internal.sql
+    storage_policy_api.sql
     cagg_utils.sql
     job_stat_history_log_retention.sql
     osm_api.sql

@@ -121,6 +121,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_COLUMN_STATS_TABLE_NAME,
 	},
+	[STORAGE_POLICY] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = STORAGE_POLICY_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -155,6 +159,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[CHUNK_COLUMN_STATS_ID_IDX] = "chunk_column_stats_pkey",
 			[CHUNK_COLUMN_STATS_HT_ID_CHUNK_ID_COLUMN_NAME_IDX] = "chunk_column_stats_ht_id_chunk_id_colname_key",
+		},
+	},
+	[STORAGE_POLICY] = {
+		.length = _MAX_STORAGE_POLICY_INDEX,
+		.names = (char *[]) {
+			[STORAGE_POLICY_PKEY] = "storage_policy_pkey",
 		},
 	},
 	[CHUNK] = {
@@ -305,6 +315,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[COMPRESSION_SETTINGS] = NULL,
 	[COMPRESSION_CHUNK_SIZE] = NULL,
 	[CHUNK_COLUMN_STATS] = CATALOG_SCHEMA_NAME ".chunk_column_stats_id_seq",
+	[STORAGE_POLICY] = CATALOG_SCHEMA_NAME ".storage_policy_id_seq",
 };
 
 typedef struct InternalFunctionDef

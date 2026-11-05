@@ -183,6 +183,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
 	.columnstore_setup = tsl_columnstore_setup,
+	.storage_policy_retention_setup = tsl_storage_policy_retention_setup,
 	.compressor_init = tsl_compressor_init,
 	.compressor_set_invalidation = tsl_compressor_set_invalidation,
 	.compressor_add_slot = tsl_compressor_add_slot,

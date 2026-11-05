@@ -32,7 +32,8 @@ list(
   osm_range_updates_iso.spec
   concurrent_decompress_update.spec
   compression_read_committed_update.spec
-  delete_job_deadlock.spec)
+  delete_job_deadlock.spec
+  storage_policy_race.spec)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})

@@ -30,6 +30,7 @@
 #include "retention_api.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
+#include "with_clause/with_clause_parser.h"
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
@@ -500,4 +501,33 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	return policy_retention_remove_internal(table_oid, if_exists);
+}
+
+/*
+ * Add the retention policy of a storage policy to a hypertable that is just being created.
+ * The age is an interval for a time column and an integer for an integer column.
+ */
+void
+tsl_storage_policy_retention_setup(Hypertable *ht, const char *after)
+{
+	const Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
+	WithClauseResult option = { .parsed = CStringGetTextDatum(after), .is_default = false };
+	Oid window_type = InvalidOid;
+	Datum window_datum =
+		ts_create_table_parse_interval_value(option, ts_dimension_get_partition_type(dim), &window_type);
+
+	if (!ts_create_table_interval_value_is_positive(window_datum, window_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"retention\" age must be greater than zero")));
+
+	policy_retention_add_internal(ht->main_table_relid,
+								  window_type,
+								  window_datum,
+								  NULL /* created_before */,
+								  (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL,
+								  true /* if_not_exists */,
+								  false /* fixed_schedule */,
+								  DT_NOBEGIN,
+								  NULL /* timezone */);
 }

@@ -174,6 +174,7 @@ TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 TSDLLEXPORT CaggRefreshStatsLevel ts_guc_cagg_refresh_stats_level = CAGG_REFRESH_STATS_OFF;
 
 bool ts_guc_enable_partitioned_hypertables = false;
+TSDLLEXPORT bool ts_guc_enable_storage_policies = true;
 TSDLLEXPORT int ts_guc_stats_max_chunks = TS_STATS_MAX_CHUNKS_DEFAULT;
 
 TSDLLEXPORT bool ts_guc_enable_cagg_rewrites = false;
@@ -1544,6 +1545,18 @@ _guc_init(void)
 							 (int *) &ts_guc_compress_truncate_behaviour,
 							 COMPRESS_TRUNCATE_ONLY,
 							 compress_truncate_behaviour_options,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_storage_policies"),
+							 "Apply storage policies when a matching table is created",
+							 "When on, CREATE TABLE for a table whose name matches a storage policy "
+							 "creates a configured hypertable",
+							 &ts_guc_enable_storage_policies,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

@@ -56,6 +56,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	CONTINUOUS_AGGS_WATERMARK,
 	CHUNK_COLUMN_STATS,
+	STORAGE_POLICY,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -368,6 +369,42 @@ enum
 	CHUNK_COLUMN_STATS_HT_ID_CHUNK_ID_COLUMN_NAME_IDX,
 	_MAX_CHUNK_COLUMN_STATS_INDEX,
 };
+
+/****** STORAGE_POLICY definitions */
+#define STORAGE_POLICY_TABLE_NAME "storage_policy"
+
+enum Anum_storage_policy
+{
+	Anum_storage_policy_id = 1,
+	Anum_storage_policy_name,
+	Anum_storage_policy_schema_name,
+	Anum_storage_policy_table_name,
+	Anum_storage_policy_match_kind,
+	Anum_storage_policy_priority,
+	Anum_storage_policy_policy,
+	Anum_storage_policy_enabled,
+	Anum_storage_policy_created_at,
+	Anum_storage_policy_updated_at,
+	Anum_storage_policy_updated_by,
+	_Anum_storage_policy_max,
+};
+
+#define Natts_storage_policy (_Anum_storage_policy_max - 1)
+
+enum
+{
+	STORAGE_POLICY_PKEY = 0,
+	_MAX_STORAGE_POLICY_INDEX,
+};
+
+enum Anum_storage_policy_pkey
+{
+	Anum_storage_policy_pkey_id = 1,
+	_Anum_storage_policy_pkey_max,
+};
+
+#define Natts_storage_policy_pkey (_Anum_storage_policy_pkey_max - 1)
+
 
 /*************************
  *

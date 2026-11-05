@@ -35,3 +35,18 @@ ts_create_table_with_clause_parse(const List *defelems)
 								 create_table_with_clauses_def,
 								 TS_ARRAY_LEN(create_table_with_clauses_def));
 }
+
+WithClauseResult *
+ts_create_table_with_clause_overlay(const WithClauseResult *explicit_clauses,
+									const WithClauseResult *policy_clauses)
+{
+	Size nargs = TS_ARRAY_LEN(create_table_with_clauses_def);
+	WithClauseResult *result = palloc(sizeof(*result) * nargs);
+
+	for (Size i = 0; i < nargs; i++)
+		result[i] = (explicit_clauses != NULL && !explicit_clauses[i].is_default) ?
+						explicit_clauses[i] :
+						policy_clauses[i];
+
+	return result;
+}

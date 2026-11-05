@@ -1,0 +1,252 @@
+Parsed test spec with 3 sessions
+
+starting permutation: a_create a_insert b_create b_insert check
+A: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step a_insert: INSERT INTO sp_t VALUES ('2025-01-01', 1, 1.0);
+B: NOTICE:  relation "sp_t" already exists, skipping
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   2|             0|     2|               1|             1|                   1
+
+
+starting permutation: a_create b_create a_insert b_insert check
+A: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+B: NOTICE:  relation "sp_t" already exists, skipping
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step a_insert: INSERT INTO sp_t VALUES ('2025-01-01', 1, 1.0);
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   2|             0|     2|               1|             1|                   1
+
+
+starting permutation: a_create b_create b_insert a_insert check
+A: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+B: NOTICE:  relation "sp_t" already exists, skipping
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step a_insert: INSERT INTO sp_t VALUES ('2025-01-01', 1, 1.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   2|             0|     2|               1|             1|                   1
+
+
+starting permutation: b_create a_create a_insert b_insert check
+B: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+A: NOTICE:  relation "sp_t" already exists, skipping
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step a_insert: INSERT INTO sp_t VALUES ('2025-01-01', 1, 1.0);
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   2|             0|     2|               1|             1|                   1
+
+
+starting permutation: b_create a_create b_insert a_insert check
+B: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+A: NOTICE:  relation "sp_t" already exists, skipping
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step a_insert: INSERT INTO sp_t VALUES ('2025-01-01', 1, 1.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   2|             0|     2|               1|             1|                   1
+
+
+starting permutation: b_create b_insert a_create a_insert check
+B: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+A: NOTICE:  relation "sp_t" already exists, skipping
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step a_insert: INSERT INTO sp_t VALUES ('2025-01-01', 1, 1.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   2|             0|     2|               1|             1|                   1
+
+
+starting permutation: a_begin_create b_create a_commit b_create_retry b_insert a_insert check
+A: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step a_begin_create: BEGIN; CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8); <waiting ...>
+step a_commit: COMMIT;
+step b_create: <... completed>
+ERROR:  duplicate key value violates unique constraint "pg_type_typname_nsp_index"
+B: NOTICE:  relation "sp_t" already exists, skipping
+step b_create_retry: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step a_insert: INSERT INTO sp_t VALUES ('2025-01-01', 1, 1.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   2|             0|     2|               1|             1|                   1
+
+
+starting permutation: a_create b_create a_ht_if_not_exists a_policy_if_not_exists b_insert check
+A: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+B: NOTICE:  relation "sp_t" already exists, skipping
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+A: NOTICE:  table "sp_t" is already a hypertable, skipping
+step a_ht_if_not_exists: SELECT create_hypertable('sp_t', 'ts', if_not_exists => true) IS NOT NULL AS created;
+created
+-------
+t      
+
+A: NOTICE:  columnstore policy already exists for hypertable "sp_t", skipping
+step a_policy_if_not_exists: SELECT add_compression_policy('sp_t', INTERVAL '7 days', if_not_exists => true) IS NOT NULL AS added;
+added
+-----
+t    
+
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   1|             0|     1|               1|             1|                   1
+
+
+starting permutation: a_create b_create a_ht_plain a_policy_plain b_insert check
+A: NOTICE:  applied storage policy "sp_race" to "public"."sp_t"
+step a_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+B: NOTICE:  relation "sp_t" already exists, skipping
+step b_create: CREATE TABLE IF NOT EXISTS sp_t (ts timestamptz NOT NULL, device int, value float8);
+step a_ht_plain: SELECT create_hypertable('sp_t', 'ts') IS NOT NULL AS created;
+ERROR:  table "sp_t" is already a hypertable
+step a_policy_plain: SELECT add_compression_policy('sp_t', INTERVAL '7 days') IS NOT NULL AS added;
+ERROR:  columnstore policy already exists for hypertable or continuous aggregate "sp_t"
+step b_insert: INSERT INTO sp_t VALUES ('2025-01-02', 2, 2.0);
+step check: 
+    SELECT
+        (SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'sp_t') AS hypertables,
+        (SELECT count(*) FROM sp_t) AS rows,
+        (SELECT count(*) FROM ONLY sp_t) AS rows_in_parent,
+        (SELECT count(*) FROM show_chunks('sp_t')) AS chunks,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_compression') AS compression_jobs,
+        (SELECT count(*) FROM timescaledb_information.jobs
+          WHERE hypertable_name = 'sp_t' AND proc_name = 'policy_retention') AS retention_jobs,
+        (SELECT count(*) FROM timescaledb_information.hypertable_columnstore_settings
+          WHERE hypertable = 'sp_t'::regclass AND segmentby = 'device') AS columnstore_settings;
+
+hypertables|rows|rows_in_parent|chunks|compression_jobs|retention_jobs|columnstore_settings
+-----------+----+--------------+------+----------------+--------------+--------------------
+          1|   1|             0|     1|               1|             1|                   1
+
+
+starting permutation: a_plain_create b_plain_create b_plain_insert a_make_hypertable
+step a_plain_create: CREATE TABLE IF NOT EXISTS sp_plain (ts timestamptz NOT NULL, device int, value float8);
+B: NOTICE:  relation "sp_plain" already exists, skipping
+step b_plain_create: CREATE TABLE IF NOT EXISTS sp_plain (ts timestamptz NOT NULL, device int, value float8);
+step b_plain_insert: INSERT INTO sp_plain VALUES ('2025-01-02', 2, 2.0);
+step a_make_hypertable: SELECT create_hypertable('sp_plain', 'ts', if_not_exists => true) IS NOT NULL AS created;
+ERROR:  table "sp_plain" is not empty

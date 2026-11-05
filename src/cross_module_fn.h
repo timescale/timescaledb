@@ -138,6 +138,7 @@ typedef struct CrossModuleFunctions
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
 
 	void (*columnstore_setup)(Hypertable *ht, WithClauseResult *with_clause_options);
+	void (*storage_policy_retention_setup)(Hypertable *ht, const char *after);
 	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort,
 									  int tuple_sort_limit, bool created_compressed_chunk);
 	void (*compressor_set_invalidation)(RowCompressor *compressor, Hypertable *ht, Oid chunk_relid);

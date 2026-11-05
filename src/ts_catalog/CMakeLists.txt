@@ -11,5 +11,6 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/continuous_aggs_watermark.c
     ${CMAKE_CURRENT_SOURCE_DIR}/hypertable_cagg_settings.c
     ${CMAKE_CURRENT_SOURCE_DIR}/metadata.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/storage_policy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tablespace.c)
 target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})

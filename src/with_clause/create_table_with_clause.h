@@ -27,3 +27,10 @@ typedef enum CreateTableFlags
 } CreateTableFlags;
 
 WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);
+
+/*
+ * Combine the options of a statement with those of a storage policy. A slot set explicitly by
+ * the statement wins, any other slot takes the policy's value.
+ */
+WithClauseResult *ts_create_table_with_clause_overlay(const WithClauseResult *explicit_clauses,
+													  const WithClauseResult *policy_clauses);

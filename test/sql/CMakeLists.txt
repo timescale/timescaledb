@@ -72,7 +72,8 @@ set(TEST_FILES
     vacuum.sql
     vacuum_parallel.sql
     version.sql
-    license.sql)
+    license.sql
+    storage_policy.sql)
 
 set(TEST_TEMPLATES
     agg_bookends.sql.in

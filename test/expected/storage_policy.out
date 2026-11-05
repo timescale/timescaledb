@@ -1,0 +1,69 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SHOW timescaledb.license;
+ timescaledb.license 
+---------------------
+ apache
+
+CREATE SCHEMA fhr;
+-- the Apache license has no columnstore or compression, so a policy that sets them is rejected
+-- when it is stored, as the CREATE TABLE it would apply to must not fail halfway
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+\set SHOW_CONTEXT never
+SELECT add_storage_policy('apache1', 'fhr', 'a1', '{"columnstore": {"segmentby": "device"}}');
+ERROR:  invalid storage policy: "columnstore" is not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this feature.
+SELECT add_storage_policy('apache2', 'fhr', 'a2', '{"compression": {"mode": "AFTER", "after": "7 days"}}');
+ERROR:  invalid storage policy: "compression" is not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this feature.
+SELECT add_storage_policy('apache3', 'fhr', 'a3', '{"compression": {"mode": "NEVER"}}');
+ERROR:  invalid storage policy: "compression" is not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this feature.
+SELECT add_storage_policy('apache4', 'fhr', 'a5', '{"retention": {"mode": "AFTER", "after": "2 years"}}');
+ERROR:  invalid storage policy: "retention" is not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this feature.
+\set SHOW_CONTEXT errors
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM _timescaledb_catalog.storage_policy;
+ count 
+-------
+     0
+
+-- a policy that only creates a hypertable is accepted and applied
+SELECT add_storage_policy('hypertable_only', 'fhr', 'a4', '{"partition_column": "ts", "chunk_interval": "1 day"}');
+ add_storage_policy 
+--------------------
+                  1
+
+CREATE TABLE fhr.a4 (ts timestamptz NOT NULL, v int);
+NOTICE:  applied storage policy "hypertable_only" to "fhr"."a4"
+SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name = 'a4';
+ hypertable_name 
+-----------------
+ a4
+
+SELECT remove_storage_policy('hypertable_only');
+ remove_storage_policy 
+-----------------------
+ 
+
+-- the view is available without the Timescale license
+SELECT add_storage_policy('listed', 'fhr', 'a6', '{"partition_column": "ts"}');
+ add_storage_policy 
+--------------------
+                  2
+
+SELECT name, schema_name, table_name, match_kind, priority, enabled FROM timescaledb_information.storage_policies;
+  name  | schema_name | table_name | match_kind | priority | enabled 
+--------+-------------+------------+------------+----------+---------
+ listed | fhr         | a6         | exact      |          | t
+
+SELECT remove_storage_policy('listed');
+ remove_storage_policy 
+-----------------------
+ 
+
