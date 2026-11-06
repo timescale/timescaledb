@@ -635,6 +635,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	MemoryContext saved_cxt, multitxn_cxt;
 
 	policy_recompression_read_and_validate_config(config, &policy_data);
+	ts_hypertable_permissions_check(policy_data.hypertable->main_table_relid, GetUserId());
 	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
 	/* we want the chunk id list to survive across transactions. So alloc in
 	 * a different context

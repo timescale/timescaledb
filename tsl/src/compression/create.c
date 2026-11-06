@@ -35,6 +35,7 @@
 #include <utils/guc.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
+#include <utils/regproc.h>
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
@@ -1890,6 +1891,108 @@ validate_hypertable_for_compression(Hypertable *ht)
 	table_close(rel, AccessShareLock);
 }
 
+typedef struct DefaultFnSecurityContext
+{
+	Oid save_userid;
+	int save_sec_context;
+	int save_nestlevel;
+} DefaultFnSecurityContext;
+
+static void
+default_fn_security_enter(const Hypertable *ht, DefaultFnSecurityContext *ctx)
+{
+	GetUserIdAndSecContext(&ctx->save_userid, &ctx->save_sec_context);
+	SetUserIdAndSecContext(ts_rel_get_owner(ht->main_table_relid),
+						   ctx->save_sec_context | SECURITY_RESTRICTED_OPERATION);
+	ctx->save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+}
+
+static void
+default_fn_security_exit(const DefaultFnSecurityContext *ctx)
+{
+	/* Roll back any GUC changes made by the default function */
+	AtEOXact_GUC(false, ctx->save_nestlevel);
+	/* Restore the caller's identity and security context */
+	SetUserIdAndSecContext(ctx->save_userid, ctx->save_sec_context);
+}
+
+/*
+ * The default functions are verified to return a single row.
+ */
+static void
+ensure_single_row_result(Oid fnoid)
+{
+	if (SPI_processed != 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("function %s returned " UINT64_FORMAT " rows",
+						format_procedure_qualified(fnoid),
+						SPI_processed),
+				 errdetail("The default function must return exactly one row.")));
+	}
+}
+
+/*
+ * Validate the segmentby columns returned by the default segmentby function.
+ * The function is user-configurable, so nothing about its result can be trusted.
+ */
+static ArrayType *
+validate_default_segmentby(const Hypertable *ht, Oid fnoid, ArrayType *columns)
+{
+	ArrayType *segmentby = NULL;
+	Datum datum;
+	bool isnull;
+
+	if (columns == NULL)
+	{
+		return NULL;
+	}
+
+	ArrayIterator it = array_create_iterator(columns, 0, NULL);
+	while (array_iterate(it, &datum, &isnull))
+	{
+		if (isnull)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid segmentby columns returned by function %s",
+							format_procedure_qualified(fnoid)),
+					 errdetail("Column names must not be NULL.")));
+		}
+
+		char *colname = TextDatumGetCString(datum);
+		AttrNumber attno = get_attnum(ht->main_table_relid, colname);
+
+		if (attno == InvalidAttrNumber)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" does not exist", colname),
+					 errdetail("The column was returned by function %s.",
+							   format_procedure_qualified(fnoid))));
+		}
+
+		/* get normalized column name */
+		colname = get_attname(ht->main_table_relid, attno, false);
+
+		if (ts_array_is_member(segmentby, colname))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("duplicate column name \"%s\"", colname),
+					 errdetail("The column was returned by function %s.",
+							   format_procedure_qualified(fnoid))));
+		}
+
+		segmentby = ts_array_add_element_text(segmentby, colname);
+	}
+	array_free_iterator(it);
+
+	return segmentby;
+}
+
 /*
  * Get the default segment by value for a hypertable
  */
@@ -1916,9 +2019,8 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 		return NULL;
 	}
 
-	/* Lock down search_path */
-	int save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
+	DefaultFnSecurityContext secctx;
+	default_fn_security_enter(ht, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -1939,13 +2041,15 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
-	if (res < 0)
+	if (res != SPI_OK_SELECT)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the default segment by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 	}
+
+	ensure_single_row_result(default_segmentby_fn);
 
 	old = MemoryContextSwitchTo(upper);
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
@@ -1973,14 +2077,15 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	pfree(command.data);
 
-	/* Reset search path since this can be executed as part of a larger transaction */
-	AtEOXact_GUC(false, save_nestlevel);
+	default_fn_security_exit(&secctx);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
 	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 	}
+
+	column_res = validate_default_segmentby(ht, default_segmentby_fn, column_res);
 
 	initStringInfo(&result);
 	ts_array_append_stringinfo(column_res, &result);
@@ -2029,9 +2134,8 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 		return obs;
 	}
 
-	/* Lock down search_path */
-	int save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
+	DefaultFnSecurityContext secctx;
+	default_fn_security_enter(ht, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -2058,13 +2162,15 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 								nulls,
 								true /* read_only */,
 								0 /*count*/);
-	if (res < 0)
+	if (res != SPI_OK_SELECT)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the default order by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 	}
+
+	ensure_single_row_result(orderby_fn);
 
 	old = MemoryContextSwitchTo(upper);
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
@@ -2090,8 +2196,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 		confidence = DatumGetInt32(datum);
 	}
 
-	/* Reset search path since this can be executed as part of a larger transaction */
-	AtEOXact_GUC(false, save_nestlevel);
+	default_fn_security_exit(&secctx);
 
 	pfree(command.data);
 
