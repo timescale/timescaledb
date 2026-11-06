@@ -15,4 +15,3 @@ SET timescaledb.enable_merge_on_cagg_refresh TO ON;
 
 \set TEST_BASE_NAME cagg_query_using_merge
 \ir include/cagg_query_common.sql
--- Trigger the valgrind CI run for this test.

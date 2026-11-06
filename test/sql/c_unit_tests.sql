@@ -38,5 +38,3 @@ SELECT test.jsonb_utils();
 SELECT test.compression_settings();
 SELECT test.chunk_stats();
 
--- Trigger the valgrind CI run for this test.
-
