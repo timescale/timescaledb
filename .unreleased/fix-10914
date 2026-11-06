@@ -1,0 +1,1 @@
+Fixes: #10914 Fix chunks created from an existing table being excluded by chunk skipping
