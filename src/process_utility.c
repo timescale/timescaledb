@@ -2993,9 +2993,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			elog(ERROR, "could not connect to SPI");
 		}
 
-		/* Lock down search_path */
-		int save_nestlevel = NewGUCNestLevel();
-		RestrictSearchPath();
+		/* Run index constraint validation as chunk owner in security-restricted context */
+		TSSecurityContext sctx;
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -3019,8 +3019,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 					 (errmsg("duplicate key value violates unique constraint"))));
 		}
 
-		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
+		ts_security_context_exit(&sctx);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
@@ -3051,9 +3050,8 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 			elog(ERROR, "could not connect to SPI");
 		}
 
-		/* Lock down search_path */
-		int save_nestlevel = NewGUCNestLevel();
-		RestrictSearchPath();
+		TSSecurityContext sctx;
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -3082,7 +3080,7 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 
 		table_close(rel, NoLock);
 		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
+		ts_security_context_exit(&sctx);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
