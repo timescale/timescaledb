@@ -125,16 +125,16 @@ WARNING:  function _timescaledb_internal.relation_size(regclass) is deprecated a
 
 SELECT _timescaledb_internal.restart_background_workers();
 WARNING:  function _timescaledb_internal.restart_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  must be superuser to restart background workers
+ERROR:  must be database owner to restart background workers
 SELECT _timescaledb_internal.show_chunk(0);
 WARNING:  function _timescaledb_internal.show_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
 SELECT _timescaledb_internal.start_background_workers();
 WARNING:  function _timescaledb_internal.start_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  must be superuser to start background workers
+ERROR:  must be database owner to start background workers
 SELECT _timescaledb_internal.stop_background_workers();
 WARNING:  function _timescaledb_internal.stop_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  must be superuser to stop background workers
+ERROR:  must be database owner to stop background workers
 SELECT _timescaledb_internal.subtract_integer_from_now(0,0);
 WARNING:  function _timescaledb_internal.subtract_integer_from_now(regclass,bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid

@@ -8,6 +8,9 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 
+#include <catalog/pg_database_d.h>
+#include <utils/acl.h>
+
 #include "../compat/compat.h"
 #include "../extension_constants.h"
 #include "bgw_counter.h"
@@ -25,8 +28,12 @@
  *
  * API 6 adds the loader ProcessUtility shim (keeps TimescaleDB last in the hook
  * chain). Older loaders lack it but stay compatible, so the minimum is unchanged.
+ *
+ * API 7 relaxes the background-worker start/stop/restart permission check from
+ * superuser to database owner. Older loaders enforce the superuser check but
+ * stay compatible, so the minimum is unchanged.
  */
-const int32 ts_bgw_loader_api_version = 6;
+const int32 ts_bgw_loader_api_version = 7;
 
 TS_FUNCTION_INFO_V1(ts_bgw_worker_reserve);
 TS_FUNCTION_INFO_V1(ts_bgw_worker_release);
@@ -71,11 +78,11 @@ ts_bgw_num_unreserved(PG_FUNCTION_ARGS)
 Datum
 ts_bgw_db_workers_start(PG_FUNCTION_ARGS)
 {
-	if (!superuser())
+	if (!object_ownercheck(DatabaseRelationId, MyDatabaseId, GetUserId()))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to start background workers"))));
+				 (errmsg("must be database owner to start background workers"))));
 	}
 
 	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(START, MyDatabaseId));
@@ -84,11 +91,11 @@ ts_bgw_db_workers_start(PG_FUNCTION_ARGS)
 Datum
 ts_bgw_db_workers_stop(PG_FUNCTION_ARGS)
 {
-	if (!superuser())
+	if (!object_ownercheck(DatabaseRelationId, MyDatabaseId, GetUserId()))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to stop background workers"))));
+				 (errmsg("must be database owner to stop background workers"))));
 	}
 
 	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(STOP, MyDatabaseId));
@@ -97,11 +104,11 @@ ts_bgw_db_workers_stop(PG_FUNCTION_ARGS)
 Datum
 ts_bgw_db_workers_restart(PG_FUNCTION_ARGS)
 {
-	if (!superuser())
+	if (!object_ownercheck(DatabaseRelationId, MyDatabaseId, GetUserId()))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to restart background workers"))));
+				 (errmsg("must be database owner to restart background workers"))));
 	}
 
 	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(RESTART, MyDatabaseId));
