@@ -494,7 +494,13 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 		int64 value;
 
 		datum = slot_getattr(slot, attno, &isnull);
-		Assert(!isnull);
+		if (isnull)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_NOT_NULL_VIOLATION),
+					 errmsg("dimension not null constraint for column \"%s\" violated by some row",
+							NameStr(dim->fd.column_name))));
+		}
 
 		if (NULL != dim->partitioning)
 		{

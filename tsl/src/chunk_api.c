@@ -321,12 +321,67 @@ chunk_show(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
+/* Collect common validations and privilege checks in one method used both in create_chunk() and
+ * attach_chunk() */
 static void
-check_privileges_for_creating_chunk(Oid hyper_relid)
+validate_and_check_privileges_for_creating_chunk(Oid hyper_relid, Oid chunk_table_relid,
+												 Jsonb *slices, bool for_attach_chunk)
 {
-	AclResult acl_result;
+	if (NULL == slices)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid dimension slices argument"),
+				 errhint("Provide a json-formatted definition of dimensional constraints for the "
+						 "chunk partition.")));
+	}
 
-	acl_result = pg_class_aclcheck(hyper_relid, GetUserId(), ACL_INSERT);
+	if (OidIsValid(chunk_table_relid))
+	{
+		if (chunk_table_relid == hyper_relid)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("chunk relation cannot be the same as hypertable relation")));
+		}
+
+		if (is_inheritance_child(chunk_table_relid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot %s chunk that is already a child of another table",
+							(for_attach_chunk ? "attach" : "create chunk with a"))));
+		}
+
+		if (ts_is_hypertable(chunk_table_relid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot %s hypertable as a chunk",
+							(for_attach_chunk ? "attach" : "create chunk with a"))));
+		}
+
+		/* Check that the chunk_table object is a table (i.e. RELATION) */
+		char relkind = get_rel_relkind(chunk_table_relid);
+		if (relkind != RELKIND_RELATION)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("relation \"%s\" is not a valid chunk",
+							get_rel_name(chunk_table_relid)),
+					 errdetail_relkind_not_supported(relkind)));
+		}
+
+		/* only owner is allowed */
+		if (!object_ownercheck(RelationRelationId, chunk_table_relid, GetUserId()))
+		{
+			aclcheck_error(ACLCHECK_NOT_OWNER,
+						   OBJECT_TABLE /* only table is allowed */,
+						   get_rel_name(chunk_table_relid));
+		}
+	}
+
+	AclResult acl_result = pg_class_aclcheck(hyper_relid, GetUserId(), ACL_INSERT);
 	if (acl_result != ACLCHECK_OK)
 	{
 		ereport(ERROR,
@@ -384,23 +439,11 @@ chunk_create(PG_FUNCTION_ARGS)
 
 	Assert(NULL != ht);
 	Assert(OidIsValid(ht->main_table_relid));
-	check_privileges_for_creating_chunk(hypertable_relid);
-	/* check whether the table referenced by the "chunk_table_relid"
-	 * can inherit the hypertable, otherwise bail out */
-	if (OidIsValid(chunk_table_relid))
-	{
-		if (!object_ownercheck(RelationRelationId, chunk_table_relid, GetUserId()))
-		{
-			aclcheck_error(ACLCHECK_NOT_OWNER,
-						   get_relkind_objtype(get_rel_relkind(chunk_table_relid)),
-						   get_rel_name(chunk_table_relid));
-		}
-	}
 
-	if (NULL == slices)
-	{
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
-	}
+	validate_and_check_privileges_for_creating_chunk(hypertable_relid,
+													 chunk_table_relid,
+													 slices,
+													 /* for_attach_chunk = */ false);
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 	{
@@ -545,49 +588,11 @@ chunk_attach(PG_FUNCTION_ARGS)
 				 errmsg("invalid hypertable relation OID")));
 	}
 
-	if (chunk_relid == ht_relid)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("chunk relation cannot be the same as hypertable relation")));
-	}
-
-	if (NULL == slices)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid dimension slices argument"),
-				 errhint("Provide a json-formatted definition of dimensional constraints for the "
-						 "chunk partition.")));
-	}
-
 	DEBUG_WAITPOINT("chunk_attach_before_lock");
 
 	/* Take the same locks taken by PostgreSQL partitioning to be consistent */
 	LockRelationOid(ht_relid, ShareUpdateExclusiveLock);
 	LockRelationOid(chunk_relid, AccessExclusiveLock);
-
-	/* Only owner is allowed */
-	if (!object_ownercheck(RelationRelationId, chunk_relid, GetUserId()))
-	{
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(get_rel_relkind(chunk_relid)),
-					   get_rel_name(chunk_relid));
-	}
-
-	if (is_inheritance_child(chunk_relid))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot attach chunk that is already a child of another table")));
-	}
-
-	if (ts_is_hypertable(chunk_relid))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot attach hypertable as a chunk")));
-	}
 
 	/* Check if the table still exists after taking the lock */
 	if (!SearchSysCacheExists1(RELOID, ObjectIdGetDatum(chunk_relid)))
@@ -597,7 +602,11 @@ chunk_attach(PG_FUNCTION_ARGS)
 				 errmsg("relation with OID %u does not exist", chunk_relid)));
 	}
 
-	check_privileges_for_creating_chunk(ht_relid);
+	validate_and_check_privileges_for_creating_chunk(ht_relid,
+													 chunk_relid,
+													 slices,
+													 /* for_attach_chunk = */ true);
+
 	ht = ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);
 	Assert(ht != NULL);
 
