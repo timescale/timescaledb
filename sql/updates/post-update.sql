@@ -32,27 +32,38 @@ INSERT INTO _timescaledb_internal.saved_privs
                         'bgw_job_stat', 'bgw_policy_chunk_stats')
 ON CONFLICT DO NOTHING;
 
--- We can now copy back saved initprivs.
+-- Restore initprivs together with the shared dependencies on their roles.
+-- GRANTs during the update may have recorded user grants as initial privileges.
+CREATE FUNCTION _timescaledb_functions._tmp_restore_relation_acl(oid, oid, aclitem[], boolean)
+RETURNS aclitem[]
+AS '@MODULE_PATHNAME@', 'ts_restore_relation_acl'
+LANGUAGE C VOLATILE;
+
 WITH to_update AS (
-     SELECT objoid, tmpini
+     SELECT objoid, cl.relowner, tmpini
      FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
         JOIN pg_init_privs ip ON ip.objoid = cl.oid AND ip.objsubid = 0
+            AND ip.classoid = 'pg_class'::regclass
         JOIN _timescaledb_internal.saved_privs ON tmpnsp = nspname AND tmpname = relname)
 UPDATE pg_init_privs
-   SET initprivs = tmpini
+   SET initprivs = _timescaledb_functions._tmp_restore_relation_acl(
+       pg_init_privs.objoid, to_update.relowner, tmpini, true)
   FROM to_update
  WHERE to_update.objoid = pg_init_privs.objoid
    AND classoid = 'pg_class'::regclass
    AND objsubid = 0;
 
 -- Can only restore permissions on views after they have been rebuilt,
--- so we restore for all types of objects here.
+-- so we restore for all types of objects here, including their ACL dependencies.
 WITH to_update AS (
      SELECT cl.oid, tmpacl
      FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
                       JOIN _timescaledb_internal.saved_privs ON tmpnsp = nspname AND tmpname = relname)
-UPDATE pg_class cl SET relacl = tmpacl
+UPDATE pg_class cl SET relacl = _timescaledb_functions._tmp_restore_relation_acl(
+    cl.oid, cl.relowner, tmpacl, false)
   FROM to_update WHERE cl.oid = to_update.oid;
+
+DROP FUNCTION _timescaledb_functions._tmp_restore_relation_acl(oid, oid, aclitem[], boolean);
 
 DROP TABLE _timescaledb_internal.saved_privs;
 
