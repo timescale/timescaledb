@@ -1,0 +1,1 @@
+Fixes: #10948 Fix use-after-free in the planner when planning ORDER BY on a hypertable
