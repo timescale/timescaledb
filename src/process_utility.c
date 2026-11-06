@@ -2993,6 +2993,13 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			elog(ERROR, "could not connect to SPI");
 		}
 
+		/* Run index constraint validation as chunk owner in security-restricted context */
+		Oid save_userid;
+		int save_sec_context;
+		GetUserIdAndSecContext(&save_userid, &save_sec_context);
+		SetUserIdAndSecContext(ts_rel_get_owner(chunk->fd.relid),
+							   save_sec_context | SECURITY_RESTRICTED_OPERATION);
+
 		/* Lock down search_path */
 		int save_nestlevel = NewGUCNestLevel();
 		RestrictSearchPath();
@@ -3021,6 +3028,8 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 
 		/* Restore search_path */
 		AtEOXact_GUC(false, save_nestlevel);
+		/* Restore the caller's identity and security context */
+		SetUserIdAndSecContext(save_userid, save_sec_context);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
