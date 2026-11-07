@@ -15,7 +15,7 @@ import re
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("filename", type=argparse.FileType("r"), nargs="+")
+parser.add_argument("filename", nargs="+")
 args = parser.parse_args()
 
 
@@ -133,12 +133,13 @@ def visit_sql(sql, file):
 def main(args):
     errors = 0
     error_files = []
-    for file in args.filename:
-        sql = file.read()
-        result = visit_sql(sql, file.name)
+    for filename in args.filename:
+        with open(filename, encoding="utf-8") as file:
+            sql = file.read()
+        result = visit_sql(sql, filename)
         if result > 0:
             errors += result
-            error_files.append(file.name)
+            error_files.append(filename)
 
     if errors > 0:
         numbering = "errors" if errors > 1 else "error"

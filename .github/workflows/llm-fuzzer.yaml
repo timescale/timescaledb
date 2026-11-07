@@ -15,8 +15,8 @@ name: LLM fuzzer
 env:
   PG_SRC_DIR: "pgbuild"
   PG_INSTALL_DIR: "postgresql"
-  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
-  CC: "clang-15"
+  extra_packages: "clang-19 llvm-19 llvm-19-dev llvm-19-tools"
+  CC: "clang-19"
   # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
   # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
   # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
@@ -74,7 +74,7 @@ jobs:
   fuzzer:
     if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     needs: config
     permissions:
       contents: read
