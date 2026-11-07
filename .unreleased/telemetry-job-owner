@@ -1,0 +1,1 @@
+Implements: #10960 Run the telemetry job as the database owner instead of the role that installed the extension
