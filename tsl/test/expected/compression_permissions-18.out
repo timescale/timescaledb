@@ -412,3 +412,47 @@ SELECT delete_job(:dbowner_retention_id);
 -- during teardown.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+-- Verify that compressed index on a chunk is created under chunk owner and does not gain superuser
+CREATE ROLE idx_owner LOGIN;              -- NOSUPERUSER
+CREATE SCHEMA io AUTHORIZATION idx_owner;
+SET ROLE idx_owner;
+SET search_path = io, public;
+-- compressed hypertable owned by idx_owner
+CREATE TABLE io.ht(time timestamptz NOT NULL, c int);
+SELECT table_name FROM public.create_hypertable('io.ht','time');
+ table_name 
+------------
+ ht
+
+INSERT INTO io.ht VALUES ('2020-01-01 00:00',1),('2020-01-01 02:00',2);
+ALTER TABLE io.ht SET (timescaledb.compress);
+SELECT count(public.compress_chunk(c)) FROM public.show_chunks('io.ht') c;
+ count 
+-------
+     1
+
+-- IMMUTABLE expression: runs as whoever evaluates the index expression
+CREATE FUNCTION io.loguser(x int) RETURNS int LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE u text; s bool; h text; w text;
+BEGIN
+  u := current_user;
+  SELECT rolsuper INTO s FROM pg_roles WHERE rolname = current_user;
+  RAISE WARNING 'current_user=% rolsuper=%', u, s;
+  RETURN x;
+END $$;
+-- force schema-qualified deparse (io out of search_path), then trigger
+SET search_path = pg_catalog, pg_temp;
+\set ON_ERROR_STOP 0
+-- Evaluates index expression as "idx_owner"
+CREATE UNIQUE INDEX io_index ON io.ht (time, io.loguser(c));
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+\set ON_ERROR_STOP 1
+RESET ROLE;
+-- cleanup
+DROP SCHEMA io CASCADE;
+NOTICE:  drop cascades to 3 other objects
+ALTER ROLE idx_owner NOSUPERUSER;
+DROP ROLE idx_owner;
