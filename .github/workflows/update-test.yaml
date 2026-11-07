@@ -17,7 +17,7 @@ name: Update and Downgrade
 
 jobs:
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -39,7 +39,7 @@ jobs:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
     name: Update test PG${{ matrix.pg }} ${{ matrix.mode }}
-    runs-on: 'ubuntu-latest'
+    runs-on: 'ubuntu-26.04'
     strategy:
       matrix:
         pg: [16, 17, 18]
@@ -76,7 +76,7 @@ jobs:
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" | sudo tee /etc/apt/sources.list.d/timescaledb.list
-        wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | sudo apt-key add -
+        wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
         sudo apt-get update
         sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
         # The unversioned timescaledb-2-postgresql package only ships update
