@@ -125,6 +125,10 @@ echo -e "\nUpdate test version ${TEST_VERSION} (${UPDATE_MODE}) for ${FROM_VERSI
 # caller should ensure that the versions are available
 check_version "${FROM_VERSION}"
 check_version "${TO_VERSION}"
+if [ "${FROM_VERSION}" = "2.30.2" ] && [ "${TO_VERSION}" = "$(awk '/^version / {print $3}' version.config)" ]; then
+  # The historical ACL regression uses the released 2.30.2 -> 2.31.0 script.
+  check_version "2.31.0"
+fi
 
 run_sql_file test/sql/updates/setup.roles.sql > /dev/null
 
@@ -224,4 +228,54 @@ fi
 if [ -f "${OUTPUT_DIR}/baseline_vs_updated.diff" ] || [ -f "${OUTPUT_DIR}/baseline_vs_restored.diff" ]; then
   echo "Update test for ${FROM_VERSION} -> ${TO_VERSION} failed"
   exit 1
+fi
+
+# Test initial privilege dependencies against the new update scripts. Downgrades
+# use the target release's scripts, which predate this fix.
+if [ "${TO_VERSION}" = "$(awk '/^version / {print $3}' version.config)" ]; then
+  run_sql "CREATE DATABASE init_privs;"
+  psql -X -d init_privs -v ON_ERROR_STOP=1 \
+    -v FROM_VERSION="${FROM_VERSION}" -v TO_VERSION="${TO_VERSION}" \
+    -f test/sql/updates/init_privs.sql > "${OUTPUT_DIR}/init_privs.log" 2>&1
+  # Dump after role cleanup: a successful DROP ROLE alone does not prove that
+  # current ACLs no longer refer to its OID, especially after catalog rebuilds.
+  {
+    pg_dump -Fc -d init_privs > "${OUTPUT_DIR}/init_privs.dump"
+    run_sql "CREATE DATABASE init_privs_restored;"
+    psql -X -d init_privs_restored -v ON_ERROR_STOP=1 -v TO_VERSION="${TO_VERSION}" \
+      -f test/sql/updates/init_privs_restore.sql
+    run_sql "ALTER DATABASE init_privs_restored SET timescaledb.restoring='on';"
+    pg_restore --exit-on-error -d init_privs_restored "${OUTPUT_DIR}/init_privs.dump"
+    run_sql "ALTER DATABASE init_privs_restored RESET timescaledb.restoring;"
+    run_sql "SELECT check_init_privs();" init_privs_restored
+    run_sql "DROP DATABASE init_privs_restored;"
+  } > "${OUTPUT_DIR}/init_privs_restore.log" 2>&1
+  run_sql "DROP DATABASE init_privs;"
+  run_sql "DROP ROLE initacl_keep, initacl_restore;"
+
+  # Reproduce catalog damage through a released update before applying the fix.
+  if [ "${FROM_VERSION}" = "2.30.2" ]; then
+    run_sql "CREATE DATABASE init_privs_legacy;"
+    psql -X -d init_privs_legacy -v ON_ERROR_STOP=1 -v TO_VERSION="${TO_VERSION}" \
+      -f test/sql/updates/init_privs_legacy.sql > "${OUTPUT_DIR}/init_privs_legacy.log" 2>&1
+    run_sql "DROP DATABASE init_privs_legacy;"
+    run_sql "DROP ROLE initacl_legacy_keep;"
+
+    {
+      run_sql "CREATE DATABASE init_privs_chain;"
+      psql -X -d init_privs_chain -v ON_ERROR_STOP=1 -v TO_VERSION="${TO_VERSION}" \
+        -f test/sql/updates/init_privs_grant_chain.sql
+      pg_dump -Fc -d init_privs_chain > "${OUTPUT_DIR}/init_privs_chain.dump"
+      run_sql "CREATE DATABASE init_privs_chain_restored;"
+      psql -X -d init_privs_chain_restored -v ON_ERROR_STOP=1 -v TO_VERSION="${TO_VERSION}" \
+        -f test/sql/updates/init_privs_grant_chain_restore.sql
+      run_sql "ALTER DATABASE init_privs_chain_restored SET timescaledb.restoring='on';"
+      pg_restore --exit-on-error -d init_privs_chain_restored "${OUTPUT_DIR}/init_privs_chain.dump"
+      run_sql "ALTER DATABASE init_privs_chain_restored RESET timescaledb.restoring;"
+      run_sql "SELECT check_init_privs_grant_chain();" init_privs_chain_restored
+      run_sql "DROP DATABASE init_privs_chain_restored;"
+      run_sql "DROP DATABASE init_privs_chain;"
+      run_sql "DROP ROLE initacl_chain_middle, initacl_chain_leaf;"
+    } > "${OUTPUT_DIR}/init_privs_chain.log" 2>&1
+  fi
 fi
