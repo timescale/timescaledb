@@ -94,7 +94,7 @@ def build_debug_config(overrides):
             "name": "Debug",
             "os": "ubuntu-22.04",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config",
-            "pg_extensions": "postgres_fdw test_decoding",
+            "pg_extensions": "postgres_fdw test_decoding pg_walinspect",
             "installcheck": True,
             "pginstallcheck": True,
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON",
@@ -172,7 +172,7 @@ def macos_config(overrides):
                 f" --with-includes={openssl_path}/include"
                 " --without-icu"
             ),
-            "pg_extensions": "postgres_fdw test_decoding",
+            "pg_extensions": "postgres_fdw test_decoding pg_walinspect",
             "pginstallcheck": True,
             "tsdb_build_args": (
                 " -DASSERTIONS=ON" f" -DOPENSSL_ROOT_DIR={openssl_path}"
