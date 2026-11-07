@@ -84,7 +84,6 @@ typedef struct MaterializationPlan
 {
 	SPIPlanPtr plan;
 	bool read_only;
-	bool catalog_security_context;
 	int nargs;
 	MaterializationCreateStatement create_statement;
 	const char *error_message;
@@ -771,18 +770,7 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 
 	create_materialization_plan_args(context, plan_type, &values, &nulls);
 
-	CatalogSecurityContext sec_ctx;
-	if (materialization->catalog_security_context)
-	{
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	}
-
 	int res = SPI_execute_plan(materialization->plan, values, nulls, materialization->read_only, 0);
-
-	if (materialization->catalog_security_context)
-	{
-		ts_catalog_restore_user(&sec_ctx);
-	}
 
 	if (res < 0)
 	{
