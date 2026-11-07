@@ -234,17 +234,12 @@ get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 }
 
 static void
-compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid, Oid chunk_relid)
+check_compression_enabled(Hypertable *ht)
 {
-	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
-	Chunk *srcchunk;
-
-	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
-
-	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(srcht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		NameData cagg_ht_name;
-		get_hypertable_or_cagg_name(srcht, &cagg_ht_name);
+		get_hypertable_or_cagg_name(ht, &cagg_ht_name);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("columnstore not enabled on \"%s\"", NameStr(cagg_ht_name)),
@@ -253,6 +248,16 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 				 errhint("Enable columnstore using ALTER TABLE/MATERIALIZED VIEW with"
 						 " the timescaledb.enable_columnstore option.")));
 	}
+}
+
+static void
+compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid, Oid chunk_relid)
+{
+	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
+	Chunk *srcchunk;
+
+	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
+	check_compression_enabled(srcht);
 
 	if (!srcht->space) /* something is wrong */
 	{
@@ -300,6 +305,12 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	}
 
 	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p, ExclusiveLock);
+
+	/* The chunk status was read before the lock was taken, re-read it */
+	if (previous_chunk)
+	{
+		previous_chunk = ts_chunk_get_by_id(previous_chunk->fd.id, false);
+	}
 
 	/* If there is no previous adjacent chunk along the time dimension or
 	 * if it hasn't been compressed yet, we can't merge.
@@ -464,6 +475,11 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid, CompressionSettings *
 
 	/* Throw error if chunk has invalid status for operation */
 	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_COMPRESS, true);
+
+	/* Re-read the hypertable as well, compression could have been disabled */
+	cxt.srcht = ts_hypertable_get_by_id(cxt.srcht->fd.id);
+	Ensure(cxt.srcht, "hypertable deleted by other transaction");
+	check_compression_enabled(cxt.srcht);
 
 	/* get compression properties for hypertable */
 	mergable_chunk = settings ? NULL : find_chunk_to_merge_into(cxt.srcht, cxt.srcht_chunk);

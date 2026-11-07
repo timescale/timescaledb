@@ -1,0 +1,3 @@
+Fixes: #10961 Fix null dereference in in-memory recompression when the compression settings are missing
+Fixes: #10961 Fix crash in decompress_chunk when the hypertable is dropped concurrently
+Fixes: #10961 Fix stale chunk and hypertable state in compress_chunk when a concurrent decompress or compression change commits
