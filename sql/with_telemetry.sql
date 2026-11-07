@@ -7,5 +7,5 @@ CREATE OR REPLACE FUNCTION @extschema@.get_telemetry_report()
        LANGUAGE C STABLE PARALLEL SAFE;
 
 INSERT INTO _timescaledb_catalog.bgw_job (id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, fixed_schedule) VALUES
-(1, 'Telemetry Reporter [1]', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h', '_timescaledb_functions', 'policy_telemetry', pg_catalog.quote_ident(current_role)::regrole, true, false)
+(1, 'Telemetry Reporter [1]', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h', '_timescaledb_functions', 'policy_telemetry', (SELECT datdba FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()), true, false)
 ON CONFLICT (id) DO NOTHING;
