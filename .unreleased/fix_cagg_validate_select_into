@@ -1,0 +1,1 @@
+Fixes: #10000 Crash in cagg_validate_query when called with a SELECT INTO statement
