@@ -30,7 +30,7 @@ BEGIN
 
     SELECT oid, contype INTO STRICT constraint_oid, constraint_type FROM pg_constraint
     WHERE conname = hypertable_constraint_name AND
-          conrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
+          conrelid = pg_catalog.format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
 
     IF constraint_type IN ('p','u') THEN
       -- primary keys and unique constraints are backed by an index which
