@@ -370,9 +370,9 @@ BEGIN
     SELECT
       coalesce(array_agg(
       CASE WHEN d.column_name IS NULL THEN
-        format('%I', a.colname)
+        pg_catalog.format('%I', a.colname)
       ELSE
-        format('%I DESC', a.colname)
+        pg_catalog.format('%I DESC', a.colname)
       END ORDER BY pos), array[]::text[]) INTO STRICT _orderby_clauses
     FROM unnest(_orderby_names) WITH ORDINALITY as a(colname, pos)
     LEFT JOIN _timescaledb_catalog.dimension d ON (d.column_name = a.colname AND d.hypertable_id = _hypertable_row.id);
