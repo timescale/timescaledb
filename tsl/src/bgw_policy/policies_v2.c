@@ -11,6 +11,7 @@
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/float.h>
+#include <utils/tuplestore.h>
 
 #include "compat/compat.h"
 #include "bgw/job.h"
@@ -736,12 +737,10 @@ Datum
 policies_show(PG_FUNCTION_ARGS)
 {
 	Oid rel_oid = PG_GETARG_OID(0);
+	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	Oid type;
 	ContinuousAgg *cagg;
 	ListCell *lc;
-	FuncCallContext *funcctx;
-	static List *jobs;
-	JsonbInState parse_state = { 0 };
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -755,37 +754,16 @@ policies_show(PG_FUNCTION_ARGS)
 
 	type = IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
 
-	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	if (SRF_IS_FIRSTCALL())
-	{
-		MemoryContext oldcontext;
+	InitMaterializedSRF(fcinfo, MAT_SRF_USE_EXPECTED_DESC);
 
-		funcctx = SRF_FIRSTCALL_INIT();
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
-		/* Use top-level memory context to preserve the global static list */
-		jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
-
-		funcctx->user_fctx = list_head(jobs);
-		MemoryContextSwitchTo(oldcontext);
-	}
-
-	funcctx = SRF_PERCALL_SETUP();
-	lc = (ListCell *) funcctx->user_fctx;
-
-	/*
-	 * clang doesn't understand that jobs won't be NIL due to the above FIRSTCALL. However
-	 * it's also possible that the ts_bgw_job_find_by_hypertable_id function above doesn't
-	 * find a job for this hypertable
-	 */
-	if (lc == NULL || jobs == NULL)
-	{
-		SRF_RETURN_DONE(funcctx);
-	}
-	else
+	foreach (lc, ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id))
 	{
 		BgwJob *job = lfirst(lc);
+		JsonbInState parse_state = { 0 };
+		Datum value;
+		bool isnull = false;
 
+		pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 		if (!namestrcmp(&(job->fd.proc_name), POLICY_REFRESH_CAGG_PROC_NAME))
 		{
 			ts_jsonb_add_str(&parse_state,
@@ -839,12 +817,11 @@ policies_show(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("\"%s\" unsupported proc", NameStr(job->fd.proc_name))));
 		}
-
 		pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
-		JsonbValue *result = parse_state.result;
 
-		funcctx->user_fctx = lnext(jobs, (ListCell *) funcctx->user_fctx);
-		SRF_RETURN_NEXT(funcctx, PointerGetDatum(JsonbValueToJsonb(result)));
+		value = PointerGetDatum(JsonbValueToJsonb(parse_state.result));
+		tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc, &value, &isnull);
 	}
-	PG_RETURN_NULL();
+
+	PG_RETURN_VOID();
 }
