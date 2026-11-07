@@ -147,7 +147,7 @@ jobs:
 
     - name: Setup WSL
       if: matrix.installcheck
-      uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
+      uses: Vampire/setup-wsl@4c48163d9f981914dd8caa0fc335fe19cca5bff4 # v7.2.0
       with:
         distribution: Debian-13
 
@@ -361,7 +361,7 @@ jobs:
 
     - name: Upload crash dumps and stack traces
       if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: Crash dumps PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
         path: |
@@ -370,7 +370,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.build_type }} Build
         path: |
@@ -379,14 +379,14 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload CMake Logs
       if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.build_type }}
         path: |
