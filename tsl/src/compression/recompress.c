@@ -1794,13 +1794,14 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk, bool keep_settings)
 	}
 
 	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->fd.relid);
-	Oid compressed_relid = settings->fd.compress_relid;
 
-	Ensure(settings && OidIsValid(compressed_relid),
+	Ensure(settings && OidIsValid(settings->fd.compress_relid),
 		   "compressed chunk not found for chunk \"%s\"",
 		   get_rel_name(uncompressed_chunk->fd.relid));
 
 	Ensure(settings->fd.orderby, "empty order by, cannot recompress in-memory");
+
+	Oid compressed_relid = settings->fd.compress_relid;
 
 	LOCKMODE lockmode = ExclusiveLock;
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->fd.relid, lockmode);
