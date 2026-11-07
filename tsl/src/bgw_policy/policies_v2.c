@@ -109,6 +109,12 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	{
 		Assert(list_length(jobs) == 1);
 		orig_ht_reten_job = linitial(jobs);
+		/* A drop_created_before policy has no drop_after to check the refresh window against */
+		if (ts_jsonb_get_str_field(orig_ht_reten_job->fd.config,
+								   POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE))
+		{
+			orig_ht_reten_job = NULL;
+		}
 	}
 
 	if (all_policies.refresh)
@@ -469,6 +475,7 @@ policies_alter(PG_FUNCTION_ARGS)
 	List *jobs;
 	ListCell *lc;
 	bool if_exists = false, found, start_found, end_found;
+	bool created_before_retention = false;
 	policies_info all_policies = { .refresh = NULL, .compress = NULL, .retention = NULL };
 	refresh_policy ref;
 	compression_policy comp;
@@ -605,6 +612,12 @@ policies_alter(PG_FUNCTION_ARGS)
 									 .drop_after = 0,
 									 .drop_after_type = InvalidOid };
 			ret = tmp;
+			/* A drop_created_before policy has no drop_after to check against */
+			if (ts_jsonb_get_str_field(job->fd.config, POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE))
+			{
+				created_before_retention = true;
+				continue;
+			}
 			all_policies.retention = &ret;
 			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
@@ -672,7 +685,11 @@ policies_alter(PG_FUNCTION_ARGS)
 	}
 	if (!PG_ARGISNULL(5))
 	{
-		if (!all_policies.retention)
+		if (created_before_retention)
+		{
+			all_policies.retention = &ret;
+		}
+		else if (!all_policies.retention)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no retention job found")));
