@@ -223,6 +223,12 @@ BEGIN
     END;
     COMMIT;
 
+    -- SET LOCAL is only active until end of transaction.
+    -- While we could use SET at the start of the function we do not
+    -- want to bleed out search_path to caller, so we do SET LOCAL
+    -- again after COMMIT
+    SET LOCAL search_path TO pg_catalog, pg_temp;
+
     -- went through recompression successfully now reindex indexes
     IF (chunk_rec.status & bit_compressed_partial = bit_compressed_partial) AND (reindex_enabled IS TRUE) THEN
       FOR idx_rec IN
@@ -245,14 +251,10 @@ BEGIN
                     ERRCODE = _sqlstate;
         END;
         COMMIT;
+        SET LOCAL search_path TO pg_catalog, pg_temp;
       END LOOP;
     END IF;
 
-    -- SET LOCAL is only active until end of transaction.
-    -- While we could use SET at the start of the function we do not
-    -- want to bleed out search_path to caller, so we do SET LOCAL
-    -- again after COMMIT
-    SET LOCAL search_path TO pg_catalog, pg_temp;
     IF verbose_log THEN
        RAISE LOG 'job % completed processing chunk %.%', job_id, chunk_rec.schema_name, chunk_rec.table_name;
     END IF;
