@@ -988,8 +988,7 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
 	chunk_id = uncompressed_chunk->fd.id;
 
-	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+	ts_hypertable_permissions_check(uncompressed_chunk->hypertable_relid, GetUserId());
 
 	if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{
