@@ -156,7 +156,7 @@ jobs:
     name: Update and Downgrade summary
     needs: [check_paths, update_test]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error
