@@ -1,0 +1,1 @@
+Fixes: Verify the server certificate on telemetry SSL connections
