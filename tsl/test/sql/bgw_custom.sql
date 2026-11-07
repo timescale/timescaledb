@@ -839,3 +839,21 @@ SELECT proc_name, owner::regrole FROM _timescaledb_config.bgw_job
 WHERE id IN (:job_owner_policy, :job_owner_custom) ORDER BY id;
 SELECT delete_job(:job_owner_custom);
 DROP TABLE owner_ht;
+
+-- The config check function runs as the job owner even when another
+-- role alters the job
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE check_caller_log(caller name);
+GRANT INSERT ON check_caller_log TO PUBLIC;
+CREATE FUNCTION check_caller(config jsonb) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO public.check_caller_log VALUES (current_user);
+END
+$$;
+SELECT add_job('custom_func', '1h', config => '{}', check_config => 'check_caller') AS job_check_caller \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT scheduled FROM alter_job(:job_check_caller, scheduled => false);
+SELECT caller FROM check_caller_log;
+SELECT delete_job(:job_check_caller);
+DROP TABLE check_caller_log;
+DROP FUNCTION check_caller;
