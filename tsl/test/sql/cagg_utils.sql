@@ -257,3 +257,6 @@ SELECT user_view_name, bf.bucket_func
 FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name = 'temperature_tz_4h_3'
 ORDER BY user_view_name;
+
+-- SELECT INTO is a utility statement and must be rejected
+SELECT * FROM _timescaledb_functions.cagg_validate_query($$ SELECT 1 INTO t $$);

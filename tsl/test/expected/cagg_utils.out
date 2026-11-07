@@ -411,3 +411,9 @@ ORDER BY user_view_name;
 ---------------------+------------------------------------------------
  temperature_tz_4h_3 | time_bucket(interval,timestamp with time zone)
 
+-- SELECT INTO is a utility statement and must be rejected
+SELECT * FROM _timescaledb_functions.cagg_validate_query($$ SELECT 1 INTO t $$);
+ is_valid | error_level | error_code |           error_message            | error_detail |                      error_hint                      
+----------+-------------+------------+------------------------------------+--------------+------------------------------------------------------
+ f        | ERROR       | 0A000      | invalid continuous aggregate query |              | Use a SELECT query in the continuous aggregate view.
+
