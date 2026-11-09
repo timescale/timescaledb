@@ -784,10 +784,13 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 ----------------------------------------------------
  
 
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                      msg                      
---------+------------------+-----------------------------------------------
-      0 | DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
+-- The scheduler may loop a few times before it sees the GUC change,
+-- so the number of wait messages is not deterministic. Filter them
+-- out to keep the output stable.
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                      msg                      
+------------------+-----------------------------------------------
+ DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
