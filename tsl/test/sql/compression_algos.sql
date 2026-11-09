@@ -613,6 +613,9 @@ DROP table uuid_set;
 -- Corrupt compressed data with zero header
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
+
+-- Corrupt bool compressed data with zero elements
+SELECT 'BQAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAA='::_timescaledb_internal.compressed_data;
 \set ON_ERROR_STOP 1
 
 

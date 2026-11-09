@@ -405,6 +405,15 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	initStringInfo(&str);
 	JsonbToCStringIndent(&str, &config->root, VARSIZE(config));
 
+	/* This is called via a public function, so check CAgg ownership before performing any work such
+	 * as calculating the refresh window, or moving the invalidation threshold. */
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(
+		policy_continuous_aggregate_get_mat_hypertable_id(config), true);
+	if (cagg != NULL)
+	{
+		ts_cagg_permissions_check(cagg->relid, GetUserId());
+	}
+
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
 	bool extend_last_bucket = !policy_refresh_cagg_check_if_last_policy(&policy_data);
 

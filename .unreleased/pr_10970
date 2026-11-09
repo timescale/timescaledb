@@ -1,0 +1,1 @@
+Fixes: #10970 Fix ORDER BY pushdown for realtime continuous aggregates with an ORDER BY in their definition
