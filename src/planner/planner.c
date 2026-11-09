@@ -2121,6 +2121,19 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 	 * are, and add_path frees the ones that lose to a cheaper path while
 	 * they are still in input_rel->pathlist.
 	 */
+	/***************************************************************
+	 * LOOK HERE   LOOK HERE   LOOK HERE   LOOK HERE   LOOK HERE   *
+	 *                                                             *
+	 *  HINT: SET timescaledb.enable_chunk_append = off;           *
+	 *        SET parallel_setup_cost = 0;                         *
+	 *        SET parallel_tuple_cost = 0;                         *
+	 *        SET min_parallel_table_scan_size = 0;                *
+	 *        SELECT a FROM hypertable                             *
+	 *        WHERE ts = (SELECT min(ts) FROM hypertable)          *
+	 *        ORDER BY a COLLATE "C";                              *
+	 *                                                             *
+	 * LOOK HERE   LOOK HERE   LOOK HERE   LOOK HERE   LOOK HERE   *
+	 ***************************************************************/
 	if (reltype == TS_REL_HYPERTABLE && ts_guc_enable_optimizations && !IS_DUMMY_REL(input_rel) &&
 		stage != UPPERREL_ORDERED && stage != UPPERREL_FINAL)
 	{
