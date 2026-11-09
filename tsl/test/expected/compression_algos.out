@@ -2544,8 +2544,22 @@ CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, u as item FROM uuid
 DROP TABLE base_uuids;
 RESET timescaledb.enable_uuid_compression;
 DROP table uuid_set;
--- Corrupt compressed data with zero header
+-- Deeply nested compressed data must not overflow the stack.
 \set ON_ERROR_STOP 0
+SELECT replace(encode(
+  (SELECT string_agg(
+       '\x0100'::bytea                                          -- ARRAY, has_nulls = 0
+       || convert_to('_timescaledb_internal', 'UTF8') || '\x00' -- element type namespace
+       || convert_to('compressed_data', 'UTF8') || '\x00'       -- element type name
+       || '\x0001'                                              -- has_nulls = 0, use_binary = 1
+       || int4send(1)                                           -- one element
+       || int4send(50 * (200000 - i) + 1),                      -- size of the nested element
+       ''::bytea ORDER BY i)
+   FROM generate_series(1, 200000) i)
+  || '\x06'                                                     -- innermost: NULL algorithm
+, 'base64'), E'\n', '')::_timescaledb_internal.compressed_data;
+ERROR:  stack depth limit exceeded
+-- Corrupt compressed data with zero header
 SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
 ERROR:  the compressed data is corrupt
 -- Corrupt bool compressed data with zero elements

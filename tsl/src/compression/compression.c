@@ -19,6 +19,7 @@
 #include <common/base64.h>
 #include <funcapi.h>
 #include <libpq/pqformat.h>
+#include <miscadmin.h>
 #include <storage/latch.h>
 #include <storage/lock.h>
 #include <storage/predicate.h>
@@ -3201,6 +3202,8 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo buf = (StringInfo) PG_GETARG_POINTER(0);
 	CompressedDataHeader header = { .vl_len_ = { 0 } };
+
+	check_stack_depth();
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 
