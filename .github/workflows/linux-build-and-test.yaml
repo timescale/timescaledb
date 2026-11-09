@@ -68,7 +68,7 @@ jobs:
     # Change the JOB_NAME variable below when changing the name.
     name: ${{ !matrix.installcheck && 'Build-only ' || '' }}PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner || matrix.os }}
     # The flaky and valgrind checks are advisory, so their failure must
     # not fail the summary.
     continue-on-error: ${{ contains(matrix.name, 'Flaky') || contains(matrix.name, 'Valgrind') }}
@@ -494,7 +494,7 @@ jobs:
     name: Regression summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error
