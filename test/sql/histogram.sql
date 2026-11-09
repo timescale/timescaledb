@@ -47,9 +47,13 @@ SELECT qualify, histogram(score, 0, 10, 2) FROM hitest2 GROUP BY qualify ORDER B
 -- standard multi-bucket
 SELECT qualify, histogram(score, 0, 10, 5) FROM hitest2 GROUP BY qualify ORDER BY qualify;
 
--- check number of buckets is constant
 \set ON_ERROR_STOP 0
+-- check number of buckets is constant
+
 select histogram(i,10,90,case when i=1 then 1 else 1000000 end) FROM generate_series(1,100) i;
+
+-- a non-positive number of buckets must be rejected, not crash the backend
+select histogram(1, 0, 100, 0);
 \set ON_ERROR_STOP 1
 
 CREATE TABLE weather (
