@@ -2355,8 +2355,9 @@ create_per_compressed_column(RowDecompressor *decompressor, bool internal_error)
 static int
 batch_row_count(RowDecompressor *decompressor)
 {
-	const int n_batch_rows =
-		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	const int count_attindex = decompressor->count_compressed_attindex;
+	CheckCompressedData(!decompressor->compressed_is_nulls[count_attindex]);
+	const int n_batch_rows = DatumGetInt32(decompressor->compressed_datums[count_attindex]);
 	CheckCompressedData(n_batch_rows > 0);
 	CheckCompressedData(n_batch_rows <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	return n_batch_rows;

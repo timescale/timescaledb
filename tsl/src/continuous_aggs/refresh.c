@@ -753,6 +753,19 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 {
 	ContinuousAggMaterializationState refresh;
 
+	/*
+	 * Run the materialization as the cagg's owner in a
+	 * security-restricted context, the same way PostgreSQL's REFRESH
+	 * MATERIALIZED VIEW does. A refresh may be run on the
+	 * owner's behalf by a superuser or the database owner, so the caller is not
+	 * necessarily the owner.
+	 */
+	Oid cagg_owner = ts_rel_get_owner(cagg->relid);
+	Oid save_userid;
+	int save_sec_context;
+	GetUserIdAndSecContext(&save_userid, &save_sec_context);
+	SetUserIdAndSecContext(cagg_owner, save_sec_context | SECURITY_RESTRICTED_OPERATION);
+
 	continuous_agg_refresh_init(&refresh,
 								cagg,
 								refresh_window,
@@ -782,6 +795,9 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 										&time_dim->fd.column_name,
 										*refresh_window);
 	}
+
+	/* Restore the caller's identity and security context */
+	SetUserIdAndSecContext(save_userid, save_sec_context);
 }
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"

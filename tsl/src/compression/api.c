@@ -14,6 +14,7 @@
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_class.h>
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
@@ -27,6 +28,7 @@
 #include <storage/lockdefs.h>
 #include <tcop/utility.h>
 #include <trigger.h>
+#include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/fmgrprotos.h>
@@ -853,6 +855,15 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+
+	/* The table becomes internal chunk storage that is dropped with the chunk */
+	if (!object_ownercheck(RelationRelationId, chunk_table, GetUserId()))
+	{
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(get_rel_relkind(chunk_table)),
+					   get_rel_name(chunk_table));
+	}
+
 	hcache = ts_hypertable_cache_pin();
 	compresschunkcxt_init(&cxt, hcache, chunk->hypertable_relid, chunk_relid);
 
