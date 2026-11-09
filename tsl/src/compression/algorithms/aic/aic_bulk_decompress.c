@@ -175,7 +175,6 @@ aic_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	size_t arrow_data_size = sizeof(ArrowArray) + sizeof(void *) * 2;
 	ArrowArray *array =
 		(ArrowArray *) MemoryContextAllocZero(dest_mctx, arrow_data_size + values_size);
-	memset(array, 0, arrow_data_size);
 	const void **buffers = (const void **) &array[1];
 	uint8 *decompressed_values = ((uint8 *) array) + arrow_data_size;
 	array->length = total_count;
