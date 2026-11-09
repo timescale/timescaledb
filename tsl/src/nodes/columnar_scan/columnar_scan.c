@@ -1894,6 +1894,24 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		columnar_scan_path_create(root, compression_info, compressed_path, all_quals_pushed_down);
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
 
+	if (chunk_rel->consider_startup && ((ColumnarScanPath *) chunk_path_no_sort)->enable_bulk_decompression &&
+		sort_info->decompressed_sort_pathkeys == NIL)
+	{
+		/*
+		 * Planner requests paths with cheap startup, but there are no ordering
+		 * requirements. Probably it's a LIMIT without ORDER BY. Such queries
+		 * are poorly defined, but are often used for interactive data
+		 * exploration. To reduce latency for this case, try a version with
+		 * row-by-row decompression as well.
+		 */
+		ColumnarScanPath *path_copy = copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
+		path_copy->enable_bulk_decompression = false;
+
+		cost_columnar_scan(compression_info, path_copy, compressed_path);
+
+		decompressed_paths = lappend(decompressed_paths, path_copy);
+	}
+
 	/*
 	 * Create a path for the batch sorted merge optimization. This optimization
 	 * performs a sorted merge of the involved batches by using a binary heap
