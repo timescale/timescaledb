@@ -17,12 +17,8 @@ env:
   PG_INSTALL_DIR: "postgresql"
   extra_packages: "clang-19 llvm-19 llvm-19-dev llvm-19-tools"
   CC: "clang-19"
-  # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
-  # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
-  # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
-  # clang CFLAGS
-  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
-  CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
 
   # We do not link libasan dynamically to avoid problems with libdl and our libraries.
   # clang does this by default, but we need to explicitly state that for gcc.
@@ -165,8 +161,7 @@ jobs:
         fi
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
-          --with-openssl --without-readline --without-zlib --without-libxml \
-          CFLAGS=-march=armv8.2-a+crypto
+          --with-openssl --without-readline --without-zlib --without-libxml
         make -j$(getconf _NPROCESSORS_ONLN)
         for ext in ${EXTENSIONS}; do
           make -j$(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
