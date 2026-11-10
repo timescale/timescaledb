@@ -1,0 +1,1 @@
+Fixes: #10988 Report a missing policy config key as a user error instead of an internal error
