@@ -188,7 +188,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!ts_chunk_is_partial(chunk))
 	{
@@ -266,7 +266,7 @@ tsl_compact_chunk(PG_FUNCTION_ARGS)
 
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
 
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!ts_chunk_is_compressed(chunk))
 	{

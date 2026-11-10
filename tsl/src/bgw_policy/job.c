@@ -226,6 +226,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	PolicyReorderData policy;
 
 	policy_reorder_read_and_validate_config(config, &policy);
+	ts_hypertable_permissions_check(policy.hypertable->main_table_relid, GetUserId());
 
 	/* Find a chunk to reorder in the selected hypertable */
 	chunk_id = get_chunk_id_to_reorder(job_id, policy.hypertable);
@@ -247,9 +248,30 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	chunk = ts_chunk_get_by_id(chunk_id, false);
 	const char *schema_name = ts_chunk_get_schema_name(chunk);
 	const char *table_name = ts_chunk_get_table_name(chunk);
-	elog(DEBUG1, "reordering chunk %s.%s", schema_name, table_name);
-	reorder_chunk(chunk->fd.relid, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
-	elog(DEBUG1, "completed reordering chunk %s.%s", schema_name, table_name);
+
+	/*
+	 * A chunk owned by another role, e.g., an attached table, cannot be
+	 * reordered by the job owner. Record the run for it anyway so the policy
+	 * moves on to the next chunk instead of failing on this one every time.
+	 */
+	if (!ts_chunk_has_privs_of(chunk->fd.relid, GetUserId()))
+	{
+		ereport(WARNING,
+				(errmsg("skipping reorder of chunk \"%s.%s\", which is owned by another role",
+						schema_name,
+						table_name)));
+	}
+	else
+	{
+		elog(DEBUG1, "reordering chunk %s.%s", schema_name, table_name);
+		reorder_chunk(chunk->fd.relid,
+					  policy.index_relid,
+					  false,
+					  InvalidOid,
+					  InvalidOid,
+					  InvalidOid);
+		elog(DEBUG1, "completed reordering chunk %s.%s", schema_name, table_name);
+	}
 
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
