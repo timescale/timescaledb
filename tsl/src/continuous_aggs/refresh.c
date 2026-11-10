@@ -789,53 +789,37 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 
 /*
- * Record a count of a refresh in the execution history of the job that ran it.
+ * Add a boundary of the refreshed range in the time type of the hypertable.
+ * Integers are JSON numbers; timestamp types are ISO-8601 strings, as
+ * `to_jsonb` renders them, so the value does not depend on DateStyle.
  */
 static void
-cagg_refresh_stats_record_count(const char *key, int64 count)
+cagg_refresh_stats_add_boundary(JsonbInState *state, const char *key, Oid range_type,
+								int64 boundary)
 {
-	JsonbValue value;
-
-	ts_jsonb_set_value_by_type(&value, INT8OID, Int64GetDatum(count));
-	ts_bgw_job_execution_set_info(key, &value);
-}
-
-/*
- * Record a boundary of the range a refresh processed so far in the execution
- * history of the job that ran it.
- *
- * The boundary is reported in the time type of the refreshed hypertable, so
- * integer based ranges show up as JSON numbers. The timestamp types are
- * rendered as ISO-8601 strings, the same representation `to_jsonb` produces,
- * so that the value does not depend on the DateStyle of the background worker
- * that happened to run the refresh.
- */
-static void
-cagg_refresh_stats_record_boundary(const char *key, Oid range_type, int64 boundary)
-{
-	JsonbValue value;
-	Datum datum = ts_internal_to_time_value(boundary, range_type);
-
 	switch (range_type)
 	{
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+			ts_jsonb_add_int64(state, key, boundary);
+			break;
+
 		case DATEOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-		{
-			char *str = JsonEncodeDateTime(NULL, datum, range_type, NULL);
-
-			value.type = jbvString;
-			value.val.string.val = str;
-			value.val.string.len = strlen(str);
+			ts_jsonb_add_str(state,
+							 key,
+							 JsonEncodeDateTime(NULL,
+												ts_internal_to_time_value(boundary, range_type),
+												range_type,
+												NULL));
 			break;
-		}
 
 		default:
-			ts_jsonb_set_value_by_type(&value, range_type, datum);
+			ts_jsonb_add_str(state, key, ts_internal_to_time_string(boundary, range_type));
 			break;
 	}
-
-	ts_bgw_job_execution_set_info(key, &value);
 }
 
 /*
@@ -856,13 +840,20 @@ cagg_refresh_stats_collect(int32 job_id, const CaggRefreshStats *stats)
 		return;
 	}
 
-	cagg_refresh_stats_record_count("total_batches", stats->total_batches);
-	cagg_refresh_stats_record_count("batches_processed", stats->batches_processed);
-	cagg_refresh_stats_record_boundary("range_start", stats->range_type, stats->range_start);
-	cagg_refresh_stats_record_boundary("range_end", stats->range_type, stats->range_end);
-	cagg_refresh_stats_record_count("rows_materialized",
-									(int64) stats->mat_stats.rows_materialized);
-	cagg_refresh_stats_record_count("rows_deleted", (int64) stats->mat_stats.rows_deleted);
+	JsonbInState state = { 0 };
+	JsonbValue value;
+
+	pushJsonbValueCompat(&state, WJB_BEGIN_OBJECT, NULL);
+	cagg_refresh_stats_add_boundary(&state, "range_start", stats->range_type, stats->range_start);
+	cagg_refresh_stats_add_boundary(&state, "range_end", stats->range_type, stats->range_end);
+	ts_jsonb_add_int64(&state, "rows_inserted", (int64) stats->mat_stats.rows_materialized);
+	ts_jsonb_add_int64(&state, "rows_deleted", (int64) stats->mat_stats.rows_deleted);
+	ts_jsonb_add_int32(&state, "total_batches", stats->total_batches);
+	ts_jsonb_add_int32(&state, "batches_processed", stats->batches_processed);
+	pushJsonbValueCompat(&state, WJB_END_OBJECT, NULL);
+
+	JsonbToJsonbValue(JsonbValueToJsonb(state.result), &value);
+	ts_bgw_job_execution_set_info("cagg_refresh", &value);
 }
 
 /*
