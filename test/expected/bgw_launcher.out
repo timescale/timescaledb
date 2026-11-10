@@ -728,6 +728,47 @@ SELECT pid = :noperm_scheduler_pid AS same_scheduler FROM pg_stat_activity WHERE
  t
 
 DROP DATABASE db_rename_noperm WITH (FORCE);
+-- test scheduler runs as the database owner
+CREATE ROLE db_owner LOGIN;
+CREATE DATABASE db_owner_test OWNER db_owner;
+\c db_owner_test :ROLE_SUPERUSER
+SET client_min_messages TO error;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+SELECT wait_for_bgw_scheduler('db_owner_test');
+ wait_for_bgw_scheduler 
+------------------------
+ BGW Scheduler found.
+
+SELECT usename FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'db_owner_test';
+ usename  
+----------
+ db_owner
+
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+DROP DATABASE db_owner_test WITH (FORCE);
+DROP ROLE db_owner;
+-- test scheduler for an owner that cannot log in: the owner on PG17+, bootstrap superuser on PG16
+CREATE ROLE db_owner_nologin NOLOGIN;
+CREATE DATABASE db_owner_test OWNER db_owner_nologin;
+\c db_owner_test :ROLE_SUPERUSER
+SET client_min_messages TO error;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+SELECT wait_for_bgw_scheduler('db_owner_test');
+ wait_for_bgw_scheduler 
+------------------------
+ BGW Scheduler found.
+
+SELECT usename = CASE WHEN current_setting('server_version_num')::int >= 170000 THEN 'db_owner_nologin' ELSE (SELECT rolname FROM pg_roles WHERE oid = 10) END AS expected_role
+FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'db_owner_test';
+ expected_role 
+---------------
+ t
+
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+DROP DATABASE db_owner_test WITH (FORCE);
+DROP ROLE db_owner_nologin;
 -- test alter database set tablespace
 SET client_min_messages TO error;
 DROP TABLESPACE IF EXISTS tablespace1;
