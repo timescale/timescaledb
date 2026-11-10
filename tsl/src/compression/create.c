@@ -2019,8 +2019,8 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 		return NULL;
 	}
 
-	DefaultFnSecurityContext secctx;
-	default_fn_security_enter(ht, &secctx);
+	TSSecurityContext secctx;
+	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -2077,7 +2077,7 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	pfree(command.data);
 
-	default_fn_security_exit(&secctx);
+	ts_security_context_exit(&secctx);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)

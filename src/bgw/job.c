@@ -149,17 +149,12 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner, Jsonb *config)
 				 errhint("Use a FUNCTION instead")));
 	}
 
-	Oid save_userid;
-	int save_sec_context;
-	GetUserIdAndSecContext(&save_userid, &save_sec_context);
-	SetUserIdAndSecContext(owner, save_sec_context | SECURITY_RESTRICTED_OPERATION);
-	int save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
+	TSSecurityContext sctx;
+	ts_security_context_enter(owner, &sctx);
 
 	job_execute_function(funcexpr);
 
-	AtEOXact_GUC(false, save_nestlevel);
-	SetUserIdAndSecContext(save_userid, save_sec_context);
+	ts_security_context_exit(&sctx);
 }
 
 /* Run the check function on a configuration. It will generate errors if there
