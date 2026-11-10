@@ -256,7 +256,6 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	Chunk *srcchunk;
 
-	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
 	check_compression_enabled(srcht);
 
 	if (!srcht->space) /* something is wrong */
@@ -316,6 +315,12 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	 * if it hasn't been compressed yet, we can't merge.
 	 */
 	if (!previous_chunk || !ts_chunk_is_compressed(previous_chunk))
+	{
+		return NULL;
+	}
+
+	/* Merging rewrites the previous chunk, so we have to own it as well */
+	if (!ts_chunk_has_privs_of(previous_chunk->fd.relid, GetUserId()))
 	{
 		return NULL;
 	}
@@ -619,7 +624,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 												CACHE_FLAG_NONE,
 												&hcache);
 
-	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
+	ts_chunk_permissions_check(uncompressed_chunk, GetUserId());
 
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
 	{
@@ -870,7 +875,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	/* The table becomes internal chunk storage that is dropped with the chunk */
 	if (!object_ownercheck(RelationRelationId, chunk_table, GetUserId()))
@@ -933,7 +938,6 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 
 	uncompressed_relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 
@@ -944,6 +948,8 @@ Oid
 tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress)
 {
 	Oid uncompressed_relid = chunk->fd.relid;
+
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (ts_chunk_is_frozen(chunk))
 	{
@@ -1074,7 +1080,7 @@ tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
 	}
 
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!ts_chunk_is_compressed(chunk) || ts_chunk_is_frozen(chunk))
 	{
@@ -1220,7 +1226,7 @@ tsl_move_to_columnstore(PG_FUNCTION_ARGS)
 	}
 
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
 	if (!ht || !TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
@@ -1282,7 +1288,7 @@ tsl_rebuild_sparse_index(PG_FUNCTION_ARGS)
 	}
 
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!ts_chunk_is_compressed(chunk) || ts_chunk_is_frozen(chunk))
 	{

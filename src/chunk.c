@@ -2827,6 +2827,34 @@ ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found)
 	return ts_chunk_get_by_relid_locked(relid, NoLock, &slice_lock, fail_if_not_found);
 }
 
+/*
+ * Like ts_hypertable_has_privs_of(), but for a chunk. A chunk normally has
+ * the same owner as its hypertable, but not always, e.g., when a table owned
+ * by another role was attached as a chunk.
+ */
+bool
+ts_chunk_has_privs_of(Oid chunk_relid, Oid userid)
+{
+	return ts_has_owner_privs(userid, ts_rel_get_owner(chunk_relid));
+}
+
+/*
+ * Check that the user owns both the hypertable and the chunk. Owning the
+ * hypertable is not enough to rewrite or drop a chunk owned by another role.
+ */
+void
+ts_chunk_permissions_check(const Chunk *chunk, Oid userid)
+{
+	ts_hypertable_permissions_check(chunk->hypertable_relid, userid);
+
+	if (!ts_chunk_has_privs_of(chunk->fd.relid, userid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be owner of chunk \"%s\"", get_rel_name(chunk->fd.relid))));
+	}
+}
+
 void
 ts_chunk_free(Chunk *chunk)
 {
@@ -4156,6 +4184,16 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			continue;
 		}
 
+		/* Skip chunks owned by another role, so the rest can still be dropped */
+		if (!ts_chunk_has_privs_of(chunks[i].fd.relid, GetUserId()))
+		{
+			ereport(WARNING,
+					(errmsg("skipping drop of chunk \"%s.%s\", which is owned by another role",
+							ts_chunk_get_schema_name(&chunks[i]),
+							ts_chunk_get_table_name(&chunks[i]))));
+			continue;
+		}
+
 		/* store chunk name for output */
 		schema_name = quote_identifier(ts_chunk_get_schema_name(&chunks[i]));
 		table_name = quote_identifier(ts_chunk_get_table_name(&chunks[i]));
@@ -4291,8 +4329,8 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   true);
 	Assert(ch != NULL);
 
-	/* Only the hypertable owner may drop a chunk */
-	ts_hypertable_permissions_check(ch->hypertable_relid, GetUserId());
+	/* Only the owner of the hypertable and of the chunk may drop a chunk */
+	ts_chunk_permissions_check(ch, GetUserId());
 
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 
@@ -5007,6 +5045,12 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 						get_rel_name(parent_ht->main_table_relid))));
 	}
 
+	/* The foreign table becomes part of the hypertable, so it has to be owned too */
+	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+	{
+		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FOREIGN_TABLE, get_rel_name(relid));
+	}
+
 	Assert(get_rel_relkind(relid) == RELKIND_FOREIGN_TABLE);
 	if (hs->num_dimensions > 1)
 	{
@@ -5507,8 +5551,8 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
 
-	/* Only the hypertable owner may drop the OSM chunk */
-	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+	/* Only the owner of the hypertable and of the OSM chunk may drop it */
+	ts_chunk_permissions_check(osm_chunk, GetUserId());
 
 	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
 
