@@ -219,6 +219,14 @@ hypercube_from_jsonb(Jsonb *json, const Hyperspace *hs, const char **parse_error
 			goto out_err;
 		}
 
+		if (range[0] > range[1])
+		{
+			err = psprintf("start of range for dimension \"%s\" should be less or equal than end "
+						   "of range",
+						   name);
+			goto out_err;
+		}
+
 		ts_hypercube_add_slice_from_range(hc, dim->fd.id, range[0], range[1]);
 	}
 
