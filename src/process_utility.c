@@ -3812,7 +3812,18 @@ process_index_start(ProcessUtilityArgs *args)
 
 	if (cagg != NULL)
 	{
-		ts_cagg_permissions_check(cagg->relid, GetUserId());
+		/*
+		 * The database owner must not be allowed to create an index on a
+		 * continuous aggregate it does not own, so require actual ownership
+		 * instead of ts_cagg_permissions_check().
+		 */
+		if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("must be owner of continuous aggregate \"%s\"",
+							get_rel_name(cagg->relid))));
+		}
 	}
 	else
 	{
