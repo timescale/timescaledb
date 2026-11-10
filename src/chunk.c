@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include "catalog/pg_namespace.h"
 #include <access/genam.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
@@ -1422,11 +1423,13 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 	Relation ht_rel = table_open(ht->main_table_relid, AccessShareLock);
 	Relation chunk_rel = table_open(chunk_table_relid, AccessShareLock);
-	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
+	TupleDesc ht_tupdesc = RelationGetDescr(ht_rel);
+	TupleDesc chunk_tupdesc = RelationGetDescr(chunk_rel);
 
-	for (int attno = 0; attno < tupdesc->natts; attno++)
+	/* Check that all chunk columns are present in the parent */
+	for (int attno = 0; attno < chunk_tupdesc->natts; attno++)
 	{
-		Form_pg_attribute att = TupleDescAttr(tupdesc, attno);
+		Form_pg_attribute att = TupleDescAttr(chunk_tupdesc, attno);
 		AttrNumber ht_attnum = InvalidAttrNumber;
 
 		/* Ignore dropped */
@@ -1448,6 +1451,29 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 					 errdetail("The new chunk can contain only the columns present in parent.")));
 		}
 
+		/* type and collation should match between child table and hypertable */
+		Oid ht_typid;
+		int32 ht_typmod;
+		Oid ht_coll;
+		get_atttypetypmodcoll(ht->main_table_relid, ht_attnum, &ht_typid, &ht_typmod, &ht_coll);
+
+		if (att->atttypid != ht_typid || att->atttypmod != ht_typmod)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("child table \"%s\" has different type for column \"%s\"",
+							RelationGetRelationName(chunk_rel),
+							NameStr(att->attname))));
+		}
+		if (att->attcollation != ht_coll)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_COLLATION_MISMATCH),
+					 errmsg("child table \"%s\" has different collation for column \"%s\"",
+							RelationGetRelationName(chunk_rel),
+							NameStr(att->attname))));
+		}
+
 		/* Check that the chunk column has the same expression as the hypertable column */
 		if (att->attgenerated && get_attgenerated(ht->main_table_relid, ht_attnum))
 		{
@@ -1464,13 +1490,42 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 			}
 		}
 	}
+
+	/* Check that all parent columns are present in the chunk */
+	for (int attno = 0; attno < ht_tupdesc->natts; attno++)
+	{
+		Form_pg_attribute att = TupleDescAttr(ht_tupdesc, attno);
+		AttrNumber chunk_attnum = InvalidAttrNumber;
+
+		/* Ignore dropped */
+		if (att->attisdropped)
+		{
+			continue;
+		}
+
+		chunk_attnum = get_attnum(chunk_table_relid, NameStr(att->attname));
+		/* Try to find the parent column in child (matching on column name) */
+		if (chunk_attnum == InvalidAttrNumber)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("child table is missing column \"%s\"", NameStr(att->attname))));
+		}
+	}
 	table_close(ht_rel, NoLock);
 
 	int32 chunk_id = get_next_chunk_id();
 
+	bool hypertable_associated_schema = false;
 	if (!schema_name || schema_name[0] == '\0')
 	{
 		schema_name = NameStr(ht->fd.associated_schema_name);
+		hypertable_associated_schema = true;
+	}
+	else
+	{
+		hypertable_associated_schema =
+			(strcmp(schema_name, NameStr(ht->fd.associated_schema_name)) == 0);
 	}
 
 	chunk = chunk_create_object(ht, cube, chunk_id);
@@ -1484,6 +1539,20 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 		ObjectAddresses *objects;
 
 		CheckSetNamespace(current_chunk_schemaid, new_chunk_schemaid);
+
+		/* Check namespace permissions if it's not hypertable associated schema */
+		if (!hypertable_associated_schema)
+		{
+			if (object_aclcheck(NamespaceRelationId, new_chunk_schemaid, GetUserId(), ACL_CREATE) !=
+				ACLCHECK_OK)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+						 errmsg("permissions denied: cannot create chunks in schema \"%s\"",
+								schema_name)));
+			}
+		}
+
 		objects = new_object_addresses();
 		AlterTableNamespaceInternal(chunk_rel, current_chunk_schemaid, new_chunk_schemaid, objects);
 		free_object_addresses(objects);
