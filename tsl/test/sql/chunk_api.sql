@@ -331,7 +331,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA privileged_schema GRANT ALL ON TABLES TO unpr
 
 \c :TEST_DBNAME unprivileged
 CREATE TABLE privileged_schema.ht(ts timestamptz NOT NULL, v int);
-SELECT create_hypertable('privileged_schema.ht','ts');
+SELECT table_name FROM create_hypertable('privileged_schema.ht','ts');
 CREATE TABLE privileged_schema.chunkt(ts timestamptz NOT NULL, v int);
 INSERT INTO privileged_schema.chunkt VALUES ('2018-01-01', 7);
 
@@ -368,7 +368,7 @@ DROP SCHEMA privileged_schema CASCADE;
 
 -- Should bail out when creating a chunk from non-table object or attaching non-table object as a chunk
 CREATE TABLE ht(ts timestamptz NOT NULL, v int);
-SELECT create_hypertable('ht', 'ts');
+SELECT table_name FROM create_hypertable('ht', 'ts');
 
 CREATE VIEW v_chunk AS SELECT '2018-01-01'::timestamptz AS ts, 7 AS v;
 
@@ -387,7 +387,7 @@ drop view v_chunk cascade;
 
 -- Report (instead of crash) when chunk source table has NULLs in dimension column
 CREATE TABLE ht(ts timestamptz NOT NULL, v int);
-SELECT create_hypertable('ht', 'ts');
+SELECT table_name FROM create_hypertable('ht', 'ts');
 
 CREATE TABLE chunk_t(ts timestamptz, v int);
 INSERT INTO chunk_t VALUES (NULL, 42);
@@ -424,7 +424,7 @@ drop table chunk_t cascade;
 
 -- Check for type mismatch between chunk source table and hypertable columns
 CREATE TABLE ht(id uuid NOT NULL, v int);
-SELECT create_hypertable('ht', 'id');
+SELECT table_name FROM create_hypertable('ht', 'id');
 
 CREATE TABLE chunk_t(id bigint NOT NULL, v int);
 INSERT INTO chunk_t VALUES (42, 1);
@@ -447,6 +447,21 @@ SELECT * FROM _timescaledb_functions.create_chunk(
     '{"id": [0, 1000000]}'::jsonb,
     NULL, NULL, 2000000000::regclass);
 
+\set ON_ERROR_STOP 1
+
+drop table ht cascade;
+drop table chunk_t cascade;
+
+-- Should validate that start range <= end range
+CREATE TABLE ht(time bigint NOT NULL, v int);
+SELECT table_name FROM create_hypertable('ht','time', chunk_time_interval=>1000000);
+CREATE TABLE chunk_t(time bigint NOT NULL, v int);
+
+\set ON_ERROR_STOP 0
+SELECT schema_name, table_name, created
+FROM _timescaledb_functions.create_chunk('ht','{"time":[2500,1500]}');
+
+CALL attach_chunk('ht','chunk_t', '{"time":[2500,1500]}');
 \set ON_ERROR_STOP 1
 
 drop table ht cascade;
