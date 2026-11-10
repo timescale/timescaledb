@@ -127,3 +127,12 @@ WHERE hypertable_name = 'test_cagg_ret2_daily' AND proc_name = 'policy_retention
 SELECT timescaledb_experimental.remove_all_policies('test_cagg_ret2_daily');
 DROP MATERIALIZED VIEW test_cagg_ret2_daily;
 DROP TABLE test_cagg_ret2;
+
+-- alter_job rejects a retention policy config without drop_after
+CREATE TABLE test_retention_null(time timestamptz NOT NULL, value float);
+SELECT create_hypertable('test_retention_null', 'time');
+SELECT add_retention_policy('test_retention_null', INTERVAL '1 year') AS ret_null_job_id \gset
+\set ON_ERROR_STOP 0
+SELECT alter_job(:ret_null_job_id, config_merge => '{"drop_after": null}');
+\set ON_ERROR_STOP 1
+DROP TABLE test_retention_null;
