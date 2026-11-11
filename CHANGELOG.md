@@ -8,6 +8,7 @@ This release contains performance improvements and bug fixes since the 2.31.0 re
 
 **Loader Changes**
 * [#10966](https://github.com/timescale/timescaledb/pull/10966) Check database ownership before stopping or restarting background workers on database commands
+* [#10983](https://github.com/timescale/timescaledb/pull/10983) Run the background worker scheduler as the database owner instead of as superuser
 
 **Features**
 * [#10864](https://github.com/timescale/timescaledb/pull/10864) Improve continuous aggregate refresh performance by updating the watermark once per batch
@@ -15,7 +16,6 @@ This release contains performance improvements and bug fixes since the 2.31.0 re
 * [#10927](https://github.com/timescale/timescaledb/pull/10927) Remove user switching when allocating ids from the internal catalog sequences
 * [#10953](https://github.com/timescale/timescaledb/pull/10953) Allow database owners to start, stop, and restart background workers without superuser
 * [#10960](https://github.com/timescale/timescaledb/pull/10960) Run the telemetry job as the database owner instead of the role that installed the extension
-* [#10983](https://github.com/timescale/timescaledb/pull/10983) Run the background worker scheduler as the database owner instead of as superuser
 
 **Bugfixes**
 * [#10075](https://github.com/timescale/timescaledb/pull/10075) Removing the bloom1_contains function and rejecting anonymous record arrays in bloom1_contains_any
