@@ -4,7 +4,7 @@
 
 ## 2.32.0 (2026-11-12)
 
-This release contains performance improvements, security and bug fixes since the 2.31.0 release. We recommend that you upgrade at the next available opportunity.
+This release includes security fixes, performance improvements, and bug fixes since 2.31.0. As part of our ongoing proactive security reviews, this release includes a larger set of security fixes than usual. We recommend that you upgrade as soon as possible.
 
 **Loader Changes**
 For the loader changes take effect a PostgreSQL restart is required.
