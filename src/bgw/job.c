@@ -7,7 +7,10 @@
 
 #include <unistd.h>
 #include <access/xact.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_authid.h>
+#include <catalog/pg_proc.h>
+#include <catalog/pg_type_d.h>
 #include <executor/execdebug.h>
 #include <executor/instrument.h>
 #include <miscadmin.h>
@@ -1037,6 +1040,43 @@ zero_guc(const char *guc_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 	}
+}
+
+/*
+ * Resolve the routine that a job's proc_schema and proc_name refer to, using
+ * the (integer, jsonb) job signature, or InvalidOid if there is none.
+ *
+ * This is a plain catalog lookup, unlike ts_bgw_job_get_funcid, which goes
+ * through name resolution and therefore checks schema USAGE as the current
+ * user. The DDL hooks call this for every job row as whoever issued the
+ * statement, and a job in a schema that user cannot use must not make an
+ * unrelated DROP, RENAME or SET SCHEMA fail.
+ */
+Oid
+ts_bgw_job_get_funcid_from_catalog(const NameData *proc_schema, const NameData *proc_name)
+{
+	Oid argtypes[] = { INT4OID, JSONBOID };
+	Oid nspoid = get_namespace_oid(NameStr(*proc_schema), true);
+	HeapTuple tuple;
+	Oid funcid;
+
+	if (!OidIsValid(nspoid))
+	{
+		return InvalidOid;
+	}
+
+	tuple = SearchSysCache3(PROCNAMEARGSNSP,
+							PointerGetDatum(NameStr(*proc_name)),
+							PointerGetDatum(buildoidvector(argtypes, lengthof(argtypes))),
+							ObjectIdGetDatum(nspoid));
+	if (!HeapTupleIsValid(tuple))
+	{
+		return InvalidOid;
+	}
+
+	funcid = ((Form_pg_proc) GETSTRUCT(tuple))->oid;
+	ReleaseSysCache(tuple);
+	return funcid;
 }
 
 Oid
