@@ -1,1 +1,0 @@
-Fixes: #10993 Require ownership of the chunk, not just of the hypertable, to do chunk operations on them

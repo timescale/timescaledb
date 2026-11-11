@@ -1,1 +1,0 @@
-Fixes: #10968 Fix crash in add_policies and alter_policies when a drop_created_before retention policy exists on the hypertable or the continuous aggregate
