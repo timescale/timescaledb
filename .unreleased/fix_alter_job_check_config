@@ -1,1 +1,0 @@
-Fixes: #10988 Restrict changing the config check function of a job to the job owner

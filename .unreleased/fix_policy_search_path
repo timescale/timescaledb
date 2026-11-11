@@ -1,1 +1,0 @@
-Fixes: #10962 Reset search_path after every COMMIT in the columnstore policy

@@ -1,1 +1,0 @@
-Fixes: #10967 Fix crash in show_policies when called more than once in the same query

@@ -2,6 +2,61 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.32.0 (2026-11-11)
+
+This release includes security fixes, performance improvements, and bug fixes since 2.31.0. As part of our ongoing proactive security reviews, this release includes a larger set of security fixes than usual. We recommend that you upgrade as soon as possible.
+
+**Loader Changes**
+For the loader changes take effect a PostgreSQL restart is required.
+
+* [#10966](https://github.com/timescale/timescaledb/pull/10966) Check database ownership before stopping or restarting background workers on database commands
+* [#10983](https://github.com/timescale/timescaledb/pull/10983) Run the background worker scheduler as the database owner instead of as superuser
+
+**Features**
+* [#10864](https://github.com/timescale/timescaledb/pull/10864) Improve continuous aggregate refresh performance by updating the watermark once per batch
+* [#10878](https://github.com/timescale/timescaledb/pull/10878) Enable Adaptive Integer Compression (AIC) by default
+* [#10927](https://github.com/timescale/timescaledb/pull/10927) Remove user switching when allocating ids from the internal catalog sequences
+* [#10953](https://github.com/timescale/timescaledb/pull/10953) Allow database owners to start, stop, and restart background workers without superuser
+* [#10960](https://github.com/timescale/timescaledb/pull/10960) Run the telemetry job as the database owner instead of the role that installed the extension
+
+**Bugfixes**
+* [#10075](https://github.com/timescale/timescaledb/pull/10075) Removing the bloom1_contains function and rejecting anonymous record arrays in bloom1_contains_any
+* [#10296](https://github.com/timescale/timescaledb/pull/10296), [#10745](https://github.com/timescale/timescaledb/pull/10745) Fix continuous aggregate refresh skipping the last invalidated bucket for variable-sized buckets
+* [#10854](https://github.com/timescale/timescaledb/pull/10854) Correctly skip rows with conversion errors during `COPY FROM ON_ERROR` ignore
+* [#10855](https://github.com/timescale/timescaledb/pull/10855) Enforce `REJECT_LIMIT` during `COPY FROM` on PostgreSQL 18 and later
+* [#10887](https://github.com/timescale/timescaledb/pull/10887) Fix "repalloc called with invalid pointer" when compressing batches of more than 992 rows for certain data patterns
+* [#10893](https://github.com/timescale/timescaledb/pull/10893) Fix typo in the columnar README example
+* [#10902](https://github.com/timescale/timescaledb/pull/10902) Fix concurrent `UPDATE`/`DELETE` on hypertables silently skipping rows under `READ COMMITTED`
+* [#10919](https://github.com/timescale/timescaledb/pull/10919) Check schema `CREATE` privilege when creating a continuous aggregate
+* [#10925](https://github.com/timescale/timescaledb/pull/10925) Create chunk constraints without switching to the catalog owner
+* [#10961](https://github.com/timescale/timescaledb/pull/10961) Fix crash in `decompress_chunk` when the hypertable is dropped concurrently
+* [#10961](https://github.com/timescale/timescaledb/pull/10961) Fix null dereference in in-memory recompression when the compression settings are missing
+* [#10961](https://github.com/timescale/timescaledb/pull/10961) Fix stale chunk and hypertable state in `compress_chunk` when a concurrent decompress or compression change commits
+* [#10962](https://github.com/timescale/timescaledb/pull/10962) Reset `search_path` after every `COMMIT` in the columnstore policy
+* [#10964](https://github.com/timescale/timescaledb/pull/10964) Fix crash in `cagg_validate_query` when called with a `SELECT INTO` statement
+* [#10964](https://github.com/timescale/timescaledb/pull/10964) Fix crash in `cagg_validate_query` when the user lacks `SELECT` permission on the hypertable
+* [#10965](https://github.com/timescale/timescaledb/pull/10965) Verify the server certificate on telemetry SSL connections
+* [#10967](https://github.com/timescale/timescaledb/pull/10967) Fix crash in `show_policies` when called more than once in the same query
+* [#10968](https://github.com/timescale/timescaledb/pull/10968) Fix crash in `add_policies` and `alter_policies` when a `drop_created_before` retention policy exists on the hypertable or the continuous aggregate
+* [#10970](https://github.com/timescale/timescaledb/pull/10970) Fix `ORDER BY` pushdown for realtime continuous aggregates with an `ORDER BY` in their definition
+* [#10988](https://github.com/timescale/timescaledb/pull/10988) Report a missing policy config key as a user error instead of an internal error
+* [#10988](https://github.com/timescale/timescaledb/pull/10988) Restrict changing the config check function of a job to the job ownerwhat 
+* [#10989](https://github.com/timescale/timescaledb/pull/10989) Match job procedures by OID in DDL hooks
+* [#10991](https://github.com/timescale/timescaledb/pull/10991) Fix function overload in `approximate_row_count`
+* [#10993](https://github.com/timescale/timescaledb/pull/10993) Require ownership of the chunk, not just of the hypertable, to do chunk operations on them
+
+**GUCs**
+* `compression_orderby_default_function`: Function to use for calculating default order_by setting for compression. Default: `timescaledb.compression_orderby_default_function`
+* `compression_segmentby_default_function`: Function to use for calculating default segment_by setting for compression. Default: `timescaledb.compression_segmentby_default_function`
+
+**Thanks**
+* @JoongHyuk-Shin for fixing continuous aggregate refresh skipping the last invalidated bucket for variable-width buckets, [10419](https://github.com/timescale/timescaledb/pull/10419)
+* @manishnithinreddy for reporting the concurrent `UPDATE`/`DELETE` regression and bisecting it to `2.28.1`, [10902](https://github.com/timescale/timescaledb/issues/10902)
+* @martin-omacht for reporting missing and stale buckets in a continuous aggregate with a timezone, [#10296](https://github.com/timescale/timescaledb/pull/10296)
+* @owhiterabbito for reporting the compression error and analyzing the selector buffer size, [#10887](https://github.com/timescale/timescaledb/pull/10887)
+* @pei711 for fixing a typo in the README, [#10893](https://github.com/timescale/timescaledb/pull/10893)
+* @salmanazmat666 for reporting the continuous aggregate refresh skipping the last bucket on a variable-width bucket boundary, [#10745](https://github.com/timescale/timescaledb/pull/10745)
+
 ## 2.31.0 (2026-10-20)
 
 This release contains performance improvements and bug fixes since the 2.30.2 release. We recommend that you upgrade at the next available opportunity.
