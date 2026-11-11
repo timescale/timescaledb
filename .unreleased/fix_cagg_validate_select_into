@@ -1,2 +1,0 @@
-Fixes: #10964 Crash in cagg_validate_query when called with a SELECT INTO statement
-Fixes: #10964 Crash in cagg_validate_query when the user lacks SELECT permission on the hypertable
