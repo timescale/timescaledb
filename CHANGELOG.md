@@ -50,12 +50,12 @@ For the loader changes take effect a PostgreSQL restart is required.
 * `compression_segmentby_default_function`: Function to use for calculating default segment_by setting for compression. Default: `timescaledb.compression_segmentby_default_function`
 
 **Thanks**
-* @JoongHyuk-Shin for fixing continuous aggregate refresh skipping the last invalidated bucket for variable-width buckets
-* @manishnithinreddy for reporting the concurrent UPDATE/DELETE regression and bisecting it to 2.28.1
-* @martin-omacht for reporting missing and stale buckets in a continuous aggregate with a timezone
-* @owhiterabbito for reporting the compression error and analyzing the selector buffer size
-* @pei711 for fixing a typo in the README
-* @salmanazmat666 for reporting the continuous aggregate refresh skipping the last bucket on a variable-width bucket boundary
+* @JoongHyuk-Shin for fixing continuous aggregate refresh skipping the last invalidated bucket for variable-width buckets, [10419](https://github.com/timescale/timescaledb/pull/10419)
+* @manishnithinreddy for reporting the concurrent `UPDATE`/`DELETE` regression and bisecting it to `2.28.1`, [10902](https://github.com/timescale/timescaledb/issues/10902)
+* @martin-omacht for reporting missing and stale buckets in a continuous aggregate with a timezone, [#10296](https://github.com/timescale/timescaledb/pull/10296)
+* @owhiterabbito for reporting the compression error and analyzing the selector buffer size, [#10887](https://github.com/timescale/timescaledb/pull/10887)
+* @pei711 for fixing a typo in the README, [#10893](https://github.com/timescale/timescaledb/pull/10893)
+* @salmanazmat666 for reporting the continuous aggregate refresh skipping the last bucket on a variable-width bucket boundary, [#10745](https://github.com/timescale/timescaledb/pull/10745)
 
 ## 2.31.0 (2026-10-20)
 
