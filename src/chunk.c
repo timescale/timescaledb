@@ -566,12 +566,29 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 		if (!isnull)
 		{
-			AlterTableCmd *cmd = makeNode(AlterTableCmd);
+			List *defs = NIL;
+			ListCell *lc;
 
-			cmd->subtype = AT_SetOptions;
-			cmd->name = attributeName;
-			cmd->def = (Node *) untransformRelOptions(options);
-			alter_cmds = lappend(alter_cmds, cmd);
+			/* Skip the attribute version, it is maintained by PostgreSQL */
+			foreach (lc, untransformRelOptions(options))
+			{
+				DefElem *def = lfirst_node(DefElem, lc);
+
+				if (strcmp(def->defname, "pg_attver") != 0)
+				{
+					defs = lappend(defs, def);
+				}
+			}
+
+			if (defs != NIL)
+			{
+				AlterTableCmd *cmd = makeNode(AlterTableCmd);
+
+				cmd->subtype = AT_SetOptions;
+				cmd->name = attributeName;
+				cmd->def = (Node *) defs;
+				alter_cmds = lappend(alter_cmds, cmd);
+			}
 		}
 
 		/*
