@@ -103,9 +103,7 @@ def build_debug_config(overrides):
     )
     base_config.update(overrides)
     if base_config["os"] == "ubuntu-24.04":
-        base_config.setdefault(
-            "runner", ""
-        )
+        base_config.setdefault("runner", "")
     return base_config
 
 
