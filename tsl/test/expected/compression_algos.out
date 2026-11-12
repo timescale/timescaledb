@@ -2593,8 +2593,8 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   336 | XX001       | XX001
-     8 | 08P01       | 08P01
+   351 | XX001       | XX001
+     9 | 08P01       | 08P01
      1 | false       | false
      1 | true        | true
 
