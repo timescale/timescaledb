@@ -266,7 +266,9 @@ SELECT
   a.atthasdef, a.atthasmissing, a.attidentity, a.attgenerated, a.attisdropped, a.attislocal,
   a.attinhcount, a.attcollation::regcollation,
   NULLIF(a.attstattarget, -1) AS attstattarget,
-  a.attacl, a.attoptions, a.attfdwoptions, a.attmissingval
+  a.attacl,
+  (SELECT array_agg(o) FROM unnest(a.attoptions) o WHERE o NOT LIKE 'pg_attver=%') AS attoptions,
+  a.attfdwoptions, a.attmissingval
 FROM pg_depend dep
   INNER JOIN pg_extension ext ON (dep.refobjid=ext.oid AND ext.extname = 'timescaledb')
   INNER JOIN pg_attribute a ON (a.attrelid=dep.objid AND a.attnum > 0)
