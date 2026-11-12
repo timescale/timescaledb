@@ -843,6 +843,7 @@ job_execute(BgwJob *job)
 		portal = CreatePortal("", true, true);
 		portal->visible = false;
 		portal->resowner = CurrentResourceOwner;
+		portal->status = PORTAL_ACTIVE;
 		ActivePortal = portal;
 		PortalContext = portal->portalContext;
 
@@ -934,6 +935,7 @@ job_execute(BgwJob *job)
 			PopActiveSnapshot();
 		}
 		CommitTransactionCommand();
+		MarkPortalDone(portal);
 		PortalDrop(portal, false);
 		ActivePortal = NULL;
 		PortalContext = NULL;
