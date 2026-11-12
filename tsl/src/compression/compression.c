@@ -163,7 +163,7 @@ static void row_compressor_process_ordered_slot(RowCompressor *row_compressor, T
 static void row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row);
 static bool row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor,
 												   TupleTableSlot *row);
-static void create_per_compressed_column(RowDecompressor *decompressor, bool internal_error);
+static void create_per_compressed_column(RowDecompressor *decompressor);
 static int batch_row_count(RowDecompressor *decompressor);
 static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row);
 static void row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer,
@@ -907,9 +907,10 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			{
 				if (compressed_column_attr->atttypid != compressed_data_type_oid)
 				{
-					elog(ERROR,
-						 "expected column '%s' to be a compressed data type",
-						 NameStr(attr->attname));
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("expected column '%s' to be a compressed data type",
+									NameStr(attr->attname))));
 				}
 
 				AttrNumber segment_min_attr_number =
@@ -1003,9 +1004,11 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			{
 				if (attr->atttypid != compressed_column_attr->atttypid)
 				{
-					elog(ERROR,
-						 "expected segment by column \"%s\" to be same type as uncompressed column",
-						 NameStr(attr->attname));
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("expected segment by column \"%s\" to be same type as "
+									"uncompressed column",
+									NameStr(attr->attname))));
 				}
 				int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
 				*column = (PerColumn){
@@ -2072,9 +2075,8 @@ bulk_writer_close(BulkWriter *writer)
  ** decompress_chunk **
  **********************/
 
-static inline RowDecompressor
-build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid in_oid,
-						  Oid out_oid, bool internal_error)
+RowDecompressor
+build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc, Oid in_oid, Oid out_oid)
 {
 	MemoryContext row_decompressor_context = AllocSetContextCreate(CurrentMemoryContext,
 																   "row decompressor context",
@@ -2111,7 +2113,7 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 		.attrmap = attrmap,
 	};
 
-	create_per_compressed_column(&decompressor, internal_error);
+	create_per_compressed_column(&decompressor);
 
 	/*
 	 * We need to make sure decompressed_is_nulls is in a defined state. While this
@@ -2131,12 +2133,6 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 
 	MemoryContextSwitchTo(old_context);
 	return decompressor;
-}
-
-RowDecompressor
-build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc, Oid in_oid, Oid out_oid)
-{
-	return build_decompressor_common(in_desc, out_desc, in_oid, out_oid, true);
 }
 
 void
@@ -2268,7 +2264,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 }
 
 static void
-create_per_compressed_column(RowDecompressor *decompressor, bool internal_error)
+create_per_compressed_column(RowDecompressor *decompressor)
 {
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	Assert(OidIsValid(compressed_data_type_oid));
@@ -2310,8 +2306,7 @@ create_per_compressed_column(RowDecompressor *decompressor, bool internal_error)
 		if (bms_is_member(decompressed_column_offset, mapped))
 		{
 			ereport(ERROR,
-					(errcode(internal_error ? ERRCODE_INTERNAL_ERROR :
-											  ERRCODE_INVALID_PARAMETER_VALUE),
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("more than one compressed column maps to decompressed column \"%s\"",
 							col_name)));
 		}
@@ -2328,8 +2323,7 @@ create_per_compressed_column(RowDecompressor *decompressor, bool internal_error)
 		if (!is_compressed && compressed_attr->atttypid != decompressed_type)
 		{
 			ereport(ERROR,
-					(errcode(internal_error ? ERRCODE_INTERNAL_ERROR :
-											  ERRCODE_INVALID_PARAMETER_VALUE),
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("compressed table type '%s' does not match decompressed "
 							"table type '%s' for segment-by column \"%s\"",
 							format_type_be(compressed_attr->atttypid),
@@ -2975,7 +2969,7 @@ tsl_decompress_batch(PG_FUNCTION_ARGS)
 
 		decompress_ctx = palloc0(sizeof(DecompressBatchSRFContext));
 		decompress_ctx->decompressor =
-			build_decompressor_common(in_desc, out_desc, InvalidOid, InvalidOid, false);
+			build_decompressor(in_desc, out_desc, InvalidOid, InvalidOid);
 
 		HeapTupleData compressed_tuple;
 		compressed_tuple.t_len = HeapTupleHeaderGetDatumLength(td);
