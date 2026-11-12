@@ -1,0 +1,1 @@
+Fixes: #11015 Fix background jobs failing on new PostgreSQL minor releases
