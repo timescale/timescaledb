@@ -20,7 +20,7 @@ name: Update and Downgrade
 
 jobs:
   check_paths:
-    runs-on: ubuntu-26.04
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -43,7 +43,7 @@ jobs:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
     name: Update test PG${{ matrix.pg }} ${{ matrix.mode }}
-    runs-on: 'ubuntu-26.04'
+    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
     strategy:
       matrix:
         pg: [16, 17, 18]
