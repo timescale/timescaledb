@@ -747,24 +747,24 @@ job_execute_function(FuncExpr *funcexpr)
 }
 
 static void
-job_execute_procedure(FuncExpr *funcexpr)
+job_execute_procedure(FuncExpr *funcexpr, bool atomic)
 {
 	CallStmt *call = makeNode(CallStmt);
 	call->funcexpr = funcexpr;
 	DestReceiver *dest = CreateDestReceiver(DestNone);
 	/* we don't need to create proper param list cause we pass in all arguments as Const */
 	ParamListInfo params = makeParamList(0);
-	ExecuteCallStmt(call, params, false, dest);
+	ExecuteCallStmt(call, params, atomic, dest);
 }
 
 /*
  * Execute the job.
  *
  * This function can be called both from a portal and from a background
- * worker.
+ * worker. When atomic is true the job must not do transaction control.
  */
 bool
-job_execute(BgwJob *job)
+job_execute_in_context(BgwJob *job, bool atomic)
 {
 	Const *arg1, *arg2;
 	bool portal_created = false;
@@ -879,7 +879,7 @@ job_execute(BgwJob *job)
 			job_execute_function(funcexpr);
 			break;
 		case PROKIND_PROCEDURE:
-			job_execute_procedure(funcexpr);
+			job_execute_procedure(funcexpr, atomic);
 			break;
 		default:
 			ereport(ERROR,
@@ -902,4 +902,10 @@ job_execute(BgwJob *job)
 	}
 
 	return true;
+}
+
+bool
+job_execute(BgwJob *job)
+{
+	return job_execute_in_context(job, false);
 }

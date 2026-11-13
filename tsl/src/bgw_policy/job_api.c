@@ -308,7 +308,11 @@ job_run(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_permission_check(job, "run");
 
-	job_execute(job);
+	/* Transaction control is only allowed in a top-level CALL outside a transaction block */
+	bool atomic = !(fcinfo->context && IsA(fcinfo->context, CallContext) &&
+					!castNode(CallContext, fcinfo->context)->atomic);
+
+	job_execute_in_context(job, atomic);
 
 	PG_RETURN_VOID();
 }
