@@ -859,3 +859,25 @@ SELECT caller FROM check_caller_log;
 SELECT delete_job(:job_check_caller);
 DROP TABLE check_caller_log;
 DROP FUNCTION check_caller;
+
+-- Job doing transaction control cannot be run from a function or a transaction block
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE custom_log(job_id int, args jsonb, extra text, runner NAME DEFAULT CURRENT_ROLE);
+SELECT add_job('custom_proc2', '1h', config => '{"type":"procedure"}') AS job_commit \gset
+CREATE FUNCTION run_job_func(job_id int) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    CALL run_job(job_id);
+END
+$$;
+\set ON_ERROR_STOP 0
+SELECT run_job_func(:job_commit);
+BEGIN;
+CALL run_job(:job_commit);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM custom_log;
+CALL run_job(:job_commit);
+SELECT extra FROM custom_log ORDER BY extra;
+SELECT delete_job(:job_commit);
+DROP FUNCTION run_job_func;
+DROP TABLE custom_log;
