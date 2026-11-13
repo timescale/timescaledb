@@ -1017,8 +1017,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, bool include_o
 }
 
 static bool
-should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *order_attno,
-					bool *reverse)
+should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *order_attno)
 {
 	/* check if optimizations are enabled */
 	if (!ts_guc_enable_optimizations || !ts_guc_enable_ordered_append ||
@@ -1036,7 +1035,40 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *ord
 		return false;
 	}
 
-	return ts_ordered_append_should_optimize(root, rel, ht, order_attno, reverse);
+	return ts_ordered_append_should_optimize(root, rel, ht, order_attno);
+}
+
+/*
+ * Compare two chunks along the first dimension and chunk ID (in that priority
+ * and order).
+ */
+static int
+chunk_cmp_first_dimension(const void *c1, const void *c2)
+{
+	const Chunk *lhs = *((const Chunk **) c1);
+	const Chunk *rhs = *((const Chunk **) c2);
+	int cmp = ts_dimension_slice_cmp(lhs->cube->slices[0], rhs->cube->slices[0]);
+
+	if (cmp == 0)
+	{
+		cmp = VALUE_CMP(lhs->fd.id, rhs->fd.id);
+	}
+
+	return cmp;
+}
+
+/*
+ * Whether the first ORDER BY entry sorts descending, i.e. its sort operator
+ * is the greater-than operator of its type.
+ */
+static bool
+first_sort_clause_is_descending(PlannerInfo *root)
+{
+	SortGroupClause *sort = linitial(root->parse->sortClause);
+	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
+	TypeCacheEntry *tce = lookup_type_cache(exprType((Node *) tle->expr), TYPECACHE_GT_OPR);
+
+	return sort->sortop == tce->gt_opr;
 }
 
 /*
@@ -1109,7 +1141,6 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out,
 		   List **quals_proven_true_by_hri_out)
 {
-	bool reverse;
 	int order_attno;
 
 	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(ht);
@@ -1150,19 +1181,34 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	 * to signal that this is safe to transform in ordered append plan in
 	 * set_rel_pathlist.
 	 */
-	if (rel->fdw_private != NULL && should_order_append(root, rel, ht, &order_attno, &reverse))
+	if (rel->fdw_private != NULL && should_order_append(root, rel, ht, &order_attno))
 	{
 		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
 
 		priv->appends_ordered = true;
 		priv->order_attno = order_attno;
 
-		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
-															  ht,
-															  include_osm,
-															  NULL,
-															  reverse,
-															  num_chunks);
+		Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, include_osm, num_chunks);
+
+		/*
+		 * Sort the chunks according to the query's ORDER BY. This is purely
+		 * cosmetic at the moment, kept to avoid changing too many tests. We
+		 * used to do it for
+		 * ChunkAppend, but it now does the required sorting itself.
+		 */
+		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_first_dimension);
+
+		if (first_sort_clause_is_descending(root))
+		{
+			for (unsigned int i = 0; i < *num_chunks / 2; i++)
+			{
+				Chunk *tmp = chunks[i];
+				chunks[i] = chunks[*num_chunks - 1 - i];
+				chunks[*num_chunks - 1 - i] = tmp;
+			}
+		}
+
+		return chunks;
 	}
 
 	return find_children_chunks(hri, ht, include_osm, num_chunks);

@@ -92,6 +92,74 @@ build_nested_oids(PlannerInfo *root, List *children)
 	return nested_oids;
 }
 
+typedef struct ChildrenOrderContext
+{
+	PlannerInfo *root;
+	bool reverse;
+} ChildrenOrderContext;
+
+static int
+ordered_child_cmp(const void *left, const void *right, void *arg)
+{
+	Path *lhs = (Path *) lfirst((const ListCell *) left);
+	Path *rhs = (Path *) lfirst((const ListCell *) right);
+	ChildrenOrderContext *context = (ChildrenOrderContext *) arg;
+	const Chunk *lhs_chunk = ts_planner_chunk_fetch(context->root, lhs->parent);
+	const Chunk *rhs_chunk = ts_planner_chunk_fetch(context->root, rhs->parent);
+
+	/*
+	 * The children should be only plain chunks since we're creating a
+	 * ChunkAppend, but don't segfault.
+	 */
+	Ensure(lhs_chunk != NULL && rhs_chunk != NULL,
+		   "unexpected ChunkAppend child relation (index %d, %d)",
+		   lhs->parent->relid,
+		   rhs->parent->relid);
+
+	int cmp = ts_dimension_slice_cmp(lhs_chunk->cube->slices[0], rhs_chunk->cube->slices[0]);
+
+	if (cmp == 0)
+	{
+		cmp = VALUE_CMP(lhs_chunk->fd.id, rhs_chunk->fd.id);
+	}
+
+	if (context->reverse)
+	{
+		cmp = -cmp;
+	}
+
+	if (cmp == 0)
+	{
+		/*
+		 * Two paths of one partially compressed chunk: the columnar scan
+		 * goes before the uncompressed scan.
+		 */
+		cmp = (int) IsA(rhs, CustomPath) - (int) IsA(lhs, CustomPath);
+	}
+
+	return cmp;
+}
+
+/*
+ * Order the children along the first dimension, in the direction required
+ * by the first pathkey.
+ */
+static void
+sort_children_by_first_dimension(PlannerInfo *root, List *children, List *pathkeys)
+{
+	PathKey *pk = linitial_node(PathKey, pathkeys);
+	ChildrenOrderContext context = {
+		.root = root,
+		.reverse = pk->pk_cmptype == COMPARE_GT,
+	};
+
+	qsort_arg(children->elements,
+			  list_length(children),
+			  sizeof(ListCell),
+			  ordered_child_cmp,
+			  &context);
+}
+
 /*
  * Create the appropriate subpath for the outer MergeAppend
  * node depending on the number of paths in the current group:
@@ -505,6 +573,15 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			break;
 	}
 
+	/*
+	 * If we're working in ordered append mode, we must order the chunks so
+	 * that their dimensions follow the pathkey order.
+	 */
+	if (ordered && path->cpath.path.pathkeys != NIL)
+	{
+		sort_children_by_first_dimension(root, children, path->cpath.path.pathkeys);
+	}
+
 	if (!ordered)
 	{
 		path->cpath.custom_paths = children;
@@ -705,7 +782,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
  */
 bool
 ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-								  int *order_attno, bool *reverse)
+								  int *order_attno)
 {
 	SortGroupClause *sort = linitial(root->parse->sortClause);
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
@@ -854,9 +931,8 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		return false;
 	}
 
-	Assert(order_attno != NULL && reverse != NULL);
+	Assert(order_attno != NULL);
 	*order_attno = ht_var->varattno;
-	*reverse = sort->sortop == tce->lt_opr ? false : true;
 
 	return true;
 }
