@@ -22,6 +22,7 @@ set(TEST_FILES
     cagg_skip_invalidation.sql
     cagg_union_view.sql
     cagg_utils.sql
+    chunk_permissions.sql
     chunk_publication_compression.sql
     columnstore_aliases.sql
     compact_chunk.sql

@@ -372,3 +372,27 @@ SELECT _timescaledb_functions.policy_retention_check(NULL);
 
 --TEST check if alias for bgw_job table works
 SELECT * from _timescaledb_config.bgw_job WHERE id = :retenion_id_missing_schedint ORDER BY id;
+
+-- The recompression policy procedure can be called directly, so it must check
+-- ownership of the hypertable itself
+CREATE TABLE recompress_perm (time timestamptz NOT NULL, device int, val int);
+SELECT table_name FROM create_hypertable('recompress_perm', 'time');
+ALTER TABLE recompress_perm SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+INSERT INTO recompress_perm SELECT '2024-01-01'::timestamptz + g * interval '1 min', g % 3, g FROM generate_series(1, 100) g;
+SELECT count(compress_chunk(c)) FROM show_chunks('recompress_perm') c;
+INSERT INTO recompress_perm VALUES ('2024-01-01 00:00:30', 1, -1);
+SELECT id AS recompress_perm_ht FROM _timescaledb_catalog.hypertable WHERE table_name = 'recompress_perm' \gset
+SELECT format('{"hypertable_id": %s, "recompress_after": "1 day"}', :recompress_perm_ht) AS recompress_conf \gset
+SELECT status FROM _timescaledb_catalog.chunk WHERE hypertable_id = :recompress_perm_ht;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+CALL _timescaledb_functions.policy_recompression(1, :'recompress_conf'::jsonb);
+\set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+-- the chunk is still partial after the rejected call
+SELECT status FROM _timescaledb_catalog.chunk WHERE hypertable_id = :recompress_perm_ht;
+CALL _timescaledb_functions.policy_recompression(1, :'recompress_conf'::jsonb);
+SELECT status FROM _timescaledb_catalog.chunk WHERE hypertable_id = :recompress_perm_ht;
+DROP TABLE recompress_perm;

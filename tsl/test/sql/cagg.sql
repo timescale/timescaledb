@@ -37,7 +37,7 @@ insert into foo values( 2 , 14 , 20);
 insert into foo values( 2 , 15 , 20);
 insert into foo values( 2 , 16 , 20);
 
-CREATE OR REPLACE FUNCTION integer_now_foo() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM foo $$;
+CREATE OR REPLACE FUNCTION integer_now_foo() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM public.foo $$;
 SELECT set_integer_now_func('foo', 'integer_now_foo');
 
 
@@ -695,7 +695,7 @@ CREATE TABLE conditions (
 
 select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
 
-CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM public.conditions $$;
 SELECT set_integer_now_func('conditions', 'integer_now_conditions');
 
 CREATE MATERIALIZED VIEW mat_with_test(timec, minl, sumt , sumh)
@@ -728,7 +728,7 @@ SELECT create_hypertable(
     partitioning_column => 'dev',
     number_partitions => 3);
 
-CREATE OR REPLACE FUNCTION integer_now_space_table() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '0') FROM space_table $$;
+CREATE OR REPLACE FUNCTION integer_now_space_table() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '0') FROM public.space_table $$;
 SELECT set_integer_now_func('space_table', 'integer_now_space_table');
 
 CREATE MATERIALIZED VIEW space_view
@@ -831,7 +831,7 @@ CREATE TABLE conditions (
 
 select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
 
-CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM public.conditions $$;
 SELECT set_integer_now_func('conditions', 'integer_now_conditions');
 
 insert into conditions

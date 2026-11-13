@@ -314,10 +314,6 @@ typedef struct InternalFunctionDef
 } InternalFunctionDef;
 
 static const InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
-	[DDL_ADD_CHUNK_CONSTRAINT] = {
-		.name = "chunk_constraint_add_table_constraint",
-		.args = 3,
-	},
 	[DDL_CONSTRAINT_CLONE] = {
 		.name = "constraint_clone",
 		.args = 2,
@@ -620,7 +616,7 @@ ts_catalog_table_next_seq_id(const Catalog *catalog, CatalogTable table)
 			 catalog_table_name(table));
 	}
 
-	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
+	return nextval_internal(relid, false);
 }
 
 Oid

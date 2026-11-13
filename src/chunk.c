@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include "catalog/pg_namespace.h"
 #include <access/genam.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
@@ -565,12 +566,29 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 		if (!isnull)
 		{
-			AlterTableCmd *cmd = makeNode(AlterTableCmd);
+			List *defs = NIL;
+			ListCell *lc;
 
-			cmd->subtype = AT_SetOptions;
-			cmd->name = attributeName;
-			cmd->def = (Node *) untransformRelOptions(options);
-			alter_cmds = lappend(alter_cmds, cmd);
+			/* Skip the attribute version, it is maintained by PostgreSQL */
+			foreach (lc, untransformRelOptions(options))
+			{
+				DefElem *def = lfirst_node(DefElem, lc);
+
+				if (strcmp(def->defname, "pg_attver") != 0)
+				{
+					defs = lappend(defs, def);
+				}
+			}
+
+			if (defs != NIL)
+			{
+				AlterTableCmd *cmd = makeNode(AlterTableCmd);
+
+				cmd->subtype = AT_SetOptions;
+				cmd->name = attributeName;
+				cmd->def = (Node *) defs;
+				alter_cmds = lappend(alter_cmds, cmd);
+			}
 		}
 
 		/*
@@ -783,12 +801,9 @@ static int32
 get_next_chunk_id()
 {
 	int32 chunk_id;
-	CatalogSecurityContext sec_ctx;
 	const Catalog *catalog = ts_catalog_get();
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk_id = ts_catalog_table_next_seq_id(catalog, CHUNK);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return chunk_id;
 }
@@ -1425,11 +1440,13 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 	Relation ht_rel = table_open(ht->main_table_relid, AccessShareLock);
 	Relation chunk_rel = table_open(chunk_table_relid, AccessShareLock);
-	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
+	TupleDesc ht_tupdesc = RelationGetDescr(ht_rel);
+	TupleDesc chunk_tupdesc = RelationGetDescr(chunk_rel);
 
-	for (int attno = 0; attno < tupdesc->natts; attno++)
+	/* Check that all chunk columns are present in the parent */
+	for (int attno = 0; attno < chunk_tupdesc->natts; attno++)
 	{
-		Form_pg_attribute att = TupleDescAttr(tupdesc, attno);
+		Form_pg_attribute att = TupleDescAttr(chunk_tupdesc, attno);
 		AttrNumber ht_attnum = InvalidAttrNumber;
 
 		/* Ignore dropped */
@@ -1451,6 +1468,29 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 					 errdetail("The new chunk can contain only the columns present in parent.")));
 		}
 
+		/* type and collation should match between child table and hypertable */
+		Oid ht_typid;
+		int32 ht_typmod;
+		Oid ht_coll;
+		get_atttypetypmodcoll(ht->main_table_relid, ht_attnum, &ht_typid, &ht_typmod, &ht_coll);
+
+		if (att->atttypid != ht_typid || att->atttypmod != ht_typmod)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("child table \"%s\" has different type for column \"%s\"",
+							RelationGetRelationName(chunk_rel),
+							NameStr(att->attname))));
+		}
+		if (att->attcollation != ht_coll)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_COLLATION_MISMATCH),
+					 errmsg("child table \"%s\" has different collation for column \"%s\"",
+							RelationGetRelationName(chunk_rel),
+							NameStr(att->attname))));
+		}
+
 		/* Check that the chunk column has the same expression as the hypertable column */
 		if (att->attgenerated && get_attgenerated(ht->main_table_relid, ht_attnum))
 		{
@@ -1467,13 +1507,42 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 			}
 		}
 	}
+
+	/* Check that all parent columns are present in the chunk */
+	for (int attno = 0; attno < ht_tupdesc->natts; attno++)
+	{
+		Form_pg_attribute att = TupleDescAttr(ht_tupdesc, attno);
+		AttrNumber chunk_attnum = InvalidAttrNumber;
+
+		/* Ignore dropped */
+		if (att->attisdropped)
+		{
+			continue;
+		}
+
+		chunk_attnum = get_attnum(chunk_table_relid, NameStr(att->attname));
+		/* Try to find the parent column in child (matching on column name) */
+		if (chunk_attnum == InvalidAttrNumber)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("child table is missing column \"%s\"", NameStr(att->attname))));
+		}
+	}
 	table_close(ht_rel, NoLock);
 
 	int32 chunk_id = get_next_chunk_id();
 
+	bool hypertable_associated_schema = false;
 	if (!schema_name || schema_name[0] == '\0')
 	{
 		schema_name = NameStr(ht->fd.associated_schema_name);
+		hypertable_associated_schema = true;
+	}
+	else
+	{
+		hypertable_associated_schema =
+			(strcmp(schema_name, NameStr(ht->fd.associated_schema_name)) == 0);
 	}
 
 	chunk = chunk_create_object(ht, cube, chunk_id);
@@ -1487,6 +1556,20 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 		ObjectAddresses *objects;
 
 		CheckSetNamespace(current_chunk_schemaid, new_chunk_schemaid);
+
+		/* Check namespace permissions if it's not hypertable associated schema */
+		if (!hypertable_associated_schema)
+		{
+			if (object_aclcheck(NamespaceRelationId, new_chunk_schemaid, GetUserId(), ACL_CREATE) !=
+				ACLCHECK_OK)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+						 errmsg("permissions denied: cannot create chunks in schema \"%s\"",
+								schema_name)));
+			}
+		}
+
 		objects = new_object_addresses();
 		AlterTableNamespaceInternal(chunk_rel, current_chunk_schemaid, new_chunk_schemaid, objects);
 		free_object_addresses(objects);
@@ -2759,6 +2842,34 @@ ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found)
 		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
 	};
 	return ts_chunk_get_by_relid_locked(relid, NoLock, &slice_lock, fail_if_not_found);
+}
+
+/*
+ * Like ts_hypertable_has_privs_of(), but for a chunk. A chunk normally has
+ * the same owner as its hypertable, but not always, e.g., when a table owned
+ * by another role was attached as a chunk.
+ */
+bool
+ts_chunk_has_privs_of(Oid chunk_relid, Oid userid)
+{
+	return ts_has_owner_privs(userid, ts_rel_get_owner(chunk_relid));
+}
+
+/*
+ * Check that the user owns both the hypertable and the chunk. Owning the
+ * hypertable is not enough to rewrite or drop a chunk owned by another role.
+ */
+void
+ts_chunk_permissions_check(const Chunk *chunk, Oid userid)
+{
+	ts_hypertable_permissions_check(chunk->hypertable_relid, userid);
+
+	if (!ts_chunk_has_privs_of(chunk->fd.relid, userid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be owner of chunk \"%s\"", get_rel_name(chunk->fd.relid))));
+	}
 }
 
 void
@@ -4090,6 +4201,16 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			continue;
 		}
 
+		/* Skip chunks owned by another role, so the rest can still be dropped */
+		if (!ts_chunk_has_privs_of(chunks[i].fd.relid, GetUserId()))
+		{
+			ereport(WARNING,
+					(errmsg("skipping drop of chunk \"%s.%s\", which is owned by another role",
+							ts_chunk_get_schema_name(&chunks[i]),
+							ts_chunk_get_table_name(&chunks[i]))));
+			continue;
+		}
+
 		/* store chunk name for output */
 		schema_name = quote_identifier(ts_chunk_get_schema_name(&chunks[i]));
 		table_name = quote_identifier(ts_chunk_get_table_name(&chunks[i]));
@@ -4225,8 +4346,8 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   true);
 	Assert(ch != NULL);
 
-	/* Only the hypertable owner may drop a chunk */
-	ts_hypertable_permissions_check(ch->hypertable_relid, GetUserId());
+	/* Only the owner of the hypertable and of the chunk may drop a chunk */
+	ts_chunk_permissions_check(ch, GetUserId());
 
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 
@@ -4929,7 +5050,6 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 {
 	Hyperspace *hs = parent_ht->space;
 	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 
 	Oid ht_ownerid = ts_rel_get_owner(parent_ht->main_table_relid);
@@ -4942,6 +5062,12 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 						get_rel_name(parent_ht->main_table_relid))));
 	}
 
+	/* The foreign table becomes part of the hypertable, so it has to be owned too */
+	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+	{
+		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FOREIGN_TABLE, get_rel_name(relid));
+	}
+
 	Assert(get_rel_relkind(relid) == RELKIND_FOREIGN_TABLE);
 	if (hs->num_dimensions > 1)
 	{
@@ -4949,9 +5075,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 			 "cannot attach a  foreign table to a hypertable that has more than 1 dimension");
 	}
 	/* Create a new chunk based on the hypercube */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK));
-	ts_catalog_restore_user(&sec_ctx);
 
 	/* fill in the correct table_name for the chunk*/
 	chunk->fd.hypertable_id = hs->hypertable_id;
@@ -5444,8 +5568,8 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
 
-	/* Only the hypertable owner may drop the OSM chunk */
-	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+	/* Only the owner of the hypertable and of the OSM chunk may drop it */
+	ts_chunk_permissions_check(osm_chunk, GetUserId());
 
 	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
 

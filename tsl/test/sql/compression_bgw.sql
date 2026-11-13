@@ -496,3 +496,26 @@ WHERE h.table_name = 'test_recompress_unordered'
 GROUP BY c.status ORDER BY c.status;
 
 DROP TABLE test_recompress_unordered;
+
+-- compression policy must not resolve unqualified functions through the
+-- session search_path after its internal COMMITs
+CREATE FUNCTION public.format(text, name, name) RETURNS text LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'search_path leak';
+END
+$$;
+CREATE TABLE test_search_path(time timestamptz NOT NULL);
+CREATE INDEX ON test_search_path(time);
+SELECT FROM create_hypertable('test_search_path', 'time');
+ALTER TABLE test_search_path SET (timescaledb.compress);
+INSERT INTO test_search_path SELECT '2000-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(1, 100) i;
+SELECT add_compression_policy('test_search_path', '1 day'::interval) AS search_path_job \gset
+CALL run_job(:search_path_job);
+-- make the chunk partial so the policy recompresses and reindexes it
+INSERT INTO test_search_path VALUES ('2000-01-01 00:30');
+CALL run_job(:search_path_job);
+SELECT c.status FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id
+WHERE h.table_name = 'test_search_path';
+DROP FUNCTION public.format(text, name, name);
+DROP TABLE test_search_path;

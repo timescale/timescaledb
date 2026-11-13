@@ -19,6 +19,7 @@
 #include <common/base64.h>
 #include <funcapi.h>
 #include <libpq/pqformat.h>
+#include <miscadmin.h>
 #include <storage/latch.h>
 #include <storage/lock.h>
 #include <storage/predicate.h>
@@ -2355,8 +2356,9 @@ create_per_compressed_column(RowDecompressor *decompressor, bool internal_error)
 static int
 batch_row_count(RowDecompressor *decompressor)
 {
-	const int n_batch_rows =
-		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	const int count_attindex = decompressor->count_compressed_attindex;
+	CheckCompressedData(!decompressor->compressed_is_nulls[count_attindex]);
+	const int n_batch_rows = DatumGetInt32(decompressor->compressed_datums[count_attindex]);
 	CheckCompressedData(n_batch_rows > 0);
 	CheckCompressedData(n_batch_rows <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	return n_batch_rows;
@@ -3200,6 +3202,8 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo buf = (StringInfo) PG_GETARG_POINTER(0);
 	CompressedDataHeader header = { .vl_len_ = { 0 } };
+
+	check_stack_depth();
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 

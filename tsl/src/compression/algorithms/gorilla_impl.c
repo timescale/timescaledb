@@ -35,7 +35,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * converts the elements to postres Datum always reads in 8 bytes.
 	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
-	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
+	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAllocZero(dest_mctx, buffer_bytes);
 
 	const uint32 n_notnull = gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total >= n_notnull);
