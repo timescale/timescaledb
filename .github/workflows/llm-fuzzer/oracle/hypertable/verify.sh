@@ -18,13 +18,19 @@
 #
 # Must not require superuser privileges.
 #
+# Must not interfere with stability checks performed by this oracle.
+#
 # The output of an admissible repro script:
 #
 # Must be sufficiently ordered to prevent false positives: use ORDER BY, avoid
 # ties in output, avoid non-deterministic constructs like LIMIT without ORDER BY,
-# and so on. A stable divergence is still not a bug if the query is underdefined.
+# and so on. A stable divergence is still not a bug if the query allows
+# multiple correct outputs.
 #
-# Must not depend on floating point precision or numeric stability.
+# Must not depend on floating point precision or numeric stability. It is always
+# possible to engineer a case where these issues accumulate to give an
+# arbitrarily large divirgence in the query results, but the underlying behavior
+# is still not admissible to this oracle.
 #
 # Must be independent from arbitrary environmental influence like the OID values
 # or chunk identifiers.
@@ -78,17 +84,21 @@ then
     exit 0
 fi
 
-if ! psql -v hyper=true -c "
-        set max_parallel_workers_per_gather = 8;
-        set parallel_setup_cost = 0;
-        set parallel_tuple_cost = 0;
-        set min_parallel_table_scan_size = 0;
-        set min_parallel_index_scan_size = 0;
-    " -f "$1" > result_hyper_para.txt
-then
-    echo "Repro errors out, not admissible"
-    exit 0
-fi
+for i in {1..5}
+do
+    if ! psql -v hyper=true -c "
+            set max_parallel_workers_per_gather = 2;
+            set parallel_leader_participation = off;
+            set parallel_setup_cost = 0;
+            set parallel_tuple_cost = 0;
+            set min_parallel_table_scan_size = 0;
+            set min_parallel_index_scan_size = 0;
+        " -f "$1" > "result_hyper_para_${i}.txt"
+    then
+        echo "Repro errors out, not admissible"
+        exit 0
+    fi
+done
 
 if ! psql -v hyper=true -c "set work_mem = '4GB'" -f "$1" > result_hyper_mem.txt
 then
@@ -106,17 +116,22 @@ then
     exit 0
 fi
 
-if ! diff -u result_plain.txt result_plain_synonym.txt \
-    || ! diff -u result_hyper.txt result_hyper_noseq.txt \
-    || ! diff -u result_hyper.txt result_hyper_noindex.txt \
-    || ! diff -u result_hyper.txt result_hyper_nohashagg.txt \
-    || ! diff -u result_hyper.txt result_hyper_para.txt \
-    || ! diff -u result_hyper.txt result_hyper_mem.txt \
-    || ! diff -u result_hyper.txt result_hyper_rowsort.txt
+if ! diff -u result_plain.txt result_plain_synonym.txt
 then
     echo "Repro gives different results between runs, not admissible"
     exit 0
 fi
+
+for variant in result_hyper_*.txt
+do
+    if ! diff -u result_hyper.txt "${variant}"
+    then
+        echo "Repro gives different results between runs, not admissible"
+        exit 0
+
+    fi
+done
+
 
 echo
 echo '```diff'

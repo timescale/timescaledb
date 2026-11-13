@@ -1,5 +1,6 @@
 self-hosted-runner:
   labels:
+    - ubuntu-26.04
     - timescaledb-runner-arm64
     - cloud-image-runner-ubuntu-24-arm64
     - runs-on/fleet=linux-2cpu/env=ue1

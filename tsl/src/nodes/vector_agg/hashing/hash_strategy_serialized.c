@@ -183,7 +183,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 		{
 			pfree(hashing->tmp_key_storage);
 		}
-		hashing->tmp_key_storage = MemoryContextAlloc(hashing->key_body_mctx, num_bytes);
+		hashing->tmp_key_storage = MemoryContextAllocZero(hashing->key_body_mctx, num_bytes);
 		hashing->num_tmp_key_storage_bytes = num_bytes;
 	}
 	uint8 *restrict serialized_key_storage = hashing->tmp_key_storage;

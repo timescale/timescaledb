@@ -247,7 +247,7 @@ SELECT schema_name || '.' || table_name AS "ROUNDTRIP_CHUNK", slices AS "ROUNDTR
 FROM _timescaledb_functions.show_chunk((SELECT show_chunks('drop_after_attach', older_than => '2026-01-02') LIMIT 1)); \gset
              ROUNDTRIP_CHUNK             |                ROUNDTRIP_SLICES                
 -----------------------------------------+------------------------------------------------
- _timescaledb_internal._hyper_3_15_chunk | {"time": [1767225600000000, 1767312000000000]}
+ _timescaledb_internal._hyper_3_13_chunk | {"time": [1767225600000000, 1767312000000000]}
 
 CALL detach_chunk(:'ROUNDTRIP_CHUNK');
 CALL attach_chunk('drop_after_attach', :'ROUNDTRIP_CHUNK', :'ROUNDTRIP_SLICES');
@@ -282,7 +282,7 @@ SELECT schema_name || '.' || table_name AS "CON_CHUNK", slices AS "CON_SLICES"
 FROM _timescaledb_functions.show_chunk((SELECT show_chunks('drop_con_after_attach') LIMIT 1)); \gset
                 CON_CHUNK                |                   CON_SLICES                   
 -----------------------------------------+------------------------------------------------
- _timescaledb_internal._hyper_4_18_chunk | {"time": [1767225600000000, 1767312000000000]}
+ _timescaledb_internal._hyper_4_16_chunk | {"time": [1767225600000000, 1767312000000000]}
 
 CALL detach_chunk(:'CON_CHUNK');
 CALL attach_chunk('drop_con_after_attach', :'CON_CHUNK', :'CON_SLICES');
@@ -293,7 +293,7 @@ WHERE conrelid = :'CON_CHUNK'::regclass
 ORDER BY conname;
             conname            | contype | conislocal | coninhcount 
 -------------------------------+---------+------------+-------------
- constraint_30                 | c       | t          |           0
+ constraint_26                 | c       | t          |           0
  drop_con_after_attach_x_check | c       | f          |           1
 
 ALTER TABLE drop_con_after_attach DROP CONSTRAINT drop_con_after_attach_x_check;

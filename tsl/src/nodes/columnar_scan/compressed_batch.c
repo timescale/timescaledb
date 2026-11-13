@@ -302,7 +302,11 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		DecompressAllFunction decompress_all =
 			tsl_get_decompress_all_function(header->compression_algorithm,
 											column_description->typid);
-		Assert(decompress_all != NULL);
+		/* Because we can attach compressed chunks to a hypertable, there
+		 * is a possibility that the planner thinks we can do bulk decompression
+		 * but the attached data type doesn't support that. This is a class of
+		 * corrupt data that we need to check here. */
+		CheckCompressedData(decompress_all != NULL);
 
 		MemoryContext context_before_decompression =
 			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
@@ -1024,7 +1028,8 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 										   column_description->compressed_scan_attno,
 										   &isnull);
 				/* count column should never be NULL */
-				Assert(!isnull);
+				CheckCompressedData(!isnull);
+
 				int count_value = DatumGetInt32(value);
 				if (count_value <= 0)
 				{
