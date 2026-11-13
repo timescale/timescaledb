@@ -1,0 +1,1 @@
+Fixes: #10739 Don't block reads of a chunk during in-memory recompression

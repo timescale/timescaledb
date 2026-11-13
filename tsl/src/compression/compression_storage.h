@@ -16,6 +16,6 @@
 #include "hypertable.h"
 
 Oid compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid,
-							 CompressionSettings *settings);
+							 CompressionSettings *settings, const char *relname);
 void modify_compressed_toast_table_storage(CompressionSettings *settings, List *coldefs,
 										   Oid compress_relid);
