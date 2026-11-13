@@ -97,6 +97,7 @@ insert into mergeme values ('2024-01-01', 3, 3.0);
 -- Can't merge chunk 1 and 3
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_3_chunk');
 call merge_chunks(NULL);
+call merge_chunks_concurrently(NULL::regclass[]);
 call merge_chunks(NULL, NULL);
 call merge_chunks(999999,999991);
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk']);

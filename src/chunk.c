@@ -5602,9 +5602,21 @@ TS_FUNCTION_INFO_V1(ts_merge_chunks_concurrently);
 Datum
 ts_merge_chunks_concurrently(PG_FUNCTION_ARGS)
 {
-	return DirectFunctionCall2(ts_cm_functions->merge_chunks,
-							   PG_GETARG_DATUM(0),
-							   BoolGetDatum(true));
+	LOCAL_FCINFO(merge_fcinfo, 2);
+
+	InitFunctionCallInfoData(*merge_fcinfo, NULL, 2, InvalidOid, NULL, NULL);
+
+	if (PG_ARGISNULL(0))
+	{
+		FC_SET_NULL(merge_fcinfo, 0);
+	}
+	else
+	{
+		FC_SET_ARG(merge_fcinfo, 0, PG_GETARG_DATUM(0));
+	}
+	FC_SET_ARG(merge_fcinfo, 1, BoolGetDatum(true));
+
+	return ts_cm_functions->merge_chunks(merge_fcinfo);
 }
 
 void
