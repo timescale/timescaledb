@@ -519,3 +519,31 @@ JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id
 WHERE h.table_name = 'test_search_path';
 DROP FUNCTION public.format(text, name, name);
 DROP TABLE test_search_path;
+
+-- reindexing in compression policy when the rowstore is emptied with DELETE
+SET timescaledb.compress_truncate_behaviour = truncate_disabled;
+CREATE TABLE metrics3(time DATE NOT NULL);
+CREATE INDEX metrics3_index ON metrics3(time DESC);
+SELECT hypertable_id AS "HYPERTABLE_ID" FROM create_hypertable('metrics3','time') \gset
+ALTER TABLE metrics3 SET (timescaledb.compress);
+INSERT INTO metrics3 SELECT '2000-01-01' FROM generate_series(1,30000);
+SELECT show_chunks('metrics3') AS "CHUNK" \gset
+SELECT pg_indexes_size(:'CHUNK') > 16384 AS indexes_populated;
+CREATE TEMP TABLE metrics3_index_files AS
+SELECT indexrelid, pg_relation_filenode(indexrelid) AS filenode FROM pg_index WHERE indrelid = :'CHUNK'::regclass;
+
+SELECT add_job('_timescaledb_functions.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb, initial_start => '2000-01-01 00:00:00+00'::timestamptz) AS "JOB_COMPRESS" \gset
+CALL run_job(:JOB_COMPRESS);
+
+-- the rows were deleted, so the heap keeps its pages
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics3';
+SELECT count(*) AS live_in_chunk_heap, pg_relation_size(:'CHUNK') > 0 AS heap_kept FROM ONLY :CHUNK;
+SELECT count(*) FROM metrics3;
+
+-- but the indexes were rebuilt; their size is not checked since concurrent
+-- snapshots can keep the deleted rows in the rebuilt index
+SELECT count(*) AS indexes, count(*) FILTER (WHERE pg_relation_filenode(indexrelid) <> filenode) AS reindexed
+FROM metrics3_index_files;
+DROP TABLE metrics3_index_files;
+DROP TABLE metrics3;
+RESET timescaledb.compress_truncate_behaviour;
