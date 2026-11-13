@@ -507,63 +507,32 @@ typedef struct Bloom1ContainsContext
 } Bloom1ContainsContext;
 
 static Bloom1ContainsContext *
-bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
+bloom1_contains_context_prepare(FunctionCallInfo fcinfo)
 {
 	Bloom1ContainsContext *context = (Bloom1ContainsContext *) fcinfo->flinfo->fn_extra;
 	if (context == NULL)
 	{
-		Ensure(PG_NARGS() == 2, "bloom1_contains called with wrong number of arguments");
+		Ensure(PG_NARGS() == 2, "bloom1_contains_any called with wrong number of arguments");
 
 		context = MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(*context));
 
-		context->element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
-		if (use_element_type)
-		{
-			context->element_type = get_element_type(context->element_type);
-			Ensure(OidIsValid(context->element_type),
-				   "cannot determine array element type for bloom1_contains_any");
-		}
+		context->element_type = get_element_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
+		Ensure(OidIsValid(context->element_type),
+			   "cannot determine array element type for bloom1_contains_any");
 
-		Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
-		int num_columns;
-
+		/*
+		 * Composite bloom filters are checked with bloom1_contains_any_hashes()
+		 * on hashes computed by bloom1_hash(). Each element of a record array
+		 * can have a different row type, so we cannot pick a hasher for them.
+		 */
 		if (context->element_type == RECORDOID)
 		{
-			HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
-			Oid tupType = HeapTupleHeaderGetTypeId(tuple);
-			int32 tupTypmod = HeapTupleHeaderGetTypMod(tuple);
-			TupleDesc tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
-
-			num_columns = tupdesc->natts;
-			if (num_columns > MAX_BLOOM_FILTER_COLUMNS)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_DATA_EXCEPTION),
-						 errmsg("composite bloom filter supports at most %d columns, got %d",
-								MAX_BLOOM_FILTER_COLUMNS,
-								num_columns)));
-			}
-
-			if (num_columns < 2)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("composite bloom filter must have at least two columns")));
-			}
-
-			for (int i = 0; i < num_columns; i++)
-			{
-				type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
-			}
-			ReleaseTupleDesc(tupdesc);
-		}
-		else
-		{
-			type_oids[0] = context->element_type;
-			num_columns = 1;
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("bloom1_contains_any does not support arrays of type record[]")));
 		}
 
-		context->bloom_hasher = bloom1_hasher_init(type_oids, num_columns);
+		context->bloom_hasher = bloom1_hasher_init(&context->element_type, 1);
 
 		get_typlenbyvalalign(context->element_type,
 							 &context->element_typlen,
@@ -612,58 +581,6 @@ bloom1_contains_hash_internal(const char *words_buf, uint32 num_bits, uint64 has
 	return true;
 }
 
-/*
- * Checks whether the given element can be present in the given bloom filter.
- * This is what we use in predicate pushdown. The SQL signature is:
- * _timescaledb_functions.bloom1_contains(bloom1, anyelement)
- */
-Datum
-bloom1_contains(PG_FUNCTION_ARGS)
-{
-	/*
-	 * A null value cannot match the equality condition, although this probably
-	 * should be optimized away by the planner.
-	 */
-	if (PG_ARGISNULL(1))
-	{
-		PG_RETURN_BOOL(false);
-	}
-
-	Bloom1ContainsContext *context =
-		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ false);
-
-	/*
-	 * This function is not strict, because if we don't have a bloom filter, this
-	 * means the condition can potentially be true.
-	 */
-	struct varlena *bloom = context->current_row_bloom;
-	if (bloom == NULL)
-	{
-		PG_RETURN_BOOL(true);
-	}
-
-	uint64 hash = 0;
-	NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
-	memset(values, 0, sizeof(values));
-
-	if (context->bloom_hasher.functions.num_columns > 1)
-	{
-		HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
-		for (int i = 0; i < context->bloom_hasher.functions.num_columns; i++)
-		{
-			values[i].value = GetAttributeByNum(tuple, i + 1, &values[i].isnull);
-		}
-	}
-	else
-	{
-		values[0].value = PG_GETARG_DATUM(1);
-		values[0].isnull = false;
-	}
-
-	hash = bloom1_hash_values(&context->bloom_hasher, values);
-	PG_RETURN_BOOL(bloom1_contains_hash(PointerGetDatum(bloom), hash));
-}
-
 #define ST_SORT sort_hashes
 #define ST_ELEMENT_TYPE uint64
 #define ST_COMPARE(a, b) ((*(a) > *(b)) - (*(a) < *(b)))
@@ -689,8 +606,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	Bloom1ContainsContext *context =
-		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ true);
+	Bloom1ContainsContext *context = bloom1_contains_context_prepare(fcinfo);
 
 	/*
 	 * This function is not strict, because if we don't have a bloom filter, this
@@ -762,51 +678,8 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	 */
 	sort_hashes(item_base_hashes, valid);
 
-	/*
-	 * Get the bloom filter parameters.
-	 */
-	const char *words_buf = bloom1_words_buf(bloom);
-	const uint32 num_bits = bloom1_num_bits(bloom);
-
-	/* Must be >= 64 bits. */
-	CheckCompressedData(num_bits >= 64);
-
-	/* Must be a power of two. */
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-
-	const uint32 num_word_bits = sizeof(*words_buf) * 8;
-	Assert(num_bits % num_word_bits == 0);
-	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
-	Assert(num_word_bits == (1ULL << log2_word_bits));
-
-	const uint32 word_mask = num_word_bits - 1;
-	Assert((word_mask >> num_word_bits) == 0);
-
-	const uint32 absolute_mask = num_bits - 1;
-
-	/* Probe the bloom filter. */
-	for (int item_index = 0; item_index < valid; item_index++)
-	{
-		const uint64 base_hash = item_base_hashes[item_index];
-		bool match = true;
-		for (int i = 0; i < BLOOM1_HASHES; i++)
-		{
-			const uint32 absolute_bit_index = bloom1_get_one_offset(base_hash, i) & absolute_mask;
-			const uint32 word_index = absolute_bit_index >> log2_word_bits;
-			const uint32 word_bit_index = absolute_bit_index & word_mask;
-			if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
-			{
-				match = false;
-				break;
-			}
-		}
-		if (match)
-		{
-			PG_RETURN_BOOL(true);
-		}
-	}
-
-	PG_RETURN_BOOL(false);
+	PG_RETURN_BOOL(
+		bloom1_contains_any_hash_values(PointerGetDatum(bloom), item_base_hashes, valid));
 }
 
 /*
@@ -840,19 +713,17 @@ bloom1_contains_any_hashes(PG_FUNCTION_ARGS)
 	Datum *hash_datums;
 	bool *hash_nulls;
 	ArrayType *arr = PG_GETARG_ARRAYTYPE_P(1);
-	Oid elem_type = ARR_ELEMTYPE(arr);
-	Assert(elem_type == INT8OID);
+	Assert(ARR_ELEMTYPE(arr) == INT8OID);
 
-	int16 typlen;
-	bool typbyval;
-	char typalign;
-	get_typlenbyvalalign(elem_type, &typlen, &typbyval, &typalign);
-
+	/*
+	 * The SQL signature guarantees an int8 array, so use the int8 type
+	 * properties directly instead of looking them up for every call.
+	 */
 	deconstruct_array(arr,
-					  elem_type,
-					  typlen,
-					  typbyval,
-					  typalign,
+					  INT8OID,
+					  sizeof(int64),
+					  FLOAT8PASSBYVAL,
+					  TYPALIGN_DOUBLE,
 					  &hash_datums,
 					  &hash_nulls,
 					  &num_hashes);
@@ -862,29 +733,28 @@ bloom1_contains_any_hashes(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	const char *words_buf = bloom1_words_buf(bloom);
-	const uint32 num_bits = bloom1_num_bits(bloom);
+	/*
+	 * Collect the non-null hashes. We can reuse the "hash_datums" space to
+	 * avoid more allocations, but have to allocate as a fallback on 32-bit
+	 * systems.
+	 */
+#if FLOAT8PASSBYVAL
+	uint64 *hashes = (uint64 *) hash_datums;
+#else
+	uint64 *hashes = palloc(sizeof(uint64) * num_hashes);
+#endif
 
-	/* Must be >= 64 bits. */
-	CheckCompressedData(num_bits >= 64);
-
-	/* Must be a power of two. */
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-
+	int valid = 0;
 	for (int i = 0; i < num_hashes; i++)
 	{
 		if (hash_nulls[i])
 		{
 			continue;
 		}
-		uint64 hash = (uint64) DatumGetInt64(hash_datums[i]);
-		if (bloom1_contains_hash_internal(words_buf, num_bits, hash))
-		{
-			PG_RETURN_BOOL(true);
-		}
+		hashes[valid++] = (uint64) DatumGetInt64(hash_datums[i]);
 	}
 
-	PG_RETURN_BOOL(false);
+	PG_RETURN_BOOL(bloom1_contains_any_hash_values(PointerGetDatum(bloom), hashes, valid));
 }
 
 Datum
@@ -933,8 +803,8 @@ bloom1_hash(PG_FUNCTION_ARGS)
 		}
 		ReleaseTupleDesc(tupdesc);
 
-		/* NULL in any column means equality can't match — return NULL
-		 * so the caller falls back to bloom1_contains. */
+		/* NULL in any column means equality can't match. Return NULL, which
+		 * bloom1_contains_any_hashes() skips. */
 		for (int i = 0; i < num_columns; i++)
 		{
 			if (values[i].isnull)
@@ -1230,17 +1100,13 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 
 char const *bloom1_column_prefix = NULL;
 
-/* this function will be reused in a later PR when we push down pre-calculated
- * hash value checks from the planner */
+/*
+ * Checks whether the bloom filter may contain any of the given hashes.
+ */
 bool
-bloom1_contains_hash(Datum bloom_datum, uint64 hash)
+bloom1_contains_any_hash_values(Datum bloom_datum, const uint64 *hashes, int nhashes)
 {
 	struct varlena *bloom = DatumGetByteaPP(bloom_datum);
-	if (bloom == NULL)
-	{
-		return true; /* No bloom = might match */
-	}
-
 	const char *words_buf = VARDATA_ANY(bloom);
 	const uint32 num_bits = 8 * VARSIZE_ANY_EXHDR(bloom);
 
@@ -1248,5 +1114,12 @@ bloom1_contains_hash(Datum bloom_datum, uint64 hash)
 	CheckCompressedData(num_bits >= 64);
 	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 
-	return bloom1_contains_hash_internal(words_buf, num_bits, hash);
+	for (int i = 0; i < nhashes; i++)
+	{
+		if (bloom1_contains_hash_internal(words_buf, num_bits, hashes[i]))
+		{
+			return true;
+		}
+	}
+	return false;
 }

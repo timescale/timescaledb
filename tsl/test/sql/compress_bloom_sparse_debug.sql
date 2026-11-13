@@ -52,7 +52,7 @@ blooms as (
 select (toast_header::bit(16), bits_total, filter_column_compression) kind,
     avg(rows)::int rows,
     count(*),
-    count(*) filter (where _timescaledb_functions.bloom1_contains(f, mix(1)::text)) h,
+    count(*) filter (where _timescaledb_functions.bloom1_contains_any(f, array[mix(1)::text])) h,
     array_agg(distinct bits_total) filter_bit_sizes,
     array_agg(distinct filter_column_compression) filter_compression_algorithms,
     round(avg(detoasted_bytes / compressed_bytes::numeric), 2) filter_compression_ratio,
@@ -72,7 +72,7 @@ with col as (
 select
     round(
         sum(pg_column_size(cc))::numeric / (sum(pg_column_size(f))
-            + sum(pg_column_size(cc)) filter (where _timescaledb_functions.bloom1_contains(f, '0.4067781441845'::text))),
+            + sum(pg_column_size(cc)) filter (where _timescaledb_functions.bloom1_contains_any(f, array['0.4067781441845'::text]))),
         2)
 from col;
 
@@ -112,19 +112,22 @@ select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
 \set ON_ERROR_STOP 0
 
 -- The "contains" functions should error out when called with wrong arguments.
-select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, 1::bit) ;
-
 select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
 
-select _timescaledb_functions.bloom1_contains(_timescaledb_functions.bloom1in('\x'::cstring), 1);
+select _timescaledb_functions.bloom1_contains_any(_timescaledb_functions.bloom1in('\x'::cstring), array[1]);
 
 select _timescaledb_functions.bloom1_contains_any(_timescaledb_functions.bloom1in('\x'::cstring), 1);
 
-select _timescaledb_functions.bloom1_contains('\x'::_timescaledb_internal.bloom1, ROW(1));
-
-select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, ROW());
-
 select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, NULL::record[]);
+
+-- Arrays of anonymous records are not supported. The array must not be read
+-- as a record, with or without NULL elements.
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[ROW(1, 'x'::text)]);
+
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[ROW(1, 'x'::text), NULL]);
+
+-- Github issue #10075
+select _timescaledb_functions.bloom1_contains_any('\x0102030405060708'::_timescaledb_internal.bloom1, array[row(1, 'x')]);
 
 -- The hash function is callable by user, so must return proper error
 select _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
@@ -169,19 +172,18 @@ create view v(f) as (select :column from :chunk1
     union all select :column from :chunk2);
 
 select
-    _timescaledb_functions.bloom1_contains(f, '1'::text),
-    _timescaledb_functions.bloom1_contains(f, '1000001'::text)
+    _timescaledb_functions.bloom1_contains_any(f, array['1'::text]),
+    _timescaledb_functions.bloom1_contains_any(f, array['1000001'::text])
 from v
 ;
 
 select (ts_bloom1_debug_info(f)).* from v;
 
 -- test NULL handling
-SELECT _timescaledb_functions.bloom1_contains(NULL, 23);
-SELECT _timescaledb_functions.bloom1_contains(NULL, NULL::int);
-SELECT _timescaledb_functions.bloom1_contains('\xd098c885f08468eb8916751d947f248ed2843a88c02b1dea6228591c588b8068'::_timescaledb_internal.bloom1, NULL::int);
--- both args NULL but second arg obfuscated through record_in
-SELECT _timescaledb_functions.bloom1_contains(NULL, pg_catalog.record_in(null::cstring, 23::oid, 12::int4));
+SELECT _timescaledb_functions.bloom1_contains_any(NULL, array[23]);
+SELECT _timescaledb_functions.bloom1_contains_any(NULL, NULL::int[]);
+SELECT _timescaledb_functions.bloom1_contains_any('\xd098c885f08468eb8916751d947f248ed2843a88c02b1dea6228591c588b8068'::_timescaledb_internal.bloom1, NULL::int[]);
+SELECT _timescaledb_functions.bloom1_contains_any('\xd098c885f08468eb8916751d947f248ed2843a88c02b1dea6228591c588b8068'::_timescaledb_internal.bloom1, array[NULL::int]);
 
 
 

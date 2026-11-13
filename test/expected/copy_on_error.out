@@ -1,0 +1,127 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- ON_ERROR was introduced in PostgreSQL 17.
+CREATE TABLE copy_ignore (time bigint NOT NULL, val int);
+SELECT create_hypertable('copy_ignore', 'time', chunk_time_interval => 10);
+    create_hypertable     
+--------------------------
+ (1,public,copy_ignore,t)
+
+-- Rejected rows must not be buffered or create chunks. Valid rows following
+-- conversion errors must still be parsed and routed to their own chunks.
+COPY copy_ignore FROM STDIN WITH (FORMAT csv, ON_ERROR ignore);
+NOTICE:  2 rows were skipped due to data type incompatibility
+SELECT * FROM copy_ignore ORDER BY time;
+ time | val 
+------+-----
+    1 |   1
+   11 |   3
+   31 |   5
+
+SELECT count(*), sum(val) FROM copy_ignore;
+ count | sum 
+-------+-----
+     3 |   9
+
+SELECT count(*) AS chunks FROM show_chunks('copy_ignore');
+ chunks 
+--------
+      3
+
+-- Errors in the partition column must be skipped before chunk routing, too.
+-- No rows or chunks should be added when all input rows are rejected.
+COPY copy_ignore FROM STDIN WITH (FORMAT csv, ON_ERROR ignore);
+NOTICE:  2 rows were skipped due to data type incompatibility
+SELECT count(*), sum(val) FROM copy_ignore;
+ count | sum 
+-------+-----
+     3 |   9
+
+SELECT count(*) AS chunks FROM show_chunks('copy_ignore');
+ chunks 
+--------
+      3
+
+-- A BEFORE trigger selects the unbuffered insert path. Rejected rows must
+-- reach neither the WHERE expression (which would divide by zero) nor triggers.
+TRUNCATE copy_ignore;
+CREATE TABLE copy_ignore_trigger_rows (time bigint, val int, skipped bigint);
+CREATE FUNCTION copy_ignore_trigger() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_stat_clear_snapshot();
+    INSERT INTO copy_ignore_trigger_rows
+        SELECT NEW.time, NEW.val, tuples_skipped
+        FROM pg_stat_progress_copy WHERE pid = pg_backend_pid();
+    RETURN NEW;
+END
+$$;
+CREATE TRIGGER copy_ignore_before BEFORE INSERT ON copy_ignore
+FOR EACH ROW EXECUTE FUNCTION copy_ignore_trigger();
+COPY copy_ignore FROM STDIN WITH (FORMAT csv, ON_ERROR ignore)
+WHERE 10 / val > 0;
+NOTICE:  3 rows were skipped due to data type incompatibility
+SELECT * FROM copy_ignore ORDER BY time;
+ time | val 
+------+-----
+    1 |   1
+   11 |   3
+   31 |   5
+
+SELECT * FROM copy_ignore_trigger_rows ORDER BY time;
+ time | val | skipped 
+------+-----+---------
+    1 |   1 |       0
+   11 |   3 |       2
+   31 |   5 |       3
+
+SELECT count(*) AS chunks FROM show_chunks('copy_ignore');
+ chunks 
+--------
+      3
+
+-- Ordinary errors must still abort the COPY statement and roll back its rows.
+TRUNCATE copy_ignore, copy_ignore_trigger_rows;
+ALTER TABLE copy_ignore ADD CHECK (val > 0), ALTER COLUMN val SET NOT NULL;
+\set ON_ERROR_STOP 0
+\set VERBOSITY sqlstate
+-- The default ON_ERROR behavior is unchanged.
+COPY copy_ignore FROM STDIN WITH (FORMAT csv);
+ERROR:  22P02
+SELECT count(*) FROM copy_ignore;
+ count 
+-------
+     0
+
+-- ON_ERROR ignore only handles conversion errors, not CHECK/NOT NULL failures
+-- or malformed records.
+COPY copy_ignore FROM STDIN WITH (FORMAT csv, ON_ERROR ignore);
+ERROR:  23514
+SELECT count(*) FROM copy_ignore;
+ count 
+-------
+     0
+
+COPY copy_ignore FROM STDIN WITH (FORMAT csv, ON_ERROR ignore);
+ERROR:  23502
+SELECT count(*) FROM copy_ignore;
+ count 
+-------
+     0
+
+COPY copy_ignore FROM STDIN WITH (FORMAT csv, ON_ERROR ignore);
+ERROR:  22P04
+SELECT count(*) FROM copy_ignore;
+ count 
+-------
+     0
+
+SELECT count(*) FROM copy_ignore_trigger_rows;
+ count 
+-------
+     0
+
+\set VERBOSITY default
+\set ON_ERROR_STOP 1
+DROP TABLE copy_ignore, copy_ignore_trigger_rows;
+DROP FUNCTION copy_ignore_trigger();

@@ -332,27 +332,27 @@ WHERE a.attrelid = (:'ic_schema1' || '.' || :'ic_table1')::regclass
   AND NOT a.attisdropped LIMIT 1 \gset
 
 -- present values (expect true)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_humidity", 42) AS val_42,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 100) AS val_100,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 7) AS val_7
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[42]) AS val_42,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[100]) AS val_100,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[7]) AS val_7
 FROM :ic_schema1.:ic_table1 WHERE device = 'd1' LIMIT 1;
 
 -- absent values (expect false)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_humidity", -999) AS val_neg999,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 999) AS val_999,
-       _timescaledb_functions.bloom1_contains(:"bloom_humidity", 12345) AS val_12345
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[-999]) AS val_neg999,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[999]) AS val_999,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_humidity", array[12345]) AS val_12345
 FROM :ic_schema1.:ic_table1 WHERE device = 'd1' LIMIT 1;
 
 -- present labels (expect true)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_label", 'label_0'::text) AS label_0,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'label_3'::text) AS label_3,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'label_6'::text) AS label_6
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['label_0'::text]) AS label_0,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['label_3'::text]) AS label_3,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['label_6'::text]) AS label_6
 FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 
 -- absent labels (expect false)
-SELECT _timescaledb_functions.bloom1_contains(:"bloom_label", 'nonexistent'::text) AS nope1,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'zzz_never'::text) AS nope2,
-       _timescaledb_functions.bloom1_contains(:"bloom_label", 'NOPE'::text) AS nope3
+SELECT _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['nonexistent'::text]) AS nope1,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['zzz_never'::text]) AS nope2,
+       _timescaledb_functions.bloom1_contains_any(:"bloom_label", array['NOPE'::text]) AS nope3
 FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 
 -- Sparse index integrity: the (device, first_time, last_time) btree must be
@@ -413,3 +413,48 @@ DROP TABLE rsi_integrity CASCADE;
 DROP FUNCTION show_compressed_columns(regclass);
 DROP FUNCTION show_chunk_index(regclass);
 DROP FUNCTION dump_sparse_metadata(regclass);
+
+-- Test rebuilding NULL chunk sparse index
+CREATE TABLE tnull_sparse_index(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('tnull_sparse_index', 'time');
+INSERT INTO tnull_sparse_index VALUES ('2024-01-01 00:00:00+00', 1, 1);
+ALTER TABLE tnull_sparse_index SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+ALTER TABLE tnull_sparse_index RESET (timescaledb.compress_index);
+SET timescaledb.auto_sparse_indexes = off;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('tnull_sparse_index') c;
+ALTER TABLE tnull_sparse_index SET (timescaledb.compress_index = 'bloom(v)');
+
+-- Should not crash
+SELECT _timescaledb_functions.rebuild_sparse_index(c) FROM show_chunks('tnull_sparse_index') c;
+
+-- Should not crash
+SELECT count(*) FROM tnull_sparse_index;
+
+DROP TABLE tnull_sparse_index CASCADE;
+
+-- Test correct results with rebuilt sparse indexes
+CREATE TABLE test_rebuild(time timestamptz NOT NULL, device int, v int);
+SELECT table_name FROM create_hypertable('test_rebuild', 'time');
+INSERT INTO test_rebuild VALUES
+  ('2024-01-01 00:00:00+00', 1, 10),
+  ('2024-01-01 00:01:00+00', 1, 20),
+  ('2024-01-01 00:02:00+00', 1, 30),
+  ('2024-01-01 00:03:00+00', 2, 40),
+  ('2024-01-01 00:04:00+00', 2, 50);
+ALTER TABLE test_rebuild SET (
+  timescaledb.compress,
+  timescaledb.compress_orderby = 'time',
+  timescaledb.compress_segmentby = 'device'
+);
+
+ALTER TABLE test_rebuild RESET (timescaledb.compress_index);
+SET timescaledb.auto_sparse_indexes = off;
+SELECT count(compress_chunk(c)) FROM show_chunks('test_rebuild') c;
+ALTER TABLE test_rebuild SET (timescaledb.compress_index = 'bloom(v)');
+
+SELECT _timescaledb_functions.rebuild_sparse_index(c) FROM show_chunks('test_rebuild') c;
+-- Should return 3 rows
+SELECT time, device, v FROM test_rebuild WHERE time >= '2024-01-01 00:02:00+00' ORDER BY time, device;
+
+drop table test_rebuild cascade;

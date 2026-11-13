@@ -89,7 +89,8 @@ extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job, const char *cmd
 extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);
 
 extern JobResult ts_bgw_job_execute(BgwJob *job);
-extern TSDLLEXPORT void ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config);
+extern TSDLLEXPORT void ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner,
+													Jsonb *config);
 
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
 extern void ts_bgw_job_set_scheduler_test_hook(scheduler_test_hook_type hook);
@@ -103,6 +104,8 @@ extern TSDLLEXPORT char *ts_bgw_job_validate_timezone(Datum timezone);
 
 extern TSDLLEXPORT bool ts_is_telemetry_job(BgwJob *job);
 
+extern TSDLLEXPORT Oid ts_bgw_job_get_funcid_from_catalog(const NameData *proc_schema,
+														  const NameData *proc_name);
 extern TSDLLEXPORT Oid ts_bgw_job_get_funcid(BgwJob *job);
 extern TSDLLEXPORT const char *ts_bgw_job_function_call_string(BgwJob *job);
 

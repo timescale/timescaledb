@@ -56,6 +56,6 @@ void batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *b
 																		 Datum *compressed_values,
 																		 bool *compressed_is_null);
 
-/* Returns true if the hash is maybe present in a bloom filter, if the bloom filter data is
- * NULL, it returns true, because we cannot be sure if the hash is present or not. */
-extern bool bloom1_contains_hash(Datum bloom_datum, uint64 hash);
+/* Returns true if any of the hashes is maybe present in a bloom filter. The bloom
+ * filter must not be NULL; callers treat a NULL filter as "maybe present". */
+extern bool bloom1_contains_any_hash_values(Datum bloom_datum, const uint64 *hashes, int nhashes);

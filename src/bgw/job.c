@@ -7,7 +7,10 @@
 
 #include <unistd.h>
 #include <access/xact.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_authid.h>
+#include <catalog/pg_proc.h>
+#include <catalog/pg_type_d.h>
 #include <executor/execdebug.h>
 #include <executor/instrument.h>
 #include <miscadmin.h>
@@ -23,6 +26,7 @@
 #include <utils/backend_status.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
+#include <utils/guc.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
@@ -110,9 +114,13 @@ job_execute_function(FuncExpr *funcexpr)
  *
  * This will run the configuration check validation function registered for
  * the job. If a new job is added, the job_id is going to be zero.
+ *
+ * The check function is owned by the job owner but can be triggered by other
+ * roles altering the job, so run it as the job owner in a security-restricted
+ * context.
  */
 void
-ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
+ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner, Jsonb *config)
 {
 	/* Nothing to check if there is no check function provided */
 	if (!OidIsValid(check))
@@ -135,11 +143,7 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 	FuncExpr *funcexpr =
 		makeFuncExpr(check, VOIDOID, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 
-	if (get_func_prokind(check) == PROKIND_FUNCTION)
-	{
-		job_execute_function(funcexpr);
-	}
-	else
+	if (get_func_prokind(check) != PROKIND_FUNCTION)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -147,6 +151,13 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 				 errdetail("Only functions are allowed as custom configuration checks"),
 				 errhint("Use a FUNCTION instead")));
 	}
+
+	TSSecurityContext sctx;
+	ts_security_context_enter(owner, &sctx);
+
+	job_execute_function(funcexpr);
+
+	ts_security_context_exit(&sctx);
 }
 
 /* Run the check function on a configuration. It will generate errors if there
@@ -181,7 +192,7 @@ job_config_check(BgwJob *job, Jsonb *config)
 	 without validating the config but also print a warning */
 	if (OidIsValid(proc))
 	{
-		ts_bgw_job_run_config_check(proc, job->fd.id, config);
+		ts_bgw_job_run_config_check(proc, job->fd.id, job->fd.owner, config);
 	}
 	else
 	{
@@ -1031,6 +1042,43 @@ zero_guc(const char *guc_name)
 	}
 }
 
+/*
+ * Resolve the routine that a job's proc_schema and proc_name refer to, using
+ * the (integer, jsonb) job signature, or InvalidOid if there is none.
+ *
+ * This is a plain catalog lookup, unlike ts_bgw_job_get_funcid, which goes
+ * through name resolution and therefore checks schema USAGE as the current
+ * user. The DDL hooks call this for every job row as whoever issued the
+ * statement, and a job in a schema that user cannot use must not make an
+ * unrelated DROP, RENAME or SET SCHEMA fail.
+ */
+Oid
+ts_bgw_job_get_funcid_from_catalog(const NameData *proc_schema, const NameData *proc_name)
+{
+	Oid argtypes[] = { INT4OID, JSONBOID };
+	Oid nspoid = get_namespace_oid(NameStr(*proc_schema), true);
+	HeapTuple tuple;
+	Oid funcid;
+
+	if (!OidIsValid(nspoid))
+	{
+		return InvalidOid;
+	}
+
+	tuple = SearchSysCache3(PROCNAMEARGSNSP,
+							PointerGetDatum(NameStr(*proc_name)),
+							PointerGetDatum(buildoidvector(argtypes, lengthof(argtypes))),
+							ObjectIdGetDatum(nspoid));
+	if (!HeapTupleIsValid(tuple))
+	{
+		return InvalidOid;
+	}
+
+	funcid = ((Form_pg_proc) GETSTRUCT(tuple))->oid;
+	ReleaseSysCache(tuple);
+	return funcid;
+}
+
 Oid
 ts_bgw_job_get_funcid(BgwJob *job)
 {
@@ -1392,10 +1440,9 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	Relation rel;
 	TupleDesc desc;
 	Datum values[Natts_bgw_job] = { 0 };
-	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_bgw_job] = { false };
 	int32 job_id;
-	char app_name[NAMEDATALEN];
+	NameData app_name = { 0 };
 	int name_len;
 
 	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
@@ -1473,10 +1520,9 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = CStringGetTextDatum(timezone);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
-	name_len = snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+	name_len =
+		snprintf(NameStr(app_name), NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
 
 	if (name_len >= NAMEDATALEN)
 	{
@@ -1484,10 +1530,9 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	}
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = Int32GetDatum(job_id);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = CStringGetDatum(app_name);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(&app_name);
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	/* This is where we would add a call to recordDependencyOnOwner, but it
 	 * cannot support dependencies on anything but built-in classes since

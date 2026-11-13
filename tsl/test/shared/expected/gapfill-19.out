@@ -1133,6 +1133,19 @@ SELECT
 FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: timezone cannot be NULL
+-- timezone evaluates to NULL
+SET plan_cache_mode = force_generic_plan;
+PREPARE gf_tz_null(text) AS
+  SELECT time_bucket_gapfill('1 hour'::interval, ts, $1,
+    '2020-01-01 00:00:00+00'::timestamptz,
+    '2020-01-01 04:00:00+00'::timestamptz)
+  FROM (VALUES ('2020-01-01 00:00:00+00'::timestamptz),
+  ('2020-01-01 02:00:00+00'::timestamptz)) t(ts)
+  GROUP BY 1 ORDER BY 1;
+EXECUTE gf_tz_null(NULL::text);
+ERROR:  invalid time_bucket_gapfill argument: timezone cannot be NULL
+DEALLOCATE gf_tz_null;
+RESET plan_cache_mode;
 -- test 0 bucket_width
 SELECT
   time_bucket_gapfill(0,time,1,11)

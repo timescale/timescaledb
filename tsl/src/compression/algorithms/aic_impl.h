@@ -158,6 +158,12 @@ AIC_TFN(aic_encode_dfor_block_)(AICCompressorImpl *impl)
 	/* bases are not encoded if their bitwidth is zero */
 	if (W_bases > 0)
 	{
+		/* the bases pack straight from the input buffer, which holds
+		 * the block's n values followed by stale or uninitialized data.
+		 * the analyzer already staged the stride-S deltas, so the values
+		 * above S are not needed anymore: fill the tier padding above S
+		 * with the bases min, so it packs as zero residuals */
+		AIC_TFN(aic_fill_padding_)(buf, S, (AIC_TY) bases_min);
 		if (bases_min == 0)
 		{
 			block->data.dfor.packed_bases_size =

@@ -1,0 +1,136 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1_begin s1_update s2_update s1_commit s3_select
+step s1_begin: BEGIN;
+step s1_update: UPDATE hyper SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  2
+
+step s2_update: UPDATE hyper SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *; <waiting ...>
+step s1_commit: COMMIT;
+step s2_update: <... completed>
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  3
+
+step s3_select: SELECT * FROM hyper ORDER BY id;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  3
+
+
+starting permutation: s1_begin s1_update s2_delete s1_commit s3_select
+step s1_begin: BEGIN;
+step s1_update: UPDATE hyper SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  2
+
+step s2_delete: DELETE FROM hyper WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *; <waiting ...>
+step s1_commit: COMMIT;
+step s2_delete: <... completed>
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  2
+
+step s3_select: SELECT * FROM hyper ORDER BY id;
+id|ts|val
+--+--+---
+
+
+starting permutation: s1_begin s1_update_pk s2_update_pk s1_commit s3_select_pk
+step s1_begin: BEGIN;
+step s1_update_pk: UPDATE hyper_pk SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  2
+
+step s2_update_pk: UPDATE hyper_pk SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *; <waiting ...>
+step s1_commit: COMMIT;
+step s2_update_pk: <... completed>
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  3
+
+step s3_select_pk: SELECT * FROM hyper_pk ORDER BY id;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  3
+
+
+starting permutation: s1_begin s1_update_pk s2_delete_pk s1_commit s3_select_pk
+step s1_begin: BEGIN;
+step s1_update_pk: UPDATE hyper_pk SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  2
+
+step s2_delete_pk: DELETE FROM hyper_pk WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *; <waiting ...>
+step s1_commit: COMMIT;
+step s2_delete_pk: <... completed>
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  2
+
+step s3_select_pk: SELECT * FROM hyper_pk ORDER BY id;
+id|ts|val
+--+--+---
+
+
+starting permutation: s1_begin s1_update s2_update_from s1_commit s3_select
+step s1_begin: BEGIN;
+step s1_update: UPDATE hyper SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  2
+
+step s2_update_from: UPDATE hyper SET val = hyper.val + src.val FROM src WHERE hyper.id = src.id RETURNING hyper.*; <waiting ...>
+step s1_commit: COMMIT;
+step s2_update_from: <... completed>
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|102
+
+step s3_select: SELECT * FROM hyper ORDER BY id;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|102
+
+
+starting permutation: s1_begin s1_update_val s2_update_val1 s1_commit s3_select
+step s1_begin: BEGIN;
+step s1_update_val: UPDATE hyper SET val = 10 WHERE id = 'a' RETURNING *;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026| 10
+
+step s2_update_val1: UPDATE hyper SET val = val + 1 WHERE id = 'a' AND val = 1 RETURNING *; <waiting ...>
+step s1_commit: COMMIT;
+step s2_update_val1: <... completed>
+id|ts|val
+--+--+---
+
+step s3_select: SELECT * FROM hyper ORDER BY id;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026| 10
+
+
+starting permutation: s1_begin s1_delete s2_update s1_commit s3_select
+step s1_begin: BEGIN;
+step s1_delete: DELETE FROM hyper WHERE id = 'a' RETURNING *;
+id|ts                      |val
+--+------------------------+---
+a |Tue Oct 27 08:53:48 2026|  1
+
+step s2_update: UPDATE hyper SET val = val + 1 WHERE id = 'a' AND ts = '2026-10-27 08:53:48' RETURNING *; <waiting ...>
+step s1_commit: COMMIT;
+step s2_update: <... completed>
+id|ts|val
+--+--+---
+
+step s3_select: SELECT * FROM hyper ORDER BY id;
+id|ts|val
+--+--+---
+

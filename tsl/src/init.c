@@ -166,7 +166,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.bool_compressor_finish = tsl_bool_compressor_finish,
 	.uuid_compressor_append = tsl_uuid_compressor_append,
 	.uuid_compressor_finish = tsl_uuid_compressor_finish,
-	.bloom1_contains = bloom1_contains,
 	.bloom1_contains_any = bloom1_contains_any,
 	.bloom1_contains_any_hashes = bloom1_contains_any_hashes,
 	.bloom1_hash = bloom1_hash,

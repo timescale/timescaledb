@@ -29,6 +29,7 @@
 #include <catalog/pg_trigger_d.h>
 #include <commands/copy.h>
 #include <commands/copyfrom_internal.h>
+#include <commands/progress.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
 #include <executor/executor.h>
@@ -40,6 +41,7 @@
 #include <parser/parse_collate.h>
 #include <parser/parse_expr.h>
 #include <parser/parse_relation.h>
+#include <pgstat.h>
 #include <storage/bufmgr.h>
 #include <storage/smgr.h>
 #include <utils/builtins.h>
@@ -895,6 +897,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	BulkInsertState bistate = NULL;
 	uint64 processed = 0;
 	ExprState *qualexpr = NULL;
+#if PG17_GE
+	CopyFromState cstate = ccstate->cstate;
+#endif
 
 	Assert(pstate->p_rtable);
 
@@ -1104,6 +1109,40 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		{
 			break;
 		}
+
+#if PG17_GE
+		/* Follow CopyFrom in PostgreSQL; cstate is NULL during table migration. */
+		if (cstate && cstate->opts.on_error == COPY_ON_ERROR_IGNORE &&
+			cstate->escontext->error_occurred)
+		{
+			/*
+			 * Soft error occurred, skip this tuple and just make
+			 * ErrorSaveContext ready for the next NextCopyFrom. Since we
+			 * don't set details_wanted and error_data is not to be filled,
+			 * just resetting error_occurred is enough.
+			 */
+			cstate->escontext->error_occurred = false;
+
+			/* Report that this tuple was skipped by the ON_ERROR clause */
+			pgstat_progress_update_param(PROGRESS_COPY_TUPLES_SKIPPED, cstate->num_errors);
+
+#if PG18_GE
+			/* Cast the positive limit to avoid -Wsign-compare. */
+			if (cstate->opts.reject_limit > 0 &&
+				cstate->num_errors > (uint64) cstate->opts.reject_limit)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+						 errmsg("skipped more than REJECT_LIMIT (%" PRId64
+								") rows due to data type incompatibility",
+								cstate->opts.reject_limit)));
+			}
+#endif
+
+			/* Repeat NextCopyFrom() until no soft error occurs */
+			continue;
+		}
+#endif
 
 		ExecStoreVirtualTuple(myslot);
 
@@ -1350,6 +1389,19 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	{
 		error_context_stack = errcallback.previous;
 	}
+
+#if PG17_GE
+	if (cstate && cstate->opts.on_error == COPY_ON_ERROR_IGNORE && cstate->num_errors > 0
+#if PG18_GE
+		&& cstate->opts.log_verbosity >= COPY_LOG_VERBOSITY_DEFAULT
+#endif
+	)
+		ereport(NOTICE,
+				errmsg_plural("%llu row was skipped due to data type incompatibility",
+							  "%llu rows were skipped due to data type incompatibility",
+							  (unsigned long long) cstate->num_errors,
+							  (unsigned long long) cstate->num_errors));
+#endif
 
 	FreeBulkInsertState(bistate);
 

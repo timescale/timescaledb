@@ -365,14 +365,6 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 
 	if (state->have_timezone)
 	{
-		if (IsA(get_timezone_arg(state), Const) &&
-			castNode(Const, get_timezone_arg(state))->constisnull)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid time_bucket_gapfill argument: timezone cannot be NULL")));
-		}
-
 		time_bucket->args =
 			list_make3(linitial(time_bucket->args), expr, lthird(time_bucket->args));
 	}
@@ -751,11 +743,7 @@ gapfill_advance_timestamp(GapFillState *state)
 			 */
 			if (state->have_timezone)
 			{
-				bool isnull;
-				/* TODO: optimize by constifying and caching the datum if possible */
-				Datum tzname =
-					gapfill_exec_expr(state, state->scanslot, get_timezone_arg(state), &isnull);
-				Assert(!isnull);
+				Datum tzname = PointerGetDatum(cstring_to_text(state->tzname));
 
 				if (state->next_offset->day != 0 || state->next_offset->month != 0)
 				{
@@ -876,6 +864,27 @@ gapfill_initialize_arguments(GapFillState *state)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg(
 					 "invalid time_bucket_gapfill argument: bucket_width must be greater than 0")));
+	}
+
+	if (state->have_timezone)
+	{
+		if (gapfill_is_const_null(get_timezone_arg(state)))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: timezone cannot be NULL")));
+		}
+
+		Datum tzdatum = gapfill_exec_expr(state, NULL, get_timezone_arg(state), &isnull);
+		if (isnull)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: timezone cannot be NULL")));
+		}
+
+		text *zone = DatumGetTextPP(tzdatum);
+		text_to_cstring_buffer(zone, state->tzname, sizeof(state->tzname));
 	}
 
 	/*

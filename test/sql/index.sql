@@ -343,3 +343,17 @@ CREATE INDEX test_temp_idx ON ONLY test (time);
 
 SELECT * FROM test.show_indexes('test');
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+
+-- opclass options are copied to chunk indexes
+CREATE TABLE index_opclass_options(time timestamptz NOT NULL, doc tsvector);
+SELECT table_name FROM create_hypertable('index_opclass_options', 'time');
+INSERT INTO index_opclass_options VALUES ('2025-01-01', 'a b c'::tsvector);
+CREATE INDEX index_opclass_options_doc_idx ON index_opclass_options USING gist (doc tsvector_ops(siglen=200));
+INSERT INTO index_opclass_options VALUES ('2025-03-01', 'd e f'::tsvector);
+SELECT c.relname, a.attoptions
+FROM show_chunks('index_opclass_options') ch
+JOIN pg_index i ON i.indrelid = ch
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_attribute a ON a.attrelid = i.indexrelid
+WHERE a.attoptions IS NOT NULL
+ORDER BY 1;
