@@ -1050,7 +1050,12 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))
 	{
-		performDeletion(&user_view, DROP_RESTRICT, 0);
+		/*
+		 * We only get here when the source of this cagg was dropped (e.g. the
+		 * materialization table of the parent). All dependents of the user view,
+		 * such as the internal views of a child cagg, have to go as well.
+		 */
+		performDeletion(&user_view, DROP_CASCADE, 0);
 	}
 
 	if (OidIsValid(mat_hypertable.objectId))

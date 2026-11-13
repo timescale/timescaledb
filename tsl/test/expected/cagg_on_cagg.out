@@ -5656,3 +5656,563 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 0.00116 secs] sho
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
 psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+-- ########################################################
+-- ## DROP tests
+-- ########################################################
+\set MAT_ONLY_1ST true
+\set MAT_ONLY_2TH true
+\set MAT_ONLY_3TH true
+\ir include/cagg_on_cagg_drop.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- DROP of a 3 level hierarchy of CAGGs on CAGGs, materialized_only
+-- taken from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE TABLE drop_raw (time TIMESTAMPTZ NOT NULL, device_id INT, value FLOAT);
+SELECT table_name FROM create_hypertable('drop_raw', 'time');
+ table_name 
+------------
+ drop_raw
+
+-- Count what is left of the caggs with the given materialization hypertables
+CREATE FUNCTION cagg_drop_leftovers(mat_ids INT[])
+RETURNS TABLE (caggs BIGINT, hypertables BIGINT, internal_views BIGINT, jobs BIGINT)
+LANGUAGE SQL AS $$
+  SELECT
+    (SELECT count(*) FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = ANY(mat_ids)),
+    (SELECT count(*) FROM _timescaledb_catalog.hypertable WHERE id = ANY(mat_ids)),
+    (SELECT count(*) FROM pg_class
+      WHERE relname IN (SELECT format('_%s_view_%s', kind, id)
+                        FROM unnest(mat_ids) id, unnest(ARRAY['partial', 'direct']) kind)),
+    (SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = ANY(mat_ids));
+$$;
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+-- RESTRICT should error naming the child cagg
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+DROP MATERIALIZED VIEW drop_cagg_1;
+psql:include/cagg_on_cagg_drop.sql:28: ERROR:  cannot drop view drop_cagg_1 because other objects depend on it
+DETAIL:  continuous aggregate drop_cagg_2 depends on continuous aggregate drop_cagg_1
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+DROP MATERIALIZED VIEW drop_cagg_2;
+psql:include/cagg_on_cagg_drop.sql:29: ERROR:  cannot drop view drop_cagg_2 because other objects depend on it
+DETAIL:  continuous aggregate drop_cagg_3 depends on continuous aggregate drop_cagg_2
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     3 |           3 |              6 |    3
+
+-- RESTRICT should error even when the children are dropped by the same statement,
+-- since their internal views still depend on the parent
+\set ON_ERROR_STOP 0
+DROP MATERIALIZED VIEW drop_cagg_3, drop_cagg_2, drop_cagg_1;
+psql:include/cagg_on_cagg_drop.sql:37: ERROR:  cannot drop view drop_cagg_2 because other objects depend on it
+\set ON_ERROR_STOP 1
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     3 |           3 |              6 |    3
+
+-- CASCADE from the middle level should not affect the parent
+DROP MATERIALIZED VIEW drop_cagg_2 CASCADE;
+psql:include/cagg_on_cagg_drop.sql:42: NOTICE:  drop cascades to 2 other objects
+SELECT user_view_name FROM _timescaledb_catalog.continuous_agg WHERE user_view_name LIKE 'drop_cagg_%';
+ user_view_name 
+----------------
+ drop_cagg_1
+
+DROP MATERIALIZED VIEW drop_cagg_1;
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+-- CASCADE from the top level should drop the whole hierarchy
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+DROP MATERIALIZED VIEW drop_cagg_1 CASCADE;
+psql:include/cagg_on_cagg_drop.sql:49: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_on_cagg_drop.sql:49: NOTICE:  drop cascades to 2 other objects
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+-- Dropping the raw hypertable should drop the whole hierarchy
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+\set ON_ERROR_STOP 0
+DROP TABLE drop_raw;
+psql:include/cagg_on_cagg_drop.sql:55: ERROR:  cannot drop table drop_raw because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TABLE drop_raw CASCADE;
+psql:include/cagg_on_cagg_drop.sql:57: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_on_cagg_drop.sql:57: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_on_cagg_drop.sql:57: NOTICE:  drop cascades to 2 other objects
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+DROP FUNCTION cagg_drop_leftovers(INT[]);
+\set MAT_ONLY_1ST false
+\set MAT_ONLY_2TH false
+\set MAT_ONLY_3TH false
+\ir include/cagg_on_cagg_drop.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- DROP of a 3 level hierarchy of CAGGs on CAGGs, materialized_only
+-- taken from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE TABLE drop_raw (time TIMESTAMPTZ NOT NULL, device_id INT, value FLOAT);
+SELECT table_name FROM create_hypertable('drop_raw', 'time');
+ table_name 
+------------
+ drop_raw
+
+-- Count what is left of the caggs with the given materialization hypertables
+CREATE FUNCTION cagg_drop_leftovers(mat_ids INT[])
+RETURNS TABLE (caggs BIGINT, hypertables BIGINT, internal_views BIGINT, jobs BIGINT)
+LANGUAGE SQL AS $$
+  SELECT
+    (SELECT count(*) FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = ANY(mat_ids)),
+    (SELECT count(*) FROM _timescaledb_catalog.hypertable WHERE id = ANY(mat_ids)),
+    (SELECT count(*) FROM pg_class
+      WHERE relname IN (SELECT format('_%s_view_%s', kind, id)
+                        FROM unnest(mat_ids) id, unnest(ARRAY['partial', 'direct']) kind)),
+    (SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = ANY(mat_ids));
+$$;
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+-- RESTRICT should error naming the child cagg
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+DROP MATERIALIZED VIEW drop_cagg_1;
+psql:include/cagg_on_cagg_drop.sql:28: ERROR:  cannot drop view drop_cagg_1 because other objects depend on it
+DETAIL:  continuous aggregate drop_cagg_2 depends on continuous aggregate drop_cagg_1
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+DROP MATERIALIZED VIEW drop_cagg_2;
+psql:include/cagg_on_cagg_drop.sql:29: ERROR:  cannot drop view drop_cagg_2 because other objects depend on it
+DETAIL:  continuous aggregate drop_cagg_3 depends on continuous aggregate drop_cagg_2
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     3 |           3 |              6 |    3
+
+-- RESTRICT should error even when the children are dropped by the same statement,
+-- since their internal views still depend on the parent
+\set ON_ERROR_STOP 0
+DROP MATERIALIZED VIEW drop_cagg_3, drop_cagg_2, drop_cagg_1;
+psql:include/cagg_on_cagg_drop.sql:37: ERROR:  cannot drop view drop_cagg_2 because other objects depend on it
+\set ON_ERROR_STOP 1
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     3 |           3 |              6 |    3
+
+-- CASCADE from the middle level should not affect the parent
+DROP MATERIALIZED VIEW drop_cagg_2 CASCADE;
+psql:include/cagg_on_cagg_drop.sql:42: NOTICE:  drop cascades to 3 other objects
+SELECT user_view_name FROM _timescaledb_catalog.continuous_agg WHERE user_view_name LIKE 'drop_cagg_%';
+ user_view_name 
+----------------
+ drop_cagg_1
+
+DROP MATERIALIZED VIEW drop_cagg_1;
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+-- CASCADE from the top level should drop the whole hierarchy
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+DROP MATERIALIZED VIEW drop_cagg_1 CASCADE;
+psql:include/cagg_on_cagg_drop.sql:49: NOTICE:  drop cascades to 6 other objects
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+-- Dropping the raw hypertable should drop the whole hierarchy
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+\set ON_ERROR_STOP 0
+DROP TABLE drop_raw;
+psql:include/cagg_on_cagg_drop.sql:55: ERROR:  cannot drop table drop_raw because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TABLE drop_raw CASCADE;
+psql:include/cagg_on_cagg_drop.sql:57: NOTICE:  drop cascades to 9 other objects
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+DROP FUNCTION cagg_drop_leftovers(INT[]);
+-- Mix of real-time and materialized only caggs
+\set MAT_ONLY_1ST true
+\set MAT_ONLY_2TH false
+\set MAT_ONLY_3TH true
+\ir include/cagg_on_cagg_drop.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- DROP of a 3 level hierarchy of CAGGs on CAGGs, materialized_only
+-- taken from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE TABLE drop_raw (time TIMESTAMPTZ NOT NULL, device_id INT, value FLOAT);
+SELECT table_name FROM create_hypertable('drop_raw', 'time');
+ table_name 
+------------
+ drop_raw
+
+-- Count what is left of the caggs with the given materialization hypertables
+CREATE FUNCTION cagg_drop_leftovers(mat_ids INT[])
+RETURNS TABLE (caggs BIGINT, hypertables BIGINT, internal_views BIGINT, jobs BIGINT)
+LANGUAGE SQL AS $$
+  SELECT
+    (SELECT count(*) FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = ANY(mat_ids)),
+    (SELECT count(*) FROM _timescaledb_catalog.hypertable WHERE id = ANY(mat_ids)),
+    (SELECT count(*) FROM pg_class
+      WHERE relname IN (SELECT format('_%s_view_%s', kind, id)
+                        FROM unnest(mat_ids) id, unnest(ARRAY['partial', 'direct']) kind)),
+    (SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = ANY(mat_ids));
+$$;
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+-- RESTRICT should error naming the child cagg
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+DROP MATERIALIZED VIEW drop_cagg_1;
+psql:include/cagg_on_cagg_drop.sql:28: ERROR:  cannot drop view drop_cagg_1 because other objects depend on it
+DETAIL:  continuous aggregate drop_cagg_2 depends on continuous aggregate drop_cagg_1
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+DROP MATERIALIZED VIEW drop_cagg_2;
+psql:include/cagg_on_cagg_drop.sql:29: ERROR:  cannot drop view drop_cagg_2 because other objects depend on it
+DETAIL:  continuous aggregate drop_cagg_3 depends on continuous aggregate drop_cagg_2
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     3 |           3 |              6 |    3
+
+-- RESTRICT should error even when the children are dropped by the same statement,
+-- since their internal views still depend on the parent
+\set ON_ERROR_STOP 0
+DROP MATERIALIZED VIEW drop_cagg_3, drop_cagg_2, drop_cagg_1;
+psql:include/cagg_on_cagg_drop.sql:37: ERROR:  cannot drop view drop_cagg_2 because other objects depend on it
+\set ON_ERROR_STOP 1
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     3 |           3 |              6 |    3
+
+-- CASCADE from the middle level should not affect the parent
+DROP MATERIALIZED VIEW drop_cagg_2 CASCADE;
+psql:include/cagg_on_cagg_drop.sql:42: NOTICE:  drop cascades to 2 other objects
+SELECT user_view_name FROM _timescaledb_catalog.continuous_agg WHERE user_view_name LIKE 'drop_cagg_%';
+ user_view_name 
+----------------
+ drop_cagg_1
+
+DROP MATERIALIZED VIEW drop_cagg_1;
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+-- CASCADE from the top level should drop the whole hierarchy
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+DROP MATERIALIZED VIEW drop_cagg_1 CASCADE;
+psql:include/cagg_on_cagg_drop.sql:49: NOTICE:  drop cascades to 5 other objects
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+-- Dropping the raw hypertable should drop the whole hierarchy
+\ir cagg_on_cagg_drop_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create a 3 level hierarchy on top of drop_raw, materialized_only taken
+-- from MAT_ONLY_1ST, MAT_ONLY_2TH and MAT_ONLY_3TH
+CREATE MATERIALIZED VIEW drop_cagg_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_1ST) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, sum(value) AS value
+FROM drop_raw
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_2TH) AS
+SELECT time_bucket('1 day', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_1
+GROUP BY 1, 2
+WITH NO DATA;
+CREATE MATERIALIZED VIEW drop_cagg_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=:MAT_ONLY_3TH) AS
+SELECT time_bucket('1 week', bucket) AS bucket, device_id, sum(value) AS value
+FROM drop_cagg_2
+GROUP BY 1, 2
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('drop_cagg_1', NULL, INTERVAL '1 hour', INTERVAL '1 hour') AS job_1,
+       add_continuous_aggregate_policy('drop_cagg_2', NULL, INTERVAL '1 day', INTERVAL '1 hour') AS job_2,
+       add_continuous_aggregate_policy('drop_cagg_3', NULL, INTERVAL '1 week', INTERVAL '1 hour') AS job_3 \gset
+-- Remember the materialization hypertables to check for leftovers after a drop
+SELECT array_agg(mat_hypertable_id ORDER BY mat_hypertable_id) AS mat_ids
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name LIKE 'drop_cagg_%' \gset
+\set ON_ERROR_STOP 0
+DROP TABLE drop_raw;
+psql:include/cagg_on_cagg_drop.sql:55: ERROR:  cannot drop table drop_raw because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TABLE drop_raw CASCADE;
+psql:include/cagg_on_cagg_drop.sql:57: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_on_cagg_drop.sql:57: NOTICE:  drop cascades to 5 other objects
+SELECT * FROM cagg_drop_leftovers(:'mat_ids');
+ caggs | hypertables | internal_views | jobs 
+-------+-------------+----------------+------
+     0 |           0 |              0 |    0
+
+DROP FUNCTION cagg_drop_leftovers(INT[]);
