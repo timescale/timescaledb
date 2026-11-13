@@ -2283,3 +2283,5 @@ where ts > now() - interval '10 years' group by b order by b limit 5;
  Wed Dec 31 16:04:00 2025 PST |     6
 
 reset enable_hashagg;
+
+-- boop
