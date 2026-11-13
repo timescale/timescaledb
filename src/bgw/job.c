@@ -1223,6 +1223,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		ts_begin_tss_store_callback();
 	}
 
+	ts_bgw_job_execution_begin();
+
 	PG_TRY();
 	{
 		/*
@@ -1300,6 +1302,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		PopActiveSnapshot();
 		CommitTransactionCommand();
+		ts_bgw_job_execution_end();
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
@@ -1336,6 +1339,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	PopActiveSnapshot();
 	CommitTransactionCommand();
+	ts_bgw_job_execution_end();
 
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, start);
