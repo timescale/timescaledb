@@ -413,3 +413,48 @@ DROP TABLE rsi_integrity CASCADE;
 DROP FUNCTION show_compressed_columns(regclass);
 DROP FUNCTION show_chunk_index(regclass);
 DROP FUNCTION dump_sparse_metadata(regclass);
+
+-- Test rebuilding NULL chunk sparse index
+CREATE TABLE tnull_sparse_index(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('tnull_sparse_index', 'time');
+INSERT INTO tnull_sparse_index VALUES ('2024-01-01 00:00:00+00', 1, 1);
+ALTER TABLE tnull_sparse_index SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+ALTER TABLE tnull_sparse_index RESET (timescaledb.compress_index);
+SET timescaledb.auto_sparse_indexes = off;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('tnull_sparse_index') c;
+ALTER TABLE tnull_sparse_index SET (timescaledb.compress_index = 'bloom(v)');
+
+-- Should not crash
+SELECT _timescaledb_functions.rebuild_sparse_index(c) FROM show_chunks('tnull_sparse_index') c;
+
+-- Should not crash
+SELECT count(*) FROM tnull_sparse_index;
+
+DROP TABLE tnull_sparse_index CASCADE;
+
+-- Test correct results with rebuilt sparse indexes
+CREATE TABLE test_rebuild(time timestamptz NOT NULL, device int, v int);
+SELECT table_name FROM create_hypertable('test_rebuild', 'time');
+INSERT INTO test_rebuild VALUES
+  ('2024-01-01 00:00:00+00', 1, 10),
+  ('2024-01-01 00:01:00+00', 1, 20),
+  ('2024-01-01 00:02:00+00', 1, 30),
+  ('2024-01-01 00:03:00+00', 2, 40),
+  ('2024-01-01 00:04:00+00', 2, 50);
+ALTER TABLE test_rebuild SET (
+  timescaledb.compress,
+  timescaledb.compress_orderby = 'time',
+  timescaledb.compress_segmentby = 'device'
+);
+
+ALTER TABLE test_rebuild RESET (timescaledb.compress_index);
+SET timescaledb.auto_sparse_indexes = off;
+SELECT count(compress_chunk(c)) FROM show_chunks('test_rebuild') c;
+ALTER TABLE test_rebuild SET (timescaledb.compress_index = 'bloom(v)');
+
+SELECT _timescaledb_functions.rebuild_sparse_index(c) FROM show_chunks('test_rebuild') c;
+-- Should return 3 rows
+SELECT time, device, v FROM test_rebuild WHERE time >= '2024-01-01 00:02:00+00' ORDER BY time, device;
+
+drop table test_rebuild cascade;

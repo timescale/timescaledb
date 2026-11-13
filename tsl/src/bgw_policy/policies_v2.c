@@ -11,6 +11,7 @@
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/float.h>
+#include <utils/tuplestore.h>
 
 #include "compat/compat.h"
 #include "bgw/job.h"
@@ -109,6 +110,12 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	{
 		Assert(list_length(jobs) == 1);
 		orig_ht_reten_job = linitial(jobs);
+		/* A drop_created_before policy has no drop_after to check the refresh window against */
+		if (ts_jsonb_get_str_field(orig_ht_reten_job->fd.config,
+								   POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE))
+		{
+			orig_ht_reten_job = NULL;
+		}
 	}
 
 	if (all_policies.refresh)
@@ -469,6 +476,7 @@ policies_alter(PG_FUNCTION_ARGS)
 	List *jobs;
 	ListCell *lc;
 	bool if_exists = false, found, start_found, end_found;
+	bool created_before_retention = false;
 	policies_info all_policies = { .refresh = NULL, .compress = NULL, .retention = NULL };
 	refresh_policy ref;
 	compression_policy comp;
@@ -605,6 +613,12 @@ policies_alter(PG_FUNCTION_ARGS)
 									 .drop_after = 0,
 									 .drop_after_type = InvalidOid };
 			ret = tmp;
+			/* A drop_created_before policy has no drop_after to check against */
+			if (ts_jsonb_get_str_field(job->fd.config, POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE))
+			{
+				created_before_retention = true;
+				continue;
+			}
 			all_policies.retention = &ret;
 			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
@@ -672,7 +686,11 @@ policies_alter(PG_FUNCTION_ARGS)
 	}
 	if (!PG_ARGISNULL(5))
 	{
-		if (!all_policies.retention)
+		if (created_before_retention)
+		{
+			all_policies.retention = &ret;
+		}
+		else if (!all_policies.retention)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no retention job found")));
@@ -719,12 +737,10 @@ Datum
 policies_show(PG_FUNCTION_ARGS)
 {
 	Oid rel_oid = PG_GETARG_OID(0);
+	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	Oid type;
 	ContinuousAgg *cagg;
 	ListCell *lc;
-	FuncCallContext *funcctx;
-	static List *jobs;
-	JsonbInState parse_state = { 0 };
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -738,37 +754,16 @@ policies_show(PG_FUNCTION_ARGS)
 
 	type = IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
 
-	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	if (SRF_IS_FIRSTCALL())
-	{
-		MemoryContext oldcontext;
+	InitMaterializedSRF(fcinfo, MAT_SRF_USE_EXPECTED_DESC);
 
-		funcctx = SRF_FIRSTCALL_INIT();
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
-		/* Use top-level memory context to preserve the global static list */
-		jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
-
-		funcctx->user_fctx = list_head(jobs);
-		MemoryContextSwitchTo(oldcontext);
-	}
-
-	funcctx = SRF_PERCALL_SETUP();
-	lc = (ListCell *) funcctx->user_fctx;
-
-	/*
-	 * clang doesn't understand that jobs won't be NIL due to the above FIRSTCALL. However
-	 * it's also possible that the ts_bgw_job_find_by_hypertable_id function above doesn't
-	 * find a job for this hypertable
-	 */
-	if (lc == NULL || jobs == NULL)
-	{
-		SRF_RETURN_DONE(funcctx);
-	}
-	else
+	foreach (lc, ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id))
 	{
 		BgwJob *job = lfirst(lc);
+		JsonbInState parse_state = { 0 };
+		Datum value;
+		bool isnull = false;
 
+		pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 		if (!namestrcmp(&(job->fd.proc_name), POLICY_REFRESH_CAGG_PROC_NAME))
 		{
 			ts_jsonb_add_str(&parse_state,
@@ -822,12 +817,11 @@ policies_show(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("\"%s\" unsupported proc", NameStr(job->fd.proc_name))));
 		}
-
 		pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
-		JsonbValue *result = parse_state.result;
 
-		funcctx->user_fctx = lnext(jobs, (ListCell *) funcctx->user_fctx);
-		SRF_RETURN_NEXT(funcctx, PointerGetDatum(JsonbValueToJsonb(result)));
+		value = PointerGetDatum(JsonbValueToJsonb(parse_state.result));
+		tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc, &value, &isnull);
 	}
-	PG_RETURN_NULL();
+
+	PG_RETURN_VOID();
 }

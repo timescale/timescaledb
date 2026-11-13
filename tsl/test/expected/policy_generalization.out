@@ -195,3 +195,99 @@ SELECT remove_retention_policy('test_retention_ts');
  
 
 DROP TABLE test_retention_ts;
+-- add_policies/alter_policies on a cagg whose hypertable has a drop_created_before retention policy
+CREATE TABLE test_cagg_ret(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION);
+SELECT create_hypertable('test_cagg_ret', 'time');
+     create_hypertable      
+----------------------------
+ (3,public,test_cagg_ret,t)
+
+SELECT add_retention_policy('test_cagg_ret', drop_created_before => INTERVAL '30 days');
+ add_retention_policy 
+----------------------
+                 1004
+
+CREATE MATERIALIZED VIEW test_cagg_ret_daily WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, avg(value) FROM test_cagg_ret GROUP BY 1 WITH NO DATA;
+ALTER MATERIALIZED VIEW test_cagg_ret_daily SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to bucket
+SELECT timescaledb_experimental.add_policies('test_cagg_ret_daily',
+    refresh_start_offset => INTERVAL '10 days', refresh_end_offset => INTERVAL '1 day',
+    compress_after => INTERVAL '20 days');
+ add_policies 
+--------------
+ t
+
+SELECT timescaledb_experimental.alter_policies('test_cagg_ret_daily',
+    refresh_start_offset => INTERVAL '12 days');
+ alter_policies 
+----------------
+ t
+
+SELECT timescaledb_experimental.remove_all_policies('test_cagg_ret_daily');
+ remove_all_policies 
+---------------------
+ t
+
+DROP MATERIALIZED VIEW test_cagg_ret_daily;
+DROP TABLE test_cagg_ret;
+-- alter_policies on a cagg that has a drop_created_before retention policy itself
+CREATE TABLE test_cagg_ret2(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION);
+SELECT create_hypertable('test_cagg_ret2', 'time');
+      create_hypertable      
+-----------------------------
+ (5,public,test_cagg_ret2,t)
+
+CREATE MATERIALIZED VIEW test_cagg_ret2_daily WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, avg(value) FROM test_cagg_ret2 GROUP BY 1 WITH NO DATA;
+SELECT add_continuous_aggregate_policy('test_cagg_ret2_daily',
+    start_offset => INTERVAL '10 days', end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour');
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1008
+
+SELECT add_retention_policy('test_cagg_ret2_daily', drop_created_before => INTERVAL '30 days');
+ add_retention_policy 
+----------------------
+                 1009
+
+SELECT timescaledb_experimental.alter_policies('test_cagg_ret2_daily',
+    refresh_start_offset => INTERVAL '12 days');
+ alter_policies 
+----------------
+ t
+
+-- replacing it with a drop_after policy
+SELECT timescaledb_experimental.alter_policies('test_cagg_ret2_daily',
+    drop_after => INTERVAL '40 days');
+ alter_policies 
+----------------
+ t
+
+SELECT config FROM timescaledb_information.jobs
+WHERE hypertable_name = 'test_cagg_ret2_daily' AND proc_name = 'policy_retention';
+                     config                      
+-------------------------------------------------
+ {"drop_after": "@ 40 days", "hypertable_id": 6}
+
+SELECT timescaledb_experimental.remove_all_policies('test_cagg_ret2_daily');
+ remove_all_policies 
+---------------------
+ t
+
+DROP MATERIALIZED VIEW test_cagg_ret2_daily;
+DROP TABLE test_cagg_ret2;
+-- alter_job rejects a retention policy config without drop_after
+CREATE TABLE test_retention_null(time timestamptz NOT NULL, value float);
+SELECT create_hypertable('test_retention_null', 'time');
+        create_hypertable         
+----------------------------------
+ (7,public,test_retention_null,t)
+
+SELECT add_retention_policy('test_retention_null', INTERVAL '1 year') AS ret_null_job_id \gset
+\set ON_ERROR_STOP 0
+SELECT alter_job(:ret_null_job_id, config_merge => '{"drop_after": null}');
+ERROR:  could not find drop_after in config for job
+\set ON_ERROR_STOP 1
+DROP TABLE test_retention_null;

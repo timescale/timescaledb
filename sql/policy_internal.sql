@@ -85,7 +85,7 @@ BEGIN
           _sqlstate = RETURNED_SQLSTATE;
       RAISE WARNING 'compaction policy failed to compact chunk "%"',
           chunk_rec.relid
-          USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
+          USING DETAIL = pg_catalog.format('Message: (%s), Detail: (%s).', _message, _detail),
                 ERRCODE = _sqlstate;
       chunks_failure := chunks_failure + 1;
     END;
@@ -107,7 +107,7 @@ BEGIN
 
   IF chunks_failure > 0 THEN
     RAISE WARNING 'compaction policy completed with some failures'
-      USING DETAIL = format('Failed to compact %L chunks. Successfully compacted %L chunks.', chunks_failure, numchunks);
+      USING DETAIL = pg_catalog.format('Failed to compact %L chunks. Successfully compacted %L chunks.', chunks_failure, numchunks);
   END IF;
 END;
 $$ LANGUAGE PLPGSQL;
@@ -164,7 +164,7 @@ BEGIN
   -- control so we adjust search_path in procedure body
   SET LOCAL search_path TO pg_catalog, pg_temp;
 
-  SELECT format('%I.%I', schema_name, table_name) INTO htoid
+  SELECT pg_catalog.format('%I.%I', schema_name, table_name) INTO htoid
   FROM _timescaledb_catalog.hypertable
   WHERE id = htid;
 
@@ -217,11 +217,17 @@ BEGIN
           _detail = PG_EXCEPTION_DETAIL,
           _sqlstate = RETURNED_SQLSTATE;
       RAISE WARNING 'converting chunk "%" to columnstore failed when recompress columnstore policy is executed', chunk_rec.oid::regclass::text
-          USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
+          USING DETAIL = pg_catalog.format('Message: (%s), Detail: (%s).', _message, _detail),
                 ERRCODE = _sqlstate;
       chunks_failure := chunks_failure + 1;
     END;
     COMMIT;
+
+    -- SET LOCAL is only active until end of transaction.
+    -- While we could use SET at the start of the function we do not
+    -- want to bleed out search_path to caller, so we do SET LOCAL
+    -- again after COMMIT
+    SET LOCAL search_path TO pg_catalog, pg_temp;
 
     -- went through recompression successfully now reindex indexes
     IF (chunk_rec.status & bit_compressed_partial = bit_compressed_partial) AND (reindex_enabled IS TRUE) THEN
@@ -234,25 +240,21 @@ BEGIN
           AND ch.status = status_fully_compressed
       LOOP
         BEGIN
-          EXECUTE format('REINDEX INDEX %I.%I;', idx_rec.schemaname, idx_rec.indexname);
+          EXECUTE pg_catalog.format('REINDEX INDEX %I.%I;', idx_rec.schemaname, idx_rec.indexname);
         EXCEPTION WHEN OTHERS THEN
           GET STACKED DIAGNOSTICS
               _message = MESSAGE_TEXT,
               _detail = PG_EXCEPTION_DETAIL,
               _sqlstate = RETURNED_SQLSTATE;
           RAISE WARNING 'reindexing index "%.%" for chunk "%" to columnstore failed when columnstore policy is executed', idx_rec.schemaname, idx_rec.indexname, chunk_rec.oid::regclass::text
-              USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
+              USING DETAIL = pg_catalog.format('Message: (%s), Detail: (%s).', _message, _detail),
                     ERRCODE = _sqlstate;
         END;
         COMMIT;
+        SET LOCAL search_path TO pg_catalog, pg_temp;
       END LOOP;
     END IF;
 
-    -- SET LOCAL is only active until end of transaction.
-    -- While we could use SET at the start of the function we do not
-    -- want to bleed out search_path to caller, so we do SET LOCAL
-    -- again after COMMIT
-    SET LOCAL search_path TO pg_catalog, pg_temp;
     IF verbose_log THEN
        RAISE LOG 'job % completed processing chunk %.%', job_id, chunk_rec.schema_name, chunk_rec.table_name;
     END IF;
@@ -264,11 +266,11 @@ BEGIN
   IF chunks_failure > 0 THEN
     IF numchunks_compressed > 0 THEN
       RAISE WARNING 'columnstore policy completed with some failures'
-        USING DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed);
+        USING DETAIL = pg_catalog.format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed);
     ELSE
       RAISE EXCEPTION 'columnstore policy failure'
         USING
-          DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed),
+          DETAIL = pg_catalog.format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed),
           ERRCODE = 'data_exception';
     END IF;
   END IF;

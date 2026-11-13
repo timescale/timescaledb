@@ -22,6 +22,7 @@
 #include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <catalog/pg_authid.h>
 #include <catalog/pg_database.h>
 #include <utils/snapmgr.h>
 
@@ -124,6 +125,7 @@ typedef struct DbHashEntry
 	SchedulerState state;
 	VirtualTransactionId vxid;
 	int state_transition_failures;
+	Oid owner_oid; /* role the scheduler connects as */
 } DbHashEntry;
 
 static void scheduler_state_trans_enabled_to_allocated(DbHashEntry *entry);
@@ -298,6 +300,12 @@ ts_bgw_cluster_launcher_init(void)
 							/* assign_hook= */ NULL,
 							/* show_hook= */ NULL);
 
+	/* No schedulers run during pg_upgrade, so skip the launcher too. */
+	if (IsBinaryUpgrade)
+	{
+		return;
+	}
+
 	memset(&worker, 0, sizeof(worker));
 	/* set up worker settings for our main worker */
 	snprintf(worker.bgw_name, BGW_MAXLEN, TS_BGW_TYPE_LAUNCHER);
@@ -317,6 +325,14 @@ ts_bgw_cluster_launcher_init(void)
 	RegisterBackgroundWorker(&worker);
 }
 
+/* Data passed from the launcher to the scheduler through bgw_extra. */
+typedef struct SchedulerBgwExtra
+{
+	VirtualTransactionId vxid;
+	/* Role the scheduler connects as. InvalidOid if the database is gone. */
+	Oid owner_oid;
+} SchedulerBgwExtra;
+
 /*
  * Register a background worker that calls the main TimescaleDB background
  * worker launcher library (i.e. loader) and uses the scheduler entrypoint
@@ -325,10 +341,17 @@ ts_bgw_cluster_launcher_init(void)
  * bgw_extra field of the BgWorker.
  */
 static bool
-register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorkerHandle **handle)
+register_entrypoint_for_db(Oid db_id, Oid owner_oid, VirtualTransactionId vxid,
+						   BackgroundWorkerHandle **handle)
 {
 	BackgroundWorker worker;
 	int restart_time_sec = ts_guc_bgw_scheduler_restart_time_sec;
+	SchedulerBgwExtra extra = {
+		.vxid = vxid,
+		.owner_oid = owner_oid,
+	};
+
+	StaticAssertStmt(sizeof(SchedulerBgwExtra) <= BGW_EXTRALEN, "scheduler bgw_extra too large");
 
 	/* BGW_NEVER_RESTART is typically -1, but we check that explicitly here in
 	 * case PostgreSQL changes it. Compiler should optimize this away if they
@@ -348,7 +371,7 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 	snprintf(worker.bgw_function_name, BGW_MAXLEN, BGW_ENTRYPOINT_FUNCNAME);
 	worker.bgw_notify_pid = MyProcPid;
 	worker.bgw_main_arg = ObjectIdGetDatum(db_id);
-	memcpy(worker.bgw_extra, &vxid, sizeof(VirtualTransactionId));
+	memcpy(worker.bgw_extra, &extra, sizeof(extra));
 
 	return RegisterDynamicBackgroundWorker(&worker, handle);
 }
@@ -382,6 +405,7 @@ db_hash_entry_create_if_not_exists(HTAB *db_htab, Oid db_oid)
 	{
 		db_he->db_scheduler_handle = NULL;
 		db_he->state = ENABLED;
+		db_he->owner_oid = InvalidOid;
 		SetInvalidVirtualTransactionId(db_he->vxid);
 		db_he->state_transition_failures = 0;
 
@@ -475,6 +499,32 @@ terminate_backends_by_backend_type(const char *backend_type)
 }
 
 /*
+ * Role the scheduler for a database connects as. PG16 has no way to bypass
+ * the login check for background workers, so owners without LOGIN fall back
+ * to superuser there.
+ */
+static Oid
+scheduler_owner_oid(Oid datdba)
+{
+#if PG17_LT
+	HeapTuple tup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(datdba));
+	bool canlogin;
+
+	if (!HeapTupleIsValid(tup))
+	{
+		return InvalidOid;
+	}
+	canlogin = ((Form_pg_authid) GETSTRUCT(tup))->rolcanlogin;
+	ReleaseSysCache(tup);
+	if (!canlogin)
+	{
+		return InvalidOid;
+	}
+#endif
+	return datdba;
+}
+
+/*
  * Model this on autovacuum.c -> get_database_list.
  *
  * Note that we are not doing all the things around memory context that they
@@ -489,6 +539,7 @@ populate_database_htab(HTAB *db_htab)
 	Relation rel;
 	TableScanDesc scan;
 	HeapTuple tup;
+	DbHashEntry *entry;
 
 	/*
 	 * by this time we should already be connected to the db, and only have
@@ -509,7 +560,9 @@ populate_database_htab(HTAB *db_htab)
 			continue; /* don't bother with dbs that don't allow
 					   * connections or are templates */
 		}
-		db_hash_entry_create_if_not_exists(db_htab, pgdb->oid);
+		entry = db_hash_entry_create_if_not_exists(db_htab, pgdb->oid);
+		/* Refresh every time so an owner change applies on the next start. */
+		entry->owner_oid = scheduler_owner_oid(pgdb->datdba);
 	}
 	table_endscan(scan);
 	table_close(rel, AccessShareLock);
@@ -570,8 +623,10 @@ scheduler_state_trans_allocated_to_started(DbHashEntry *entry)
 	Assert(entry->state == ALLOCATED);
 	Assert(entry->db_scheduler_handle == NULL);
 
-	worker_registered =
-		register_entrypoint_for_db(entry->db_oid, entry->vxid, &entry->db_scheduler_handle);
+	worker_registered = register_entrypoint_for_db(entry->db_oid,
+												   entry->owner_oid,
+												   entry->vxid,
+												   &entry->db_scheduler_handle);
 
 	if (!worker_registered)
 	{
@@ -810,6 +865,13 @@ launcher_handle_message(HTAB *db_htab)
 	if (message == NULL)
 	{
 		return false;
+	}
+
+	/* A database created after the loop's scan has no entry yet. Rescan so
+	 * its owner is known before a scheduler is started for it. */
+	if (hash_search(db_htab, &message->db_oid, HASH_FIND, NULL) == NULL)
+	{
+		populate_database_htab(db_htab);
 	}
 
 	sender = BackendPidGetProc(message->sender_pid);
@@ -1119,7 +1181,9 @@ extern Datum
 ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 {
 	Oid db_id = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
-	VirtualTransactionId vxid;
+	SchedulerBgwExtra extra;
+
+	memcpy(&extra, MyBgworkerEntry->bgw_extra, sizeof(extra));
 
 	pqsignal(SIGINT, StatementCancelHandler);
 	pqsignal(SIGTERM, die);
@@ -1130,7 +1194,15 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	 * a FATAL error, which might trigger restarts, so we override this check
 	 * and do it ourselves.
 	 */
-	BackgroundWorkerInitializeConnectionByOid(db_id, InvalidOid, BGWORKER_BYPASS_ALLOWCONN);
+	int flags = BGWORKER_BYPASS_ALLOWCONN;
+
+#if PG17_GE
+	/* The owner does not need LOGIN for this, so bypass that check. */
+	flags |= BGWORKER_BYPASS_ROLELOGINCHECK;
+#endif
+
+	/* Connect as the database owner rather than as superuser. */
+	BackgroundWorkerInitializeConnectionByOid(db_id, extra.owner_oid, flags);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 
 	/*
@@ -1141,10 +1213,9 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	 */
 	StartTransactionCommand();
 	(void) GetTransactionSnapshot();
-	memcpy(&vxid, MyBgworkerEntry->bgw_extra, sizeof(VirtualTransactionId));
-	if (VirtualTransactionIdIsValid(vxid))
+	if (VirtualTransactionIdIsValid(extra.vxid))
 	{
-		VirtualXactLock(vxid, true);
+		VirtualXactLock(extra.vxid, true);
 	}
 	CommitTransactionCommand();
 
