@@ -49,10 +49,12 @@ SELECT * FROM my_jobs;
 -- a normal user. We test both users with superuser privileges and
 -- default permissions.
 \set ON_ERROR_STOP 0
+\set VERBOSITY sqlstate
 REASSIGN OWNED BY another_user TO :ROLE_SUPERUSER;
-ERROR:  permission denied to reassign objects
+ERROR:  42501
 REASSIGN OWNED BY another_user TO :ROLE_DEFAULT_PERM_USER;
-ERROR:  permission denied to reassign objects
+ERROR:  42501
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
 RESET ROLE;
 -- Test that renaming a user changes keeps the job assigned to that user.

@@ -54,8 +54,10 @@ SELECT * FROM my_jobs;
 -- a normal user. We test both users with superuser privileges and
 -- default permissions.
 \set ON_ERROR_STOP 0
+\set VERBOSITY sqlstate
 REASSIGN OWNED BY another_user TO :ROLE_SUPERUSER;
 REASSIGN OWNED BY another_user TO :ROLE_DEFAULT_PERM_USER;
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
