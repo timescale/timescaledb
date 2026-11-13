@@ -32,6 +32,9 @@ min_percent_authorship_for_extra_reviewer: 0
 # minimum number of lines that must be changed to add an extra reviewer (set to 0 to disable)
 min_lines_changed_for_extra_reviewer: 0
 
+# do not create a separate notification message and just use the "request review" feature of GitHub
+notification_channels: []
+
 # require a user to be listed in the reviewers section in order to be assigned to a pull request
 require_notification: true
 
