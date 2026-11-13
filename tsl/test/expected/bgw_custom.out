@@ -1185,11 +1185,13 @@ SELECT ts_test_bgw_job_function_call_string(:job_proc);
 ----------------------------------------------------------
  CALL public.custom_proc('1022', '{"type": "procedure"}')
 
--- Remove the procedure and let's check it errors out when we try to call the function that gets the proc name
-DROP PROCEDURE custom_proc(jobid int, args jsonb);
+-- Point the job at a procedure that does not exist (dropping the procedure
+-- is blocked while a job depends on it) and check that building the call
+-- string errors out.
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'custom_proc_missing' WHERE id = :job_proc;
 \set ON_ERROR_STOP 0
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
-ERROR:  function or procedure "public.custom_proc(integer, jsonb)" does not exist
+ERROR:  function or procedure "public.custom_proc_missing(integer, jsonb)" does not exist
 \set ON_ERROR_STOP 1
 SELECT delete_job(:job_func);
  delete_job 
@@ -1276,3 +1278,33 @@ SELECT delete_job(:job_owner_custom);
  
 
 DROP TABLE owner_ht;
+-- The config check function runs as the job owner even when another
+-- role alters the job
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE check_caller_log(caller name);
+GRANT INSERT ON check_caller_log TO PUBLIC;
+CREATE FUNCTION check_caller(config jsonb) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO public.check_caller_log VALUES (current_user);
+END
+$$;
+SELECT add_job('custom_func', '1h', config => '{}', check_config => 'check_caller') AS job_check_caller \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT scheduled FROM alter_job(:job_check_caller, scheduled => false);
+ scheduled 
+-----------
+ f
+
+SELECT caller FROM check_caller_log;
+      caller       
+-------------------
+ default_perm_user
+ default_perm_user
+
+SELECT delete_job(:job_check_caller);
+ delete_job 
+------------
+ 
+
+DROP TABLE check_caller_log;
+DROP FUNCTION check_caller;

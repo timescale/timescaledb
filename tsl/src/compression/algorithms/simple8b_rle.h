@@ -243,8 +243,11 @@ simple8brle_serialized_recv(StringInfo buffer)
 	uint32 i;
 	uint32 num_elements = pq_getmsgint32(buffer);
 	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(num_elements > 0);
 	uint32 num_blocks = pq_getmsgint32(buffer);
 	CheckCompressedData(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(num_blocks > 0);
+	CheckCompressedData(num_elements >= num_blocks);
 	uint32 num_selector_slots = SIMPLE8B_NUM_SELECTORS_FOR_NBLOCKS(num_blocks);
 	Simple8bRleSerialized *data;
 	Size compressed_size =
@@ -274,8 +277,11 @@ simple8brle_serialized_recv_into(StringInfo buffer, void *dest, Simple8bRleSeria
 	uint32 i;
 	uint32 num_elements = pq_getmsgint32(buffer);
 	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(num_elements > 0);
 	uint32 num_blocks = pq_getmsgint32(buffer);
 	CheckCompressedData(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(num_blocks > 0);
+	CheckCompressedData(num_elements >= num_blocks);
 	uint32 num_selector_slots = SIMPLE8B_NUM_SELECTORS_FOR_NBLOCKS(num_blocks);
 
 	Size compressed_size =

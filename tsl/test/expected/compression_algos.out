@@ -2544,10 +2544,27 @@ CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, u as item FROM uuid
 DROP TABLE base_uuids;
 RESET timescaledb.enable_uuid_compression;
 DROP table uuid_set;
--- Corrupt compressed data with zero header
+-- Deeply nested compressed data must not overflow the stack.
 \set ON_ERROR_STOP 0
+SELECT replace(encode(
+  (SELECT string_agg(
+       '\x0100'::bytea                                          -- ARRAY, has_nulls = 0
+       || convert_to('_timescaledb_internal', 'UTF8') || '\x00' -- element type namespace
+       || convert_to('compressed_data', 'UTF8') || '\x00'       -- element type name
+       || '\x0001'                                              -- has_nulls = 0, use_binary = 1
+       || int4send(1)                                           -- one element
+       || int4send(50 * (200000 - i) + 1),                      -- size of the nested element
+       ''::bytea ORDER BY i)
+   FROM generate_series(1, 200000) i)
+  || '\x06'                                                     -- innermost: NULL algorithm
+, 'base64'), E'\n', '')::_timescaledb_internal.compressed_data;
+ERROR:  stack depth limit exceeded
+-- Corrupt compressed data with zero header
 SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
 ERROR:  the compressed data is corrupt
+-- Corrupt bool compressed data with zero elements
+SELECT 'BQAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAA='::_timescaledb_internal.compressed_data;
+ERROR:  the compressed data is corrupt at character 8
 \set ON_ERROR_STOP 1
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
@@ -2576,8 +2593,8 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   315 | XX001       | XX001
-    24 | 08P01       | 08P01
+   336 | XX001       | XX001
+     8 | 08P01       | 08P01
      1 | false       | false
      1 | true        | true
 
@@ -2591,8 +2608,8 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   259 | XX001       | XX001
-    14 | 08P01       | 08P01
+   263 | XX001       | XX001
+    10 | 08P01       | 08P01
      2 | true        | true
      1 | false       | false
 
@@ -2650,8 +2667,8 @@ group by 2, 3 order by 1 desc
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
     18 | true        | true
-    14 | XX001       | XX001
-     8 | 08P01       | 08P01
+    15 | XX001       | XX001
+     7 | 08P01       | 08P01
      2 | 3F000       | 3F000
      2 | false       | false
      1 | 22021       | 22021
@@ -2666,10 +2683,10 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   108 | XX001       | XX001
+   109 | XX001       | XX001
      8 | 22021       | 22021
-     6 | 08P01       | 08P01
      5 | true        | true
+     5 | 08P01       | 08P01
      1 | XX001       | true
      1 | false       | false
      1 | true        | XX001

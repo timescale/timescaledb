@@ -9,7 +9,7 @@ name: Code style
 jobs:
   cmake_checks:
     name: Check CMake files
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - name: Install prerequisites
         run: pip install cmakelang
@@ -24,10 +24,12 @@ jobs:
 
   perl_checks:
     name: Check Perl code in tree
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - name: Install prerequisites
-        run: sudo apt install perltidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y perltidy
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check trailing whitespace
@@ -44,7 +46,7 @@ jobs:
 
   yaml_checks:
     name: Check YAML code in tree
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - name: Install prerequisites
         run: |
@@ -57,7 +59,7 @@ jobs:
 
   workflow_checks:
     name: Check GitHub Actions workflows
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     env:
       ACTIONLINT_VERSION: 1.7.12
       ACTIONLINT_SHA256: 325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
@@ -84,7 +86,7 @@ jobs:
 
   spelling_checks:
     name: Check spelling
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - name: Install prerequisites
         run: |
@@ -98,7 +100,7 @@ jobs:
 
   cc_checks:
     name: Check code formatting
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     strategy:
       fail-fast: false
     env:
@@ -123,8 +125,8 @@ jobs:
         gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 || gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys 15CF4D18AF4F7421
         gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
 
-        . /etc/os-release
-        echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+        # apt.llvm.org has no LLVM 17 suite for Ubuntu 26.04, so use the 24.04 one
+        echo "deb https://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
         sudo apt-get update
 
         sudo apt-get install clang-format-${LLVM_VER}
@@ -154,7 +156,7 @@ jobs:
 
   clang_tidy:
     name: clang-tidy
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     env:
       LLVM_VER: 17
     steps:
@@ -164,8 +166,8 @@ jobs:
         gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 || gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys 15CF4D18AF4F7421
         gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
 
-        . /etc/os-release
-        echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+        # apt.llvm.org has no LLVM 17 suite for Ubuntu 26.04, so use the 24.04 one
+        echo "deb https://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
         sudo apt-get update
 
         sudo apt-get install clang-${LLVM_VER} lld-${LLVM_VER} clang-tidy-${LLVM_VER}
@@ -235,7 +237,7 @@ jobs:
 
   python_checks:
     name: Check Python code in tree
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - name: Install prerequisites
         run: |
@@ -262,7 +264,7 @@ jobs:
 
   misc_checks:
     name: Check license, update scripts, git hooks, missing gitignore entries and unnecessary template tests
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     strategy:
       fail-fast: false
     steps:
