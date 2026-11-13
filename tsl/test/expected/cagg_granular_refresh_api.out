@@ -267,12 +267,46 @@ ALTER TABLE metrics ALTER COLUMN device_id DROP NOT NULL;
 ALTER TABLE metrics ALTER COLUMN value TYPE numeric;
 ALTER TABLE metrics RENAME COLUMN value TO reading;
 ALTER TABLE metrics DROP COLUMN reading;
+-- Granular refresh column can be a DOMAIN type, so block it from being dropped via DROP DOMAIN...CASCADE
+CREATE DOMAIN device_dom AS integer;
+CREATE TABLE metrics_dom (time timestamptz NOT NULL, device_id device_dom, value float8);
+SELECT create_hypertable('metrics_dom', 'time', chunk_time_interval => '1 day'::interval);
+    create_hypertable     
+--------------------------
+ (2,public,metrics_dom,t)
+
+ALTER TABLE metrics_dom SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = '30 days',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+\set ON_ERROR_STOP 0
+-- Blocked
+DROP DOMAIN device_dom CASCADE;
+NOTICE:  drop cascades to column device_id of table metrics_dom
+ERROR:  cannot drop column "device_id" used to set up granular refresh
+\set ON_ERROR_STOP 1
+:GRC 'metrics_dom';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics_dom     | device_id               | 30 days                       | 1 day
+
+-- Once granular refresh is turned off, the domain can be dropped.
+ALTER TABLE metrics_dom SET (timescaledb.cagg_enable_granular_refresh = false);
+DROP DOMAIN device_dom CASCADE;
+NOTICE:  drop cascades to column device_id of table metrics_dom
+:GRC 'metrics_dom';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+
+DROP TABLE metrics_dom;
 -- Integer-time hypertable: offsets are interpreted as integers.
 CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
 SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
     create_hypertable     
 --------------------------
- (2,public,metrics_int,t)
+ (3,public,metrics_int,t)
 
 \set ON_ERROR_STOP 0
 -- Error: offsets must not be negative.
@@ -339,7 +373,7 @@ CREATE TABLE sensors (time timestamptz NOT NULL, sensor_id integer, temp float8)
 SELECT create_hypertable('sensors', 'time', chunk_time_interval => '1 day'::interval);
   create_hypertable   
 ----------------------
- (3,public,sensors,t)
+ (4,public,sensors,t)
 
 CREATE MATERIALIZED VIEW sensors_hourly
 WITH (timescaledb.continuous) AS
@@ -452,7 +486,7 @@ CREATE TABLE readings (time timestamptz NOT NULL, sensor_id integer, location te
 SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::interval);
    create_hypertable   
 -----------------------
- (5,public,readings,t)
+ (6,public,readings,t)
 
 ALTER TABLE readings SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -482,7 +516,7 @@ CREATE TABLE devices (time timestamptz NOT NULL, device_id integer, value float8
 SELECT create_hypertable('devices', 'time', chunk_time_interval => '1 day'::interval);
   create_hypertable   
 ----------------------
- (7,public,devices,t)
+ (8,public,devices,t)
 
 ALTER TABLE devices SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -533,7 +567,7 @@ SELECT create_hypertable('events', 'time', chunk_time_interval => '1 day'::inter
 WARNING:  column type "timestamp without time zone" used for "event_time" does not follow best practices
   create_hypertable   
 ----------------------
- (10,public,events,t)
+ (11,public,events,t)
 
 \set ON_ERROR_STOP 0
 ALTER TABLE events SET (
@@ -559,7 +593,7 @@ SELECT create_hypertable('char_widths', 'time', chunk_time_interval => '1 day'::
 WARNING:  column type "character varying" used for "unpadded" does not follow best practices
      create_hypertable     
 ---------------------------
- (11,public,char_widths,t)
+ (12,public,char_widths,t)
 
 \set ON_ERROR_STOP 0
 ALTER TABLE char_widths SET (
@@ -590,7 +624,7 @@ SELECT create_hypertable('vc_width', 'time', chunk_time_interval => '1 day'::int
 WARNING:  column type "character varying" used for "sensor" does not follow best practices
    create_hypertable    
 ------------------------
- (12,public,vc_width,t)
+ (13,public,vc_width,t)
 
 ALTER TABLE vc_width SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -624,7 +658,7 @@ CREATE TABLE meters (time timestamptz NOT NULL, meter_id integer, value float8);
 SELECT create_hypertable('meters', 'time', chunk_time_interval => '1 day'::interval);
   create_hypertable   
 ----------------------
- (13,public,meters,t)
+ (14,public,meters,t)
 
 -- Disabling when nothing is configured is a no-op, not an error.
 ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
@@ -780,7 +814,7 @@ CREATE TABLE readings (time timestamptz NOT NULL, sensor_id integer, value float
 SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::interval);
    create_hypertable    
 ------------------------
- (15,public,readings,t)
+ (16,public,readings,t)
 
 ALTER TABLE readings SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -843,7 +877,7 @@ SELECT count(*) FROM readings_hourly;
 BEGIN;
 DROP TABLE readings CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_2_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_2_chunk
 ROLLBACK;
 :GRC 'readings';
  hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
@@ -859,5 +893,5 @@ SELECT count(*) FROM readings_hourly;
      4
 
 DROP MATERIALIZED VIEW readings_hourly;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_2_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_2_chunk
 DROP TABLE readings;
