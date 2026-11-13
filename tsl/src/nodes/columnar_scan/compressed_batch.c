@@ -140,7 +140,7 @@ make_single_value_arrow_text(Datum datum, bool isnull)
 ArrowArray *
 make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 {
-	if (pgtype == TEXTOID)
+	if (pgtype == TEXTOID || pgtype == BYTEAOID)
 	{
 		return make_single_value_arrow_text(datum, isnull);
 	}
