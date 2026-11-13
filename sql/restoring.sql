@@ -8,7 +8,7 @@ DECLARE
     db text;
 BEGIN
     SELECT current_database() INTO db;
-    EXECUTE format($$ALTER DATABASE %I SET timescaledb.restoring ='on'$$, db);
+    EXECUTE pg_catalog.format($$ALTER DATABASE %I SET timescaledb.restoring ='on'$$, db);
     SET SESSION timescaledb.restoring = 'on';
     PERFORM _timescaledb_functions.stop_background_workers();
     RETURN true;
@@ -33,7 +33,7 @@ BEGIN
     END IF;
 
     SELECT current_database() INTO db;
-    EXECUTE format($$ALTER DATABASE %I RESET timescaledb.restoring $$, db);
+    EXECUTE pg_catalog.format($$ALTER DATABASE %I RESET timescaledb.restoring $$, db);
     -- we cannot use reset here because the reset_val might not be off
     SET timescaledb.restoring TO off;
     PERFORM _timescaledb_functions.restart_background_workers();

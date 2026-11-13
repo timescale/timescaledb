@@ -65,7 +65,7 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 		if (!found && !null_ok)
 		{
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 					 errmsg("could not find %s in config for existing job", json_label)));
 		}
 
@@ -101,7 +101,7 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 		if (config_value == NULL && !null_ok)
 		{
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 					 errmsg("could not find %s in config for job", json_label)));
 		}
 

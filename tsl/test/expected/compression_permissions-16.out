@@ -412,3 +412,212 @@ SELECT delete_job(:dbowner_retention_id);
 -- during teardown.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+-- Verify that compressed index on a chunk is created under chunk owner and does not gain superuser
+CREATE ROLE idx_owner LOGIN;              -- NOSUPERUSER
+CREATE SCHEMA io AUTHORIZATION idx_owner;
+SET ROLE idx_owner;
+SET search_path = io, public;
+-- compressed hypertable owned by idx_owner
+CREATE TABLE io.ht(time timestamptz NOT NULL, c int);
+SELECT table_name FROM public.create_hypertable('io.ht','time');
+ table_name 
+------------
+ ht
+
+INSERT INTO io.ht VALUES ('2020-01-01 00:00',1),('2020-01-01 02:00',2);
+ALTER TABLE io.ht SET (timescaledb.compress);
+SELECT count(public.compress_chunk(c)) FROM public.show_chunks('io.ht') c;
+ count 
+-------
+     1
+
+-- IMMUTABLE expression: runs as whoever evaluates the index expression
+CREATE FUNCTION io.loguser(x int) RETURNS int LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE u text; s bool; h text; w text;
+BEGIN
+  u := current_user;
+  SELECT rolsuper INTO s FROM pg_roles WHERE rolname = current_user;
+  RAISE WARNING 'current_user=% rolsuper=%', u, s;
+  RETURN x;
+END $$;
+-- force schema-qualified deparse (io out of search_path), then trigger
+SET search_path = pg_catalog, pg_temp;
+\set ON_ERROR_STOP 0
+-- Evaluates index expression as "idx_owner"
+CREATE UNIQUE INDEX io_index ON io.ht (time, io.loguser(c));
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+\set ON_ERROR_STOP 1
+RESET ROLE;
+-- cleanup
+DROP SCHEMA io CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DROP ROLE idx_owner;
+-- The background worker runs the config check function as the job owner. The database
+-- owner can change the schedule of a job but not its check function.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE FUNCTION dbowner_check_config(config JSONB) RETURNS VOID LANGUAGE PLPGSQL AS $$ BEGIN END $$;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT add_retention_policy('dbowner_conditions', INTERVAL '1 year') AS dbowner_retention_id \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT (alter_job(:dbowner_retention_id, schedule_interval => INTERVAL '1 hour')).schedule_interval AS altered;
+ altered  
+----------
+ @ 1 hour
+
+\set ON_ERROR_STOP 0
+SELECT alter_job(:dbowner_retention_id, check_config => 'dbowner_check_config'::regproc);
+ERROR:  insufficient permissions to change the config check function of job 1003
+SELECT alter_job(:dbowner_retention_id, check_config => 0);
+ERROR:  insufficient permissions to change the config check function of job 1003
+\set ON_ERROR_STOP 1
+-- The job owner can change the check function.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT (alter_job(:dbowner_retention_id, check_config => 'dbowner_check_config'::regproc)).check_config;
+        check_config         
+-----------------------------
+ public.dbowner_check_config
+
+SELECT (alter_job(:dbowner_retention_id, check_config => 0)).check_config;
+ check_config 
+--------------
+ 
+
+SELECT delete_job(:dbowner_retention_id);
+ delete_job 
+------------
+ 
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+DROP FUNCTION dbowner_check_config(JSONB);
+-- Owning the hypertable is not enough to convert a chunk owned by another role
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE chunk_owner_test (time TIMESTAMPTZ NOT NULL, value INT);
+SELECT FROM create_hypertable('chunk_owner_test', 'time', chunk_time_interval => INTERVAL '1 day');
+--
+
+ALTER TABLE chunk_owner_test SET (timescaledb.compress);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+CREATE TABLE attached_chunk_1 (time TIMESTAMPTZ NOT NULL, value INT);
+CREATE TABLE attached_chunk_2 (time TIMESTAMPTZ NOT NULL, value INT);
+INSERT INTO attached_chunk_1 VALUES ('2024-01-01 12:00', 1);
+INSERT INTO attached_chunk_2 VALUES ('2024-01-02 12:00', 2);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CALL attach_chunk('chunk_owner_test', 'attached_chunk_1', '{"time": ["2024-01-01", "2024-01-02"]}');
+CALL attach_chunk('chunk_owner_test', 'attached_chunk_2', '{"time": ["2024-01-02", "2024-01-03"]}');
+SELECT compress_chunk('attached_chunk_2');
+  compress_chunk  
+------------------
+ attached_chunk_2
+
+SELECT compress_relid AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings
+WHERE relid = 'attached_chunk_2'::regclass \gset
+CREATE TABLE other_owner_compressed (LIKE :COMPRESSED_CHUNK);
+ALTER TABLE other_owner_compressed OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT compress_chunk('attached_chunk_1');
+ERROR:  must be owner of chunk "attached_chunk_1"
+SELECT compress_chunk('attached_chunk_2', recompress => true);
+ERROR:  must be owner of chunk "attached_chunk_2"
+SELECT decompress_chunk('attached_chunk_2');
+ERROR:  must be owner of chunk "attached_chunk_2"
+CALL _timescaledb_functions.rebuild_columnstore('attached_chunk_2');
+ERROR:  must be owner of chunk "attached_chunk_2"
+SELECT _timescaledb_functions.rebuild_sparse_index('attached_chunk_2');
+ERROR:  must be owner of chunk "attached_chunk_2"
+SELECT _timescaledb_functions.recompress_chunk_segmentwise('attached_chunk_2');
+ERROR:  must be owner of chunk "attached_chunk_2"
+SELECT _timescaledb_functions.compact_chunk('attached_chunk_2');
+ERROR:  must be owner of chunk "attached_chunk_2"
+SELECT _timescaledb_functions.create_compressed_chunk('attached_chunk_1', 'attached_chunk_2', 0, 0, 0, 0, 0, 0, 0, 0);
+ERROR:  must be owner of chunk "attached_chunk_1"
+SELECT _timescaledb_functions.freeze_chunk('attached_chunk_1');
+ERROR:  must be owner of chunk "attached_chunk_1"
+SELECT _timescaledb_functions.unfreeze_chunk('attached_chunk_1');
+ERROR:  must be owner of chunk "attached_chunk_1"
+SELECT _timescaledb_functions.move_to_columnstore('attached_chunk_1', fallback => true);
+ERROR:  must be owner of chunk "attached_chunk_1"
+\set ON_ERROR_STOP 1
+-- The table used as compressed chunk must also be owned by the caller
+INSERT INTO chunk_owner_test VALUES ('2024-01-05 12:00', 5);
+SELECT show_chunks('chunk_owner_test', newer_than => '2024-01-04') AS "OWN_CHUNK" \gset
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(:'OWN_CHUNK', 'other_owner_compressed', 0, 0, 0, 0, 0, 0, 0, 0);
+ERROR:  must be owner of table other_owner_compressed
+\set ON_ERROR_STOP 1
+-- Being the database owner is not enough either
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER TABLE other_owner_compressed OWNER TO :ROLE_SUPERUSER;
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(:'OWN_CHUNK', 'other_owner_compressed', 0, 0, 0, 0, 0, 0, 0, 0);
+ERROR:  must be owner of table other_owner_compressed
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+-- The chunk owner still needs to own the hypertable
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT compress_chunk('attached_chunk_1');
+ERROR:  must be owner of hypertable "chunk_owner_test"
+SELECT decompress_chunk('attached_chunk_2');
+ERROR:  must be owner of hypertable "chunk_owner_test"
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT compress_chunk('attached_chunk_1');
+  compress_chunk  
+------------------
+ attached_chunk_1
+
+SELECT decompress_chunk('attached_chunk_2');
+ decompress_chunk 
+------------------
+ attached_chunk_2
+
+DROP TABLE chunk_owner_test;
+DROP TABLE other_owner_compressed;
+-- Compressing a chunk must not merge it into an adjacent chunk owned
+-- by another role
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE merge_owner_test (time TIMESTAMPTZ NOT NULL, value INT);
+SELECT FROM create_hypertable('merge_owner_test', 'time', chunk_time_interval => INTERVAL '1 day');
+--
+
+ALTER TABLE merge_owner_test SET (timescaledb.compress, timescaledb.compress_orderby = 'time',
+    timescaledb.compress_chunk_time_interval = '2 days');
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+CREATE TABLE merge_attached_chunk (time TIMESTAMPTZ NOT NULL, value INT);
+INSERT INTO merge_attached_chunk VALUES ('2024-02-01 12:00', 1);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CALL attach_chunk('merge_owner_test', 'merge_attached_chunk', '{"time": ["2024-02-01", "2024-02-02"]}');
+SELECT compress_chunk('merge_attached_chunk');
+    compress_chunk    
+----------------------
+ merge_attached_chunk
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+INSERT INTO merge_owner_test VALUES ('2024-02-02 12:00', 2);
+SELECT show_chunks('merge_owner_test', newer_than => '2024-02-02') AS "MERGE_CHUNK" \gset
+SELECT compress_chunk(:'MERGE_CHUNK') IS NOT NULL AS compressed;
+ compressed 
+------------
+ t
+
+SELECT c.chunk_name = 'merge_attached_chunk' AS is_attached, c.range_start, c.range_end, c.is_compressed
+FROM timescaledb_information.chunks c
+WHERE c.hypertable_name = 'merge_owner_test'
+ORDER BY c.range_start;
+ is_attached |         range_start          |          range_end           | is_compressed 
+-------------+------------------------------+------------------------------+---------------
+ t           | Thu Feb 01 00:00:00 2024 PST | Fri Feb 02 00:00:00 2024 PST | t
+ f           | Fri Feb 02 00:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST | t
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE merge_owner_test;

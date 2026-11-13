@@ -635,3 +635,75 @@ DROP TABLE rsi_integrity CASCADE;
 DROP FUNCTION show_compressed_columns(regclass);
 DROP FUNCTION show_chunk_index(regclass);
 DROP FUNCTION dump_sparse_metadata(regclass);
+-- Test rebuilding NULL chunk sparse index
+CREATE TABLE tnull_sparse_index(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('tnull_sparse_index', 'time');
+     table_name     
+--------------------
+ tnull_sparse_index
+
+INSERT INTO tnull_sparse_index VALUES ('2024-01-01 00:00:00+00', 1, 1);
+ALTER TABLE tnull_sparse_index SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+ALTER TABLE tnull_sparse_index RESET (timescaledb.compress_index);
+SET timescaledb.auto_sparse_indexes = off;
+SELECT count(compress_chunk(c)) FROM show_chunks('tnull_sparse_index') c;
+ count 
+-------
+     1
+
+ALTER TABLE tnull_sparse_index SET (timescaledb.compress_index = 'bloom(v)');
+NOTICE:  updated compression settings will only apply to future compressions
+-- Should not crash
+SELECT _timescaledb_functions.rebuild_sparse_index(c) FROM show_chunks('tnull_sparse_index') c;
+ rebuild_sparse_index 
+----------------------
+ 
+
+-- Should not crash
+SELECT count(*) FROM tnull_sparse_index;
+ count 
+-------
+     1
+
+DROP TABLE tnull_sparse_index CASCADE;
+-- Test correct results with rebuilt sparse indexes
+CREATE TABLE test_rebuild(time timestamptz NOT NULL, device int, v int);
+SELECT table_name FROM create_hypertable('test_rebuild', 'time');
+  table_name  
+--------------
+ test_rebuild
+
+INSERT INTO test_rebuild VALUES
+  ('2024-01-01 00:00:00+00', 1, 10),
+  ('2024-01-01 00:01:00+00', 1, 20),
+  ('2024-01-01 00:02:00+00', 1, 30),
+  ('2024-01-01 00:03:00+00', 2, 40),
+  ('2024-01-01 00:04:00+00', 2, 50);
+ALTER TABLE test_rebuild SET (
+  timescaledb.compress,
+  timescaledb.compress_orderby = 'time',
+  timescaledb.compress_segmentby = 'device'
+);
+ALTER TABLE test_rebuild RESET (timescaledb.compress_index);
+SET timescaledb.auto_sparse_indexes = off;
+SELECT count(compress_chunk(c)) FROM show_chunks('test_rebuild') c;
+ count 
+-------
+     1
+
+ALTER TABLE test_rebuild SET (timescaledb.compress_index = 'bloom(v)');
+NOTICE:  updated compression settings will only apply to future compressions
+SELECT _timescaledb_functions.rebuild_sparse_index(c) FROM show_chunks('test_rebuild') c;
+ rebuild_sparse_index 
+----------------------
+ 
+
+-- Should return 3 rows
+SELECT time, device, v FROM test_rebuild WHERE time >= '2024-01-01 00:02:00+00' ORDER BY time, device;
+             time             | device | v  
+------------------------------+--------+----
+ Sun Dec 31 16:02:00 2023 PST |      1 | 30
+ Sun Dec 31 16:03:00 2023 PST |      2 | 40
+ Sun Dec 31 16:04:00 2023 PST |      2 | 50
+
+drop table test_rebuild cascade;

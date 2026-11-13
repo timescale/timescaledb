@@ -1328,9 +1328,36 @@ SELECT count(*) FROM issue_6902;
 -------
    362
 
--- test untyped interval error handling
+-- show_policies called for several caggs in the same target list
 CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
 NOTICE:  using column "time" as partitioning column
+CREATE MATERIALIZED VIEW cagg_show1 WITH (tsdb.continuous)
+AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW cagg_show2 WITH (tsdb.continuous)
+AS SELECT time_bucket('1 hour', time) FROM m GROUP BY 1 WITH NO DATA;
+SELECT timescaledb_experimental.add_policies('cagg_show1', refresh_start_offset => '10 days'::interval, refresh_end_offset => '1 day'::interval, drop_after => '30 days'::interval);
+ add_policies 
+--------------
+ t
+
+SELECT timescaledb_experimental.add_policies('cagg_show2', refresh_start_offset => '10 days'::interval, refresh_end_offset => '1 day'::interval);
+ add_policies 
+--------------
+ t
+
+SELECT timescaledb_experimental.show_policies('cagg_show1'), timescaledb_experimental.show_policies('cagg_show2');
+                                                                        show_policies                                                                         |                                                                        show_policies                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 10 days"} | {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 10 days"}
+ {"drop_after": "@ 30 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}                                                              | 
+
+SELECT timescaledb_experimental.show_policies('cagg_show2'), timescaledb_experimental.show_policies('cagg_show1');
+                                                                        show_policies                                                                         |                                                                        show_policies                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 10 days"} | {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 10 days"}
+                                                                                                                                                              | {"drop_after": "@ 30 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+
+-- test untyped interval error handling
 CREATE MATERIALIZED VIEW cagg_error WITH (tsdb.continuous)
 AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1;
 NOTICE:  continuous aggregate "cagg_error" is already up-to-date

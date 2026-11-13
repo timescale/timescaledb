@@ -411,3 +411,17 @@ ORDER BY user_view_name;
 ---------------------+------------------------------------------------
  temperature_tz_4h_3 | time_bucket(interval,timestamp with time zone)
 
+-- SELECT INTO is a utility statement and must be rejected
+SELECT * FROM _timescaledb_functions.cagg_validate_query($$ SELECT 1 INTO t $$);
+ is_valid | error_level | error_code |           error_message            | error_detail |                      error_hint                      
+----------+-------------+------------+------------------------------------+--------------+------------------------------------------------------
+ f        | ERROR       | 0A000      | invalid continuous aggregate query |              | Use a SELECT query in the continuous aggregate view.
+
+-- Missing SELECT permission on the hypertable must be an error, not a crash
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+SELECT * FROM _timescaledb_functions.cagg_validate_query($$ SELECT time_bucket('4 hour', time), avg(value) FROM timestamptz_ht GROUP BY 1 $$);
+ is_valid | error_level | error_code |               error_message                | error_detail | error_hint 
+----------+-------------+------------+--------------------------------------------+--------------+------------
+ f        | ERROR       | 42501      | permission denied for table timestamptz_ht |              | 
+
+RESET ROLE;
