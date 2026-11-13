@@ -15,6 +15,15 @@ name: ABI Test Against Snapshot
     paths: .github/workflows/snapshot-abi.yaml
   workflow_dispatch:
 
+  # Reuse from other workflows.
+  workflow_call:
+    inputs:
+      # Ref in timescale/timescaledb to test when called by release validation,
+      # usually the release branch (e.g. 2.30.x).
+      timescaledb-ref:
+        required: true
+        type: string
+
 jobs:
   config:
     runs-on: ubuntu-26.04
@@ -26,13 +35,16 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
 
   abi_snapshot_test:
     name: ABI Snapshot Test PG${{ matrix.pg }}
-    runs-on: ubuntu-26.04
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     needs: config
 
     env:
@@ -81,6 +93,9 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
 
     - name: Download Postgres ${{ matrix.pg }}
       run: |
