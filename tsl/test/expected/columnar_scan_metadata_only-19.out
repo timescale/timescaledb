@@ -985,7 +985,6 @@ EXPLAIN (analyze, costs off, timing off, summary off, buffers off) SELECT max(ti
      ->  Limit (actual rows=1.00 loops=1)
            ->  Custom Scan (DeferredChunkAppend) on limit_one_sorted (actual rows=1.00 loops=1)
                  Order: "time" DESC
-                 Filter: (("time" IS NOT NULL))
                  Chunks Visited: 1
                  ->  Limit (actual rows=1.00 loops=1)
                        ->  Custom Scan (ColumnarScan) on _hyper_11_15_chunk (actual rows=1.00 loops=1)
