@@ -5,6 +5,7 @@ self-hosted-runner:
     - cloud-image-runner-ubuntu-24-arm64
     - runs-on/fleet=linux-2cpu/env=ue1
     - runs-on/fleet=linux-8cpu/env=ue1
+    - runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     - runs-on/fleet=linux-2cpu-x64/env=ue1
     - runs-on/fleet=linux-8cpu-x64/env=ue1
     - runs-on/fleet=linux-2cpu-ondemand/env=ue1
