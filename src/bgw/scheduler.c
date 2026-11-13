@@ -861,15 +861,14 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 	pgstat_report_activity(STATE_RUNNING, NULL);
 
-	/* If we are restoring or upgrading, don't schedule anything. Just
-	 * exit. */
-	if (ts_guc_restoring || IsBinaryUpgrade)
+	/* If we are restoring, don't schedule anything. Just exit. */
+	if (ts_guc_restoring)
 	{
 		ereport(LOG,
 				errmsg("scheduler for database %u exiting with exit status %d",
 					   MyDatabaseId,
 					   ts_debug_bgw_scheduler_exit_status),
-				errdetail("the database is restoring or upgrading"));
+				errdetail("the database is restoring"));
 		terminate_all_jobs_and_release_workers();
 		goto scheduler_exit;
 	}

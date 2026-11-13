@@ -255,6 +255,7 @@ CREATE EXTENSION timescaledb;
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 SELECT wait_for_bgw_scheduler('db_rename_test');
 ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
+SELECT wait_for_bgw_scheduler('db_rename_test2');
 DROP DATABASE db_rename_test2 WITH (FORCE);
 
 -- test create database with timescaledb database as template
@@ -262,6 +263,86 @@ SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 CREATE DATABASE db_from_template WITH TEMPLATE :TEST_DBNAME;
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 DROP DATABASE db_from_template WITH (FORCE);
+
+-- database commands by a non-owner must not stop or restart the scheduler of the other database
+SELECT pid AS scheduler_pid FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME' \gset
+\c :TEST_DBNAME_2 :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+DROP DATABASE :TEST_DBNAME;
+ALTER DATABASE :TEST_DBNAME RENAME TO db_rename_test3;
+ALTER DATABASE :TEST_DBNAME SET TABLESPACE pg_default;
+CREATE DATABASE db_from_template WITH TEMPLATE :TEST_DBNAME;
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
+SELECT pid = :scheduler_pid AS same_scheduler FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME';
+
+-- drop inside a transaction block or function fails and must keep the scheduler running
+BEGIN;
+\set ON_ERROR_STOP 0
+DROP DATABASE :TEST_DBNAME;
+\set ON_ERROR_STOP 1
+ROLLBACK;
+\set ON_ERROR_STOP 0
+DROP DATABASE :TEST_DBNAME \; SELECT 1;
+SELECT pg_catalog.format('DO $$ BEGIN EXECUTE %L; END $$', pg_catalog.format('DROP DATABASE %I', :'TEST_DBNAME')) \gexec
+\set ON_ERROR_STOP 1
+SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
+SELECT pid = :scheduler_pid AS same_scheduler FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME';
+
+-- a user without CREATEDB must not restart the scheduler of a template database
+ALTER DATABASE :TEST_DBNAME IS_TEMPLATE true;
+\c :TEST_DBNAME_2 :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+CREATE DATABASE db_from_template WITH TEMPLATE :TEST_DBNAME;
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME IS_TEMPLATE false;
+SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
+SELECT pid = :scheduler_pid AS same_scheduler FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME';
+
+-- an owner without CREATEDB must not restart the scheduler on rename
+CREATE DATABASE db_rename_noperm OWNER :ROLE_DEFAULT_PERM_USER;
+\c db_rename_noperm :ROLE_SUPERUSER
+SET client_min_messages=error;
+CREATE EXTENSION timescaledb;
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+SELECT wait_for_bgw_scheduler('db_rename_noperm');
+SELECT pid AS noperm_scheduler_pid FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'db_rename_noperm' \gset
+\c :TEST_DBNAME_2 :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+ALTER DATABASE db_rename_noperm RENAME TO db_rename_noperm2;
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+SELECT wait_for_bgw_scheduler('db_rename_noperm');
+SELECT pid = :noperm_scheduler_pid AS same_scheduler FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'db_rename_noperm';
+DROP DATABASE db_rename_noperm WITH (FORCE);
+-- test scheduler runs as the database owner
+CREATE ROLE db_owner LOGIN;
+CREATE DATABASE db_owner_test OWNER db_owner;
+\c db_owner_test :ROLE_SUPERUSER
+SET client_min_messages TO error;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+SELECT wait_for_bgw_scheduler('db_owner_test');
+SELECT usename FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'db_owner_test';
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+DROP DATABASE db_owner_test WITH (FORCE);
+DROP ROLE db_owner;
+
+-- test scheduler for an owner that cannot log in: the owner on PG17+, bootstrap superuser on PG16
+CREATE ROLE db_owner_nologin NOLOGIN;
+CREATE DATABASE db_owner_test OWNER db_owner_nologin;
+\c db_owner_test :ROLE_SUPERUSER
+SET client_min_messages TO error;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+SELECT wait_for_bgw_scheduler('db_owner_test');
+SELECT usename = CASE WHEN current_setting('server_version_num')::int >= 170000 THEN 'db_owner_nologin' ELSE (SELECT rolname FROM pg_roles WHERE oid = 10) END AS expected_role
+FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'db_owner_test';
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+DROP DATABASE db_owner_test WITH (FORCE);
+DROP ROLE db_owner_nologin;
 
 -- test alter database set tablespace
 SET client_min_messages TO error;

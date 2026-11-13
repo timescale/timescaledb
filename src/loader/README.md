@@ -51,10 +51,11 @@ job worker to "steal" a scheduler's slot during a restart.
 Server startup: no message sent. However, the launcher takes essentially the
 `start` action for each database (without the message handling/signalling bit).
 It cannot figure out whether a scheduler should exist for a given database
-because it can only connect to shared catalogs. The scheduler is responsible for
-shutting down if it should not exist (because either TimescaleDB is not
-installed in the database or the version of TimescaleDB installed does not have
-a scheduler function to call). 
+because it can only connect to shared catalogs. It does read the database owner
+from `pg_database` and starts the scheduler as that role rather than as
+superuser. The scheduler is responsible for shutting down if it should not
+exist (because either TimescaleDB is not installed in the database or the
+version of TimescaleDB installed does not have a scheduler function to call).
 
 `CREATE DATABASE`: essentially the same as server startup. The launcher checks
 for new databases each time it wakes up and will start schedulers for any that
