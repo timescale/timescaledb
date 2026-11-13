@@ -637,18 +637,7 @@ bool
 cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 					 const bool for_rewrites)
 {
-	if (!query->jointree->fromlist)
-	{
-		if (!for_rewrites)
-		{
-			appendStringInfoString(hint, "FROM clause missing in the query");
-		}
-		else if (hint)
-		{
-			appendStringInfoString(hint, "FROM clause missing in the query");
-		}
-		return false;
-	}
+	/* Utility statements like SELECT INTO have no jointree, so check the command type first */
 	if (query->commandType != CMD_SELECT)
 	{
 		if (!for_rewrites)
@@ -658,6 +647,18 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 		else if (hint)
 		{
 			appendStringInfoString(hint, "not a SELECT query");
+		}
+		return false;
+	}
+	if (!query->jointree->fromlist)
+	{
+		if (!for_rewrites)
+		{
+			appendStringInfoString(hint, "FROM clause missing in the query");
+		}
+		else if (hint)
+		{
+			appendStringInfoString(hint, "FROM clause missing in the query");
 		}
 		return false;
 	}
@@ -1259,6 +1260,7 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 	if (aclresult != ACLCHECK_OK)
 	{
 		/* User doesn't have permission */
+		ts_cache_release(&hcache);
 		aclcheck_error(aclresult,
 					   get_relkind_objtype(get_rel_relkind(ht->main_table_relid)),
 					   get_rel_name(ht->main_table_relid));
