@@ -11,7 +11,7 @@ CREATE OR REPLACE VIEW _timescaledb_catalog.chunk_constraint AS
 SELECT
   chunk_id,
   id AS dimension_slice_id,
-  format('constraint_%s',id) AS constraint_name,
+  pg_catalog.format('constraint_%s',id) AS constraint_name,
   NULL::text AS hypertable_constraint_name from _timescaledb_catalog.dimension_slice;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;

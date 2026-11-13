@@ -22,7 +22,6 @@ SELECT _timescaledb_internal.freeze_chunk(0);
 SELECT FROM _timescaledb_internal.generate_uuid();
 SELECT _timescaledb_internal.get_approx_row_count(0);
 SELECT _timescaledb_internal.get_compressed_chunk_index_for_recompression(0);
-SELECT _timescaledb_internal.get_create_command(NULL);
 SELECT pg_typeof(_timescaledb_internal.get_os_info());
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
@@ -56,6 +55,10 @@ CALL _timescaledb_internal.policy_refresh_continuous_aggregate(0,NULL);
 CALL _timescaledb_internal.policy_reorder(0,NULL);
 CALL _timescaledb_internal.policy_retention(0,NULL);
 CALL public.recompress_chunk(0);
+CALL convert_to_columnstore(0);
+CALL convert_to_columnstore(NULL);
+CALL convert_to_rowstore(0);
+CALL convert_to_rowstore(NULL);
 \set ON_ERROR_STOP 1
 
 -- tests for the cagg invalidation trigger on the deprecated schema

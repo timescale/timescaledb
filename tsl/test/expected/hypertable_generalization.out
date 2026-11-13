@@ -396,11 +396,6 @@ NOTICE:  table "test_table_int" is already a hypertable, skipping
 -------------------
  (9,f)
 
-SELECT * FROM _timescaledb_functions.get_create_command('test_table_int');
-                                                 get_create_command                                                 
---------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('public.test_table_int', 'id', chunk_time_interval => 10, create_default_indexes=>FALSE);
-
 \set ON_ERROR_STOP 0
 -- Should throw an error when if_not_exists is not set
 SELECT create_hypertable('test_table_int', by_range('id', 10));

@@ -392,3 +392,13 @@ extern TSDLLEXPORT char *ts_list_to_string(List *list, append_cell_func append);
 extern TSDLLEXPORT List *ts_find_aggrefs(Node *node);
 extern TSDLLEXPORT bool ts_is_time_bucket_function(Expr *node);
 extern TSDLLEXPORT bool ts_get_attnotnull(Oid relid, AttrNumber attno);
+
+typedef struct TSSecurityContext
+{
+	Oid save_userid;
+	int save_sec_context;
+	int save_nestlevel;
+} TSSecurityContext;
+
+extern TSDLLEXPORT void ts_security_context_enter(Oid owner_userid, TSSecurityContext *ctx);
+extern TSDLLEXPORT void ts_security_context_exit(const TSSecurityContext *ctx);

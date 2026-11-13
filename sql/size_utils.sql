@@ -260,16 +260,16 @@ BEGIN
         RETURN '';
     END IF;
     IF time_value IS NULL THEN
-        RETURN format('%L', NULL);
+        RETURN pg_catalog.format('%L', NULL);
     END IF;
     CASE column_type
       WHEN 'BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype THEN
-        RETURN format('%L', time_value); -- scale determined by user.
+        RETURN pg_catalog.format('%L', time_value); -- scale determined by user.
       WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype THEN
         -- assume time_value is in microsec
-        RETURN format('%1$L', _timescaledb_functions.to_timestamp(time_value)); -- microseconds
+        RETURN pg_catalog.format('%1$L', _timescaledb_functions.to_timestamp(time_value)); -- microseconds
       WHEN 'DATE'::regtype THEN
-        RETURN format('%L', timezone('UTC',_timescaledb_functions.to_timestamp(time_value))::date);
+        RETURN pg_catalog.format('%L', timezone('UTC',_timescaledb_functions.to_timestamp(time_value))::date);
       ELSE
         RETURN time_value;
     END CASE;
@@ -294,7 +294,7 @@ DECLARE
 BEGIN
     -- Check if input relation is continuous aggregate view then
     -- get the corresponding materialized hypertable and schema name
-    SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass INTO v_mat_ht
+    SELECT pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass INTO v_mat_ht
       FROM pg_class c
       JOIN pg_namespace n ON (n.OID = c.relnamespace)
       JOIN _timescaledb_catalog.continuous_agg a ON (a.user_view_schema = n.nspname AND a.user_view_name = c.relname)
@@ -320,7 +320,7 @@ BEGIN
 
 		IF EXISTS (SELECT FROM pg_inherits WHERE inhparent = relation) THEN
 		RETURN (
-        SELECT _timescaledb_functions.get_approx_row_count(relation) + COALESCE(SUM(@extschema@.approximate_row_count(i.inhrelid)),0) FROM pg_inherits i
+        SELECT _timescaledb_functions.get_approx_row_count(relation) + COALESCE(SUM(@extschema@.approximate_row_count(i.inhrelid::regclass)),0) FROM pg_inherits i
         WHERE i.inhparent = relation
      );
     END IF;
@@ -596,7 +596,7 @@ BEGIN
   ELSIF samplerate <= 0 THEN
     RAISE EXCEPTION 'samplerate must be in the range (0, 100]';
   ELSE
-    v_sample_clause := format(' TABLESAMPLE BERNOULLI(%s)', samplerate);
+    v_sample_clause := pg_catalog.format(' TABLESAMPLE BERNOULLI(%s)', samplerate);
     v_scale := 100.0 / samplerate;
   END IF;
 
@@ -622,17 +622,17 @@ BEGIN
   IF v_num_varlen_columns > 0 THEN
 	  SELECT ' + (' || string_agg(
 	    CASE WHEN attname = ANY(v_segmentby)
-	      THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
-	      ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
+	      THEN pg_catalog.format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
+	      ELSE pg_catalog.format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
 	    END, ' + ') || ') * ' || v_scale
     FROM pg_attribute
     INTO v_varlen_query
     WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
   END IF;
 
-  EXECUTE format('SELECT sum(_ts_meta_count) FROM %s', v_compressed_chunk) INTO tuples;
+  EXECUTE pg_catalog.format('SELECT sum(_ts_meta_count) FROM %s', v_compressed_chunk) INTO tuples;
   -- we can optimize the following query if all columns are fixed size
-  EXECUTE format('SELECT (((%s::bigint * (%s::bigint + %s::bigint)) %s) * %s)::bigint FROM %s%s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk, v_sample_clause) INTO relation_size;
+  EXECUTE pg_catalog.format('SELECT (((%s::bigint * (%s::bigint + %s::bigint)) %s) * %s)::bigint FROM %s%s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk, v_sample_clause) INTO relation_size;
 
   index_size := 0;
   FOR v_index, v_varlen_query, v_columns IN
@@ -640,8 +640,8 @@ BEGIN
       i.indexrelid::regclass,
       (SELECT ' + (' || string_agg(
          CASE WHEN attname = ANY(v_segmentby)
-           THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
-           ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
+           THEN pg_catalog.format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
+           ELSE pg_catalog.format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
          END, ' + ' ORDER BY attnum
          )
          || ') * ' || v_scale
@@ -653,7 +653,7 @@ BEGIN
     v_index_header := 8; -- Index tuple header
 
     -- v_compressed_chunk is a regclass, which will be properly escaped when cast to `text`
-    EXECUTE format('SELECT (((%s::bigint * %s::bigint) %s) * %s)::bigint FROM %s%s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk, v_sample_clause) INTO v_index_size;
+    EXECUTE pg_catalog.format('SELECT (((%s::bigint * %s::bigint) %s) * %s)::bigint FROM %s%s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk, v_sample_clause) INTO v_index_size;
     index_size := index_size + v_index_size;
   END LOOP;
 
