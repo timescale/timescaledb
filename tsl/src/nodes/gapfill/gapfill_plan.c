@@ -282,11 +282,11 @@ gapfill_estimate_boundary(GapFillArgEvalContext *gapfill_plan_ctx, GapFillBounda
 	Node *arg = NULL;
 	if (boundary == GAPFILL_START)
 	{
-		arg = (list_length(args) < 5 ? lthird(args) : lfourth(args));
+		arg = list_nth(args, list_length(args) - 2);
 	}
 	else
 	{
-		arg = (list_length(args) < 5 ? lfourth(args) : lfifth(args));
+		arg = llast(args);
 	}
 
 	if (gapfill_is_const_null((Expr *) arg))
@@ -765,7 +765,7 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	 */
 	FuncExpr *func = context.call.func;
 	int nargs = list_length(func->args);
-	if (nargs == 5)
+	if (!gapfill_is_integer_bucket(func->args) && (nargs == 5 || nargs == 7))
 	{
 		Expr *tz_arg = lthird(func->args);
 		if (contains_nonconstant_expr((Node *) tz_arg))
