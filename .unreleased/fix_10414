@@ -1,0 +1,2 @@
+Fixes: #10414 Fix crash on queries and DML against chunks compressed with an empty sparse index setting
+Thanks: @abbudao for reporting and analysing a crash with an empty sparse index setting
