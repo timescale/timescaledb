@@ -20,7 +20,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["ubuntu-24.04"]
+        os: ["runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1"]
+        os_name: ["linux-8cpu-x64-ubuntu24"]
         pg: [ "16", "17", "18" ]
         build_type: ["Debug"]
       fail-fast: false
@@ -154,7 +155,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
+        name: Coredumps sqlsmith ${{ matrix.os_name }} PG${{ matrix.pg }}
         path: coredumps
 
     - name: Save PostgreSQL log

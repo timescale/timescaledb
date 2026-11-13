@@ -9,7 +9,7 @@ name: Coccinelle
 jobs:
   coccinelle:
     name: Coccinelle
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
 
     steps:
     - name: Replace unreliable Azure APT mirror
@@ -45,4 +45,3 @@ jobs:
       with:
         name: coccinelle.diff
         path: coccinelle.diff
-

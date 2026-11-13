@@ -22,7 +22,7 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch .deb build
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     env:
       GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       WORKFLOW_REPO: timescale/release-build-scripts
