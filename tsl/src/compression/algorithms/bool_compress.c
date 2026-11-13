@@ -470,7 +470,7 @@ bool_compressed_from_parts(Simple8bRleSerialized *values, Simple8bRleSerialized 
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
 	}
 
-	compressed_data = palloc(compressed_size);
+	compressed_data = palloc0(compressed_size);
 	compressed = (BoolCompressed *) compressed_data;
 	SET_VARSIZE(&compressed->vl_len_, compressed_size);
 

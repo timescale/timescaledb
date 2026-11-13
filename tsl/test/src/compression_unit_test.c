@@ -236,6 +236,23 @@ test_string_dictionary()
 }
 
 static void
+test_bit_array_reverse_empty()
+{
+	/*
+	 * Test that reverse iteration on a bit array with zero buckets but a bogus
+	 * non-zero bits_used_in_last_bucket doesn't read out of bounds. This can
+	 * happen with corrupted compressed gorilla data.
+	 */
+	BitArray xors;
+	bit_array_wrap_internal(&xors, 0, 64, NULL);
+
+	BitArrayIterator xors_iter;
+	bit_array_iterator_init_rev(&xors_iter, &xors);
+
+	TestEnsureError(bit_array_iter_next_rev(&xors_iter, 5));
+}
+
+static void
 test_gorilla_int()
 {
 	GorillaCompressor *compressor = gorilla_compressor_alloc();
@@ -1868,6 +1885,7 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_string_array();
 	test_int_dictionary();
 	test_string_dictionary();
+	test_bit_array_reverse_empty();
 	test_gorilla_int();
 	test_gorilla_float();
 	test_gorilla_double(/* have_nulls = */ false, /* have_random = */ false);

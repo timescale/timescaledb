@@ -2246,3 +2246,24 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 	return result;
 #endif
 }
+
+/* Enter/exit security context for internally called procedures */
+void
+ts_security_context_enter(Oid owner_userid, TSSecurityContext *ctx)
+{
+	/* Run as owner in security-restricted context */
+	GetUserIdAndSecContext(&ctx->save_userid, &ctx->save_sec_context);
+	SetUserIdAndSecContext(owner_userid, ctx->save_sec_context | SECURITY_RESTRICTED_OPERATION);
+	/* Lock down search_path */
+	ctx->save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+}
+
+void
+ts_security_context_exit(const TSSecurityContext *ctx)
+{
+	/* Roll back any GUC changes */
+	AtEOXact_GUC(false, ctx->save_nestlevel);
+	/* Restore the caller's identity and security context */
+	SetUserIdAndSecContext(ctx->save_userid, ctx->save_sec_context);
+}
