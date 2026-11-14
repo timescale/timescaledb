@@ -3785,8 +3785,6 @@ process_index_start(ProcessUtilityArgs *args)
 	TupleDesc main_table_desc;
 	Relation main_table_index_relation;
 	LockRelId main_table_index_lock_relid;
-	int sec_ctx;
-	Oid uid = InvalidOid, saved_uid = InvalidOid;
 	ContinuousAgg *cagg = NULL;
 
 	Assert(IsA(stmt, IndexStmt));
@@ -3924,25 +3922,15 @@ process_index_start(ProcessUtilityArgs *args)
 								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
 	}
 
-	if (cagg)
-	{
-		/*
-		 * If this is an index creation for cagg, then we need to switch user as the current
-		 * user might not have permissions on the internal schema where cagg index will be
-		 * created.
-		 */
-		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
-	}
-
-	/* CREATE INDEX on the root table of the hypertable */
+	/*
+	 * CREATE INDEX on the root table of the hypertable. The owner of a
+	 * continuous aggregate usually has no CREATE permission on the schema
+	 * of the materialization hypertable.
+	 */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
-														   info.extended_options.multitransaction);
-
-	if (cagg)
-	{
-		RESTORE_USER(uid, saved_uid, sec_ctx);
-	}
+														   info.extended_options.multitransaction,
+														   cagg == NULL);
 
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
