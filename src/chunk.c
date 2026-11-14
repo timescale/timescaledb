@@ -892,7 +892,9 @@ chunk_set_replica_identity(const Chunk *chunk)
 		.def = (Node *) &stmt,
 		.subtype = AT_ReplicaIdentity,
 	};
-	CatalogSecurityContext sec_ctx;
+	Oid owner = ch_rel->rd_rel->relowner;
+	Oid saved_uid;
+	int sec_ctx;
 
 	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
 	{
@@ -917,9 +919,17 @@ chunk_set_replica_identity(const Chunk *chunk)
 		}
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	/* Run as the chunk owner since the inserting user may not own the chunk */
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
 	ts_alter_table_with_event_trigger(chunk->fd.relid, NULL, list_make1(&cmd), false);
-	ts_catalog_restore_user(&sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
+	}
 	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
 }
