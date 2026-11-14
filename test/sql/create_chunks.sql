@@ -186,3 +186,12 @@ GRANT INSERT ON attopt_insert TO :ROLE_DEFAULT_PERM_USER_2;
 INSERT INTO attopt_insert VALUES ('2025-01-01 00:00:00+00', 1);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT a.attname, (SELECT array_agg(o) FROM unnest(a.attoptions) o WHERE o NOT LIKE 'pg_attver=%') AS attoptions FROM show_chunks('attopt_insert') ch JOIN pg_attribute a ON (a.attrelid = ch AND a.attname = 'device');
+
+-- chunk created by a user with only INSERT gets the replica identity of the hypertable
+CREATE TABLE replident_insert(time timestamptz not null, device int) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
+ALTER TABLE replident_insert REPLICA IDENTITY FULL;
+GRANT INSERT ON replident_insert TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO replident_insert VALUES ('2025-01-01 00:00:00+00', 1);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT c.relreplident, pg_get_userbyid(c.relowner) = current_user AS owned_by_hypertable_owner FROM show_chunks('replident_insert') ch JOIN pg_class c ON (ch = c.oid);
