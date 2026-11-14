@@ -1329,21 +1329,9 @@ rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ct
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	/*
-	 * Code that runs as part of the refresh can connect to SPI on top of our
-	 * own non-atomic connection: PL/pgSQL triggers on the materialization
-	 * hypertable, PL functions used in the continuous aggregate query, etc.
-	 * Those connections are atomic (plain functions, not procedures). When
-	 * such code raises an error the longjmp skips its SPI_finish(), and only
-	 * a transaction or subtransaction abort would pop the stale entries. Since
-	 * we caught the error ourselves, they are still on top of the SPI stack
-	 * here, and SPI_rollback()/SPI_commit() inspect the top entry: they would
-	 * refuse with "invalid transaction termination", which masks the original
-	 * error and leaves the registration row behind.
-	 *
-	 * Pop the stale connections until we are back at our own non-atomic one.
-	 * SPI_finish() switches to the saved memory context of the popped
-	 * connection, so restore ours afterwards.
-	 */
+	* A PL function that errored during the refresh leaves its atomic SPI connection on the
+	* stack, making SPI_rollback()/SPI_commit() fail; pop them back to our non-atomic one.
+	*/
 	while (!IsSubTransaction() && !SPI_inside_nonatomic_context())
 	{
 		if (SPI_finish() != SPI_OK_FINISH)
