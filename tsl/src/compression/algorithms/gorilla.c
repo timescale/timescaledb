@@ -1049,6 +1049,7 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 static uint8 *
 unpack_leading_zeros_array(BitArray *bitarray, uint32 *_n)
 {
+#ifndef WORDS_BIGENDIAN
 #define LANE_INPUTS 3
 #define LANE_OUTPUTS 4
 	StaticAssertExpr(BITS_PER_LEADING_ZEROS * LANE_OUTPUTS == 8 * LANE_INPUTS,
@@ -1093,6 +1094,25 @@ unpack_leading_zeros_array(BitArray *bitarray, uint32 *_n)
 
 	*_n = n_outputs;
 	return dest;
+#else
+	/* Big-endian (e.g. s390x) architecture path */
+	const uint32 total_bits = bit_array_num_bits(bitarray);
+	const uint32 num_items = (total_bits + BITS_PER_LEADING_ZEROS - 1) / BITS_PER_LEADING_ZEROS;
+	const uint32 n_outputs = ((num_items + 3) / 4) * 4;
+	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED_N64);
+	uint8 *restrict dest = palloc0(n_outputs > 0 ? n_outputs : 1);
+
+	BitArrayIterator iter;
+	bit_array_iterator_init(&iter, bitarray);
+
+	for (uint32 i = 0; i < num_items; i++)
+	{
+		dest[i] = (uint8) bit_array_iter_next(&iter, BITS_PER_LEADING_ZEROS);
+	}
+
+	*_n = n_outputs;
+	return dest;
+#endif
 }
 
 /* Bulk gorilla decompression, specialized for supported data types. */
