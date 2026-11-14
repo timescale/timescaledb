@@ -178,3 +178,12 @@ ALTER TABLE t_with SET (tsdb.chunk_interval = '1 hour');
 SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 't_with';
 
 
+
+-- chunk created by a user with only INSERT gets the replica identity of the hypertable
+CREATE TABLE replident_insert(time timestamptz not null, device int) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
+ALTER TABLE replident_insert REPLICA IDENTITY FULL;
+GRANT INSERT ON replident_insert TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO replident_insert VALUES ('2025-01-01 00:00:00+00', 1);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT c.relreplident, pg_get_userbyid(c.relowner) = current_user AS owned_by_hypertable_owner FROM show_chunks('replident_insert') ch JOIN pg_class c ON (ch = c.oid);
