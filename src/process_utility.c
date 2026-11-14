@@ -6498,17 +6498,11 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 
 	if (ht != NULL)
 	{
-		CatalogSecurityContext sec_ctx;
-
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 		/* Recurse to each chunk and drop the corresponding constraint */
 		foreach_chunk(ht,
 					  process_drop_constraint_on_chunk,
 					  (void *) constraint->constraint_name,
 					  false);
-
-		ts_catalog_restore_user(&sec_ctx);
 	}
 }
 
