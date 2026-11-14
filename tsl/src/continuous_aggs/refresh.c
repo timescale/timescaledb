@@ -1328,7 +1328,7 @@ rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ct
 {
 	MemoryContext oldcontext = CurrentMemoryContext;
 
-	 /*
+	/*
 	 * A PL function that errored during the refresh leaves its atomic SPI connection on the
 	 * stack, making SPI_rollback()/SPI_commit() fail; pop them back to our non-atomic one.
 	 */

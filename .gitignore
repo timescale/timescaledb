@@ -38,3 +38,5 @@ tags
 /.idea/
 coccinelle.diff
 .gdb_history
+EGM.md
+.zvec-grep/
