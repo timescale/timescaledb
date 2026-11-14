@@ -10,15 +10,18 @@
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_tablespace.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <fmgr.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
 #include <nodes/value.h>
 #include <parser/parse_utilcmd.h>
+#include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -415,7 +418,7 @@ ts_indexing_relation_get_unique_columns(Relation rel)
  */
 extern ObjectAddress
 ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
-									bool is_multitransaction)
+									bool is_multitransaction, bool check_schema_permission)
 {
 	Oid relid;
 	LOCKMODE lockmode;
@@ -474,6 +477,24 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 		list_free(inheritors);
 	}
 
+	/* DefineIndex checks schema and tablespace permissions together */
+	if (!check_schema_permission)
+	{
+		Oid tablespace = stmt->tableSpace ? get_tablespace_oid(stmt->tableSpace, false) :
+											GetDefaultTablespace(get_rel_persistence(relid), false);
+
+		if (OidIsValid(tablespace) && tablespace != MyDatabaseTableSpace)
+		{
+			AclResult aclresult =
+				object_aclcheck(TableSpaceRelationId, tablespace, GetUserId(), ACL_CREATE);
+
+			if (aclresult != ACLCHECK_OK)
+			{
+				aclcheck_error(aclresult, OBJECT_TABLESPACE, get_tablespace_name(tablespace));
+			}
+		}
+	}
+
 	/* Run parse analysis ... */
 	stmt = transformIndexStmt(relid, stmt, queryString);
 
@@ -483,15 +504,15 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	(void) total_parts;
 	root_table_address = DefineIndexCompat(relid, /* OID of heap relation */
 										   stmt,
-										   InvalidOid,	/* no predefined OID */
-										   InvalidOid,	/* parentIndexId */
-										   InvalidOid,	/* parentConstraintId */
-										   total_parts, /* total_parts */
-										   false,		/* is_alter_table */
-										   true,		/* check_rights */
-										   false,		/* check_not_in_use */
-										   false,		/* skip_build */
-										   false);		/* quiet */
+										   InvalidOid,				/* no predefined OID */
+										   InvalidOid,				/* parentIndexId */
+										   InvalidOid,				/* parentConstraintId */
+										   total_parts,				/* total_parts */
+										   false,					/* is_alter_table */
+										   check_schema_permission, /* check_rights */
+										   false,					/* check_not_in_use */
+										   false,					/* skip_build */
+										   false);					/* quiet */
 
 	return root_table_address;
 }
