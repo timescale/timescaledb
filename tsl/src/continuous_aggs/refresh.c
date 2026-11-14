@@ -1347,7 +1347,9 @@ rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ct
 	while (!IsSubTransaction() && !SPI_inside_nonatomic_context())
 	{
 		if (SPI_finish() != SPI_OK_FINISH)
+		{
 			break;
+		}
 	}
 	MemoryContextSwitchTo(oldcontext);
 
