@@ -576,7 +576,6 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_bgw_job_stat];
 	bool nulls[Natts_bgw_job_stat] = { false };
-	CatalogSecurityContext sec_ctx;
 	Interval zero_ival = {
 		.time = 0,
 	};
@@ -622,9 +621,7 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(0);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return true;
 }

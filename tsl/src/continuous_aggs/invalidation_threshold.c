@@ -312,7 +312,6 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 		TupleDesc desc = RelationGetDescr(rel);
 		Datum values[Natts_continuous_aggs_invalidation_threshold];
 		bool nulls[Natts_continuous_aggs_invalidation_threshold] = { false };
-		CatalogSecurityContext sec_ctx;
 		/* get the MIN value for the partition type */
 		int64 min_value = cagg_get_time_min(cagg);
 
@@ -322,9 +321,7 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_invalidation_threshold_watermark)] =
 			Int64GetDatum(min_value);
 
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		ts_catalog_insert_values(rel, desc, values, nulls);
-		ts_catalog_restore_user(&sec_ctx);
 		table_close(rel, NoLock);
 	}
 }

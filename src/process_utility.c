@@ -561,12 +561,9 @@ process_drop_schema_start(DropStmt *stmt)
 			String *object = lfirst_node(String, cell);
 			if (namestrcmp(proc_schema, strVal(object)) == 0)
 			{
-				CatalogSecurityContext sec_ctx;
 				Assert(stmt->behavior == DROP_CASCADE);
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
 				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-				ts_catalog_restore_user(&sec_ctx);
 			}
 		}
 	}
@@ -660,11 +657,8 @@ process_drop_procedure_start(DropStmt *stmt)
 			}
 			else
 			{
-				CatalogSecurityContext sec_ctx;
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
 				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-				ts_catalog_restore_user(&sec_ctx);
 			}
 			break;
 		}
