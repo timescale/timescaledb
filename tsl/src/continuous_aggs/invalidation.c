@@ -244,7 +244,6 @@ void
 invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end, int32 seqnum)
 {
 	Relation rel = open_cagg_table(HYPER_INVALIDATION_LOG, RowExclusiveLock);
-	CatalogSecurityContext sec_ctx;
 	Datum values[Natts_continuous_aggs_hypertable_invalidation_log];
 	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
 
@@ -269,9 +268,7 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end, int32 s
 			Int32GetDatum(seqnum);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, NoLock);
 	elog(DEBUG1,
 		 "hypertable log for hypertable %d added entry [" INT64_FORMAT ", " INT64_FORMAT "]",
@@ -331,7 +328,6 @@ static bool
 write_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
 							  ItemPointer update_tid)
 {
-	CatalogSecurityContext sec_ctx;
 	HeapTuple tup;
 
 	if (!IsValidInvalidation(invalidation))
@@ -344,7 +340,6 @@ write_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalid
 									   invalidation->lowest_modified_value,
 									   invalidation->greatest_modified_value,
 									   invalidation->seqnum);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	if (ItemPointerIsValid(update_tid))
 	{
 		ts_catalog_update_tid_only(cagg_log_rel, update_tid, tup);
@@ -353,7 +348,6 @@ write_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalid
 	{
 		ts_catalog_insert_only(cagg_log_rel, tup);
 	}
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(tup);
 
 	return true;
@@ -857,14 +851,10 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 
 			if (cagg_hyper_id == last_cagg_hyper_id)
 			{
-				CatalogSecurityContext sec_ctx;
-
 				/* The invalidation has been processed for all caggs, so the
 				 * only thing left is to delete it from the source hypertable
 				 * invalidation log. */
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 				ts_catalog_delete_tid_only(ti->scanrel, &logentry.tid);
-				ts_catalog_restore_user(&sec_ctx);
 			}
 
 			MemoryContextSwitchTo(oldmctx);

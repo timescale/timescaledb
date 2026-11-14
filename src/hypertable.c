@@ -430,16 +430,13 @@ static void
 hypertable_update_catalog_tuple(ItemPointer tid, FormData_hypertable *update)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	Catalog *catalog = ts_catalog_get();
 	Oid table = catalog_get_table_id(catalog, HYPERTABLE);
 	Relation hypertable_rel = relation_open(table, RowExclusiveLock);
 
 	new_tuple = hypertable_formdata_make_tuple(update, hypertable_rel->rd_att);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(hypertable_rel, tid, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	relation_close(hypertable_rel, NoLock);
 }
@@ -657,7 +654,6 @@ ts_hypertable_drop_trigger(Oid relid, const char *trigger_name)
 static ScanTupleResult
 hypertable_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
 	bool isnull;
 	int hypertable_id = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_id, &isnull));
 
@@ -706,9 +702,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 		osm_htdrop_hook(NameStr(*schema_name), NameStr(*table_name));
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }
@@ -790,14 +784,11 @@ reset_associated_tuple_found(TupleInfo *ti, void *data)
 {
 	HeapTuple new_tuple;
 	FormData_hypertable fd;
-	CatalogSecurityContext sec_ctx;
 
 	ts_hypertable_formdata_fill(&fd, ti);
 	namestrcpy(&fd.associated_schema_name, INTERNAL_SCHEMA_NAME);
 	new_tuple = hypertable_formdata_make_tuple(&fd, ts_scanner_get_tupledesc(ti));
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 
 	return SCAN_CONTINUE;
@@ -883,13 +874,10 @@ static void
 hypertable_insert_relation(Relation rel, FormData_hypertable *fd)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 
 	new_tuple = hypertable_formdata_make_tuple(fd, RelationGetDescr(rel));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 }
 
