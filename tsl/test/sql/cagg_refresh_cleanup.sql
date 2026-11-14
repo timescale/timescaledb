@@ -111,6 +111,48 @@ FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
 SELECT debug_waitpoint_release('cagg_refresh_fail_at_txn1_start');
 
+-- Test 4c: refresh fails inside a PL/pgSQL function (a trigger on the
+-- materialization hypertable). The function's SPI connection is left on the
+-- SPI stack by the longjmp; the refresh must still roll back, report the
+-- original error instead of "invalid transaction termination", and clean up
+-- the registration row.
+BEGIN; INSERT INTO conditions VALUES ('2026-03-10', 444), ('2026-03-12', 444); COMMIT;
+
+CREATE FUNCTION fail_trigger_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'error raised from trigger';
+END
+$$;
+
+SELECT format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name) AS mat_table
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'cond_daily' \gset
+
+CREATE TRIGGER fail_trigger AFTER INSERT ON :mat_table
+FOR EACH ROW EXECUTE FUNCTION fail_trigger_fn();
+
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+\set ON_ERROR_STOP 1
+
+SELECT count(*) AS jobs_after_plpgsql_fail
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
+-- The failed transaction was rolled back: the invalidated buckets still hold
+-- the previously materialized values
+SELECT bucket, avg_val FROM cond_daily
+WHERE bucket IN ('2026-03-10 00:00+00', '2026-03-12 00:00+00') ORDER BY bucket;
+
+DROP TRIGGER fail_trigger ON :mat_table;
+DROP FUNCTION fail_trigger_fn();
+
+-- Without the failing trigger the same refresh succeeds
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+SELECT count(*) AS jobs_after_plpgsql_fail_retry
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+SELECT bucket, avg_val FROM cond_daily
+WHERE bucket IN ('2026-03-10 00:00+00', '2026-03-12 00:00+00') ORDER BY bucket;
+
 -- Test 5: stale entry with a dead PID is cleaned up by the next refresh.
 -- Inserting a row with PID 0 as a dummy job.
 INSERT INTO _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges

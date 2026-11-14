@@ -1,0 +1,1 @@
+Fixes: #11033 Fix masked errors from PL/pgSQL during cagg refresh
