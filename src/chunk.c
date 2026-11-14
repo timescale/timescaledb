@@ -706,7 +706,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 													0));
 	}
 
-	Oid uid, saved_uid;
+	Oid uid, saved_uid, owner;
 
 	Assert(chunk->hypertable_relid == ht->main_table_relid);
 
@@ -714,6 +714,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the parent hypertable */
 	stmt.relation->relpersistence = rel->rd_rel->relpersistence;
+	owner = rel->rd_rel->relowner;
 
 	/*
 	 * If the chunk is created in the internal schema, become the catalog
@@ -725,15 +726,10 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 	}
 	else
 	{
-		uid = rel->rd_rel->relowner;
+		uid = owner;
 	}
 
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-
-	if (uid != saved_uid)
-	{
-		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
 
 	/* Prepare event trigger state and invoke ddl_command_start triggers */
 	if (ts_guc_enable_event_triggers)
@@ -742,7 +738,17 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 		EventTriggerDDLCommandStart((Node *) &stmt);
 	}
 
-	address = DefineRelation(&stmt, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
+	if (uid != saved_uid)
+	{
+		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
+
+	address = DefineRelation(&stmt, chunk->relkind, owner, NULL, NULL);
+
+	if (uid != saved_uid)
+	{
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
+	}
 
 	/* Invoke ddl_command_end triggers and clean up the event trigger state */
 	if (ts_guc_enable_event_triggers)
@@ -757,7 +763,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 	CommandCounterIncrement();
 
 	/* Copy acl from hypertable to chunk relation record */
-	copy_hypertable_acl_to_relid(ht, rel->rd_rel->relowner, address.objectId);
+	copy_hypertable_acl_to_relid(ht, owner, address.objectId);
 
 	if (chunk->relkind == RELKIND_RELATION)
 	{
@@ -767,13 +773,15 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 		 */
 		create_toast_table(&stmt, address.objectId);
 
-		/*
-		 * Some options require being table owner to set for example statistics
-		 * so we have to set them before restoring security context
-		 */
+		/* The inserting user may not own the chunk */
+		if (owner != saved_uid)
+		{
+			SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+		}
+
 		set_attoptions(rel, address.objectId);
 
-		if (uid != saved_uid)
+		if (owner != saved_uid)
 		{
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 		}

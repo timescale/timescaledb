@@ -178,3 +178,11 @@ ALTER TABLE t_with SET (tsdb.chunk_interval = '1 hour');
 SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 't_with';
 
 
+-- chunk created by a user with only INSERT gets the attribute options of the hypertable
+CREATE TABLE attopt_insert(time timestamptz not null, device int) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
+ALTER TABLE attopt_insert ALTER COLUMN device SET (n_distinct = 10);
+GRANT INSERT ON attopt_insert TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO attopt_insert VALUES ('2025-01-01 00:00:00+00', 1);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT a.attname, a.attoptions FROM show_chunks('attopt_insert') ch JOIN pg_attribute a ON (a.attrelid = ch AND a.attname = 'device');

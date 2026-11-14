@@ -616,3 +616,18 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT count(*) FROM dc_small;
 
 DROP TABLE dc_small;
+
+-- compressed chunk created by a user with only INSERT is owned by the hypertable owner
+CREATE TABLE dc_insert_only (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.direct_compress);
+GRANT INSERT ON dc_insert_only TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO dc_insert_only SELECT '2025-01-01 00:00:00+00'::timestamptz, 'd1', i::float FROM generate_series(0,5) i;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_insert_only') chunk;
+SELECT pg_get_userbyid(c.relowner) = current_user AS owned_by_hypertable_owner, c.reloptions
+FROM show_chunks('dc_insert_only') chunk
+JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = chunk)
+JOIN pg_class c ON (c.oid = cs.compress_relid);
+
+DROP TABLE dc_insert_only;
