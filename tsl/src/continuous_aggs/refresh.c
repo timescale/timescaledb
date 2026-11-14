@@ -1326,6 +1326,21 @@ continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx
 static void
 rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ctx, ErrorData *edata)
 {
+	MemoryContext oldcontext = CurrentMemoryContext;
+
+	/*
+	 * A PL function that errored during the refresh leaves its atomic SPI connection on the
+	 * stack, making SPI_rollback()/SPI_commit() fail; pop them back to our non-atomic one.
+	 */
+	while (!IsSubTransaction() && !SPI_inside_nonatomic_context())
+	{
+		if (SPI_finish() != SPI_OK_FINISH)
+		{
+			break;
+		}
+	}
+	MemoryContextSwitchTo(oldcontext);
+
 	/*
 	 * Every spi_execute pushes a snapshot on the stack (unless a snapshot
 	 * is explicitly passed to it). This is usually cleaned up after a
