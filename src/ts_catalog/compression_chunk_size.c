@@ -87,7 +87,6 @@ ts_compression_chunk_size_update(int32 chunk_id, Form_compression_chunk_size for
 	ScanIterator iterator =
 		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, RowExclusiveLock, CurrentMemoryContext);
 	bool found = false;
-	CatalogSecurityContext sec_ctx;
 
 	Assert(form != NULL);
 
@@ -105,9 +104,7 @@ ts_compression_chunk_size_update(int32 chunk_id, Form_compression_chunk_size for
 		form->compressed_chunk_id = tupform->compressed_chunk_id;
 
 		memcpy(tupform, form, sizeof(FormData_compression_chunk_size));
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		ts_catalog_update_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti), copy);
-		ts_catalog_restore_user(&sec_ctx);
 		found = true;
 
 		heap_freetuple(copy);

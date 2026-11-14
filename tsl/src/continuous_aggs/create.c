@@ -130,7 +130,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	NameData user_schnm, user_viewnm, partial_schnm, partial_viewnm, direct_schnm, direct_viewnm;
 	Datum values[Natts_continuous_agg];
 	bool nulls[Natts_continuous_agg] = { false };
-	CatalogSecurityContext sec_ctx;
 
 	namestrcpy(&user_schnm, user_schema);
 	namestrcpy(&user_viewnm, user_view);
@@ -176,9 +175,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
 		BoolGetDatum(false);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
 }
 
@@ -196,7 +193,6 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 	TupleDesc desc;
 	Datum values[Natts_continuous_aggs_bucket_function];
 	bool nulls[Natts_continuous_aggs_bucket_function] = { false };
-	CatalogSecurityContext sec_ctx;
 
 	Assert(OidIsValid(bucket_function));
 	Assert(bucket_width != NULL);
@@ -256,9 +252,7 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_fixed_width)] =
 		BoolGetDatum(bucket_fixed_width);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
 }
 
