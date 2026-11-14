@@ -225,14 +225,11 @@ static void
 chunk_insert_relation(Relation rel, const Chunk *chunk)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	FormData_chunk fd = chunk->fd;
 
 	new_tuple = chunk_formdata_make_tuple(&fd, RelationGetDescr(rel));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 
 	heap_freetuple(new_tuple);
 }
@@ -3161,7 +3158,6 @@ static void
 chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 {
 	FormData_chunk form;
-	CatalogSecurityContext sec_ctx;
 
 	/*
 	 * chunk_delete locked this chunk row for us. Check the lock result before
@@ -3297,9 +3293,7 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		ts_compression_settings_delete_by_compress_relid(relid);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 }
 
 static void
@@ -3522,16 +3516,13 @@ static void
 chunk_update_catalog_tuple(ItemPointer tid, FormData_chunk *update)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	Catalog *catalog = ts_catalog_get();
 	Oid table = catalog_get_table_id(catalog, CHUNK);
 	Relation chunk_rel = relation_open(table, RowExclusiveLock);
 
 	new_tuple = chunk_formdata_make_tuple(update, chunk_rel->rd_att);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(chunk_rel, tid, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	relation_close(chunk_rel, NoLock);
 }

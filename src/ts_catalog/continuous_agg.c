@@ -719,7 +719,6 @@ ts_continuous_agg_set_schema_change_timestamp(int32 mat_hypertable_id, int64 thr
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
-	CatalogSecurityContext sec_ctx;
 
 	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
@@ -736,9 +735,7 @@ ts_continuous_agg_set_schema_change_timestamp(int32 mat_hypertable_id, int64 thr
 
 			HeapTuple new_tuple =
 				continuous_agg_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-			ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 			ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-			ts_catalog_restore_user(&sec_ctx);
 			heap_freetuple(new_tuple);
 		}
 	}
@@ -1297,7 +1294,6 @@ continuous_agg_rename(TupleInfo *ti, void *data)
 	CaggRenameCtx *ctx = (CaggRenameCtx *) data;
 	FormData_continuous_agg form;
 	bool do_update = false;
-	CatalogSecurityContext sec_ctx;
 
 	continuous_agg_formdata_fill(&form, ti);
 
@@ -1307,9 +1303,7 @@ continuous_agg_rename(TupleInfo *ti, void *data)
 	{
 		HeapTuple new_tuple =
 			continuous_agg_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-		ts_catalog_restore_user(&sec_ctx);
 		heap_freetuple(new_tuple);
 	}
 

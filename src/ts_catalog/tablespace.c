@@ -366,13 +366,10 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 {
 	TablespaceScanInfo *info = data;
 	bool should_free;
-	CatalogSecurityContext sec_ctx;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	FormData_tablespace *form = (FormData_tablespace *) GETSTRUCT(tuple);
 
-	ts_catalog_database_info_become_owner(info->database_info, &sec_ctx);
 	ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 	info->hypertables = lappend_int(info->hypertables, form->hypertable_id);
 
 	if (should_free)
