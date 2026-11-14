@@ -3627,7 +3627,6 @@ static void
 process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
-	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
@@ -3672,13 +3671,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 #endif
 
 	/*
-	 * Change user since chunks are typically located in an internal schema
-	 * and chunk indexes require metadata changes. In the single-transaction
-	 * case, we do this once for the entire table.
-	 */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	/*
 	 * Hold a lock on the hypertable index, and the chunk to prevent
 	 * from being altered. Since we use the same relids across transactions,
 	 * there is a potential issue if the id gets reassigned between one
@@ -3721,8 +3713,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	validate_index_constraints(chunk, info->stmt);
 
 	table_close(chunk_rel, NoLock);
-
-	ts_catalog_restore_user(&sec_ctx);
 
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
 	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
@@ -3987,14 +3977,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* create chunk indexes using the same transaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
-		CatalogSecurityContext sec_ctx;
 		List *chunks;
-		/*
-		 * Change user since chunk's are typically located in an internal
-		 * schema and chunk indexes require metadata changes. In the
-		 * multi-transaction case, we do this once per chunk.
-		 */
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 		pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
@@ -4003,7 +3986,6 @@ process_index_start(ProcessUtilityArgs *args)
 		/* Recurse to each chunk and create a corresponding index. */
 		foreach_chunk(ht, process_index_chunk, &info, false);
 
-		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
 
 		pgstat_progress_end_command();

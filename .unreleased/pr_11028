@@ -1,0 +1,1 @@
+Fixes: #11028 Create chunk indexes without switching to the catalog owner
