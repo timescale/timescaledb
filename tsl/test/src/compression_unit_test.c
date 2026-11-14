@@ -36,6 +36,7 @@
 #include "compression/algorithms/uuid_compress.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/batch_metadata_builder_minmax.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 #include "uuid.h"
 
 #define TEST_ELEMENTS 1015
@@ -318,45 +319,119 @@ test_gorilla_int()
 		}
 		TestAssertInt64Eq(i, TEST_ELEMENTS);
 	}
+
+	/* Bulk decompression */
+	{
+		ArrowArray *bulk_result =
+			gorilla_decompress_all(PointerGetDatum(compressed), INT8OID, CurrentMemoryContext);
+		for (i = 0; i < TEST_ELEMENTS; i++)
+		{
+			TestAssertTrue(arrow_row_is_valid(bulk_result->buffers[0], i));
+			TestAssertInt64Eq(((int64 *) bulk_result->buffers[1])[i], i);
+		}
+	}
 }
 
 static void
-test_gorilla_float()
+test_gorilla_float(bool have_nulls, bool have_random)
 {
 	GorillaCompressor *compressor = gorilla_compressor_alloc();
 	GorillaCompressed *compressed;
-	DecompressionIterator *iter;
-	for (int x = 0; x < TEST_ELEMENTS; x++)
+
+	float values[TEST_ELEMENTS];
+	bool nulls[TEST_ELEMENTS];
+	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
-		gorilla_compressor_append_value(compressor, float_get_bits((float) x));
+		if (have_random)
+		{
+			/* Also add some stretches of equal numbers. */
+			int base = i;
+			if (i % 37 < 3)
+			{
+				base = 1;
+			}
+			else if (i % 53 < 2)
+			{
+				base = 2;
+			}
+
+			values[i] = (float) ((test_hash64(base) / (double) PG_UINT64_MAX) * 100.);
+		}
+		else
+		{
+			values[i] = (float) i;
+		}
+
+		if (have_nulls && i % 29 == 0)
+		{
+			nulls[i] = true;
+		}
+		else
+		{
+			nulls[i] = false;
+		}
+
+		if (nulls[i])
+		{
+			gorilla_compressor_append_null(compressor);
+		}
+		else
+		{
+			gorilla_compressor_append_value(compressor, float_get_bits(values[i]));
+		}
 	}
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1168);
-
-	float i = 0;
-	iter =
-		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT4OID);
-	for (DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter); !r.is_done;
-		 r = gorilla_decompression_iterator_try_next_forward(iter))
+	if (!have_nulls && !have_random)
 	{
-		TestAssertTrue(!r.is_null);
-		TestAssertDoubleEq(DatumGetFloat4(r.val), i);
-		i += 1.0;
+		TestAssertInt64Eq(VARSIZE(compressed), 1168);
 	}
-	TestAssertInt64Eq(i, TEST_ELEMENTS);
 
+	/* Forward decompression. */
+	DecompressionIterator *iter =
+		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT4OID);
+	ArrowArray *bulk_result =
+		gorilla_decompress_all(PointerGetDatum(compressed), FLOAT4OID, CurrentMemoryContext);
+	for (int i = 0; i < TEST_ELEMENTS; i++)
+	{
+		DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+			TestAssertTrue(!arrow_row_is_valid(bulk_result->buffers[0], i));
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertTrue(arrow_row_is_valid(bulk_result->buffers[0], i));
+			TestAssertDoubleEq(DatumGetFloat4(r.val), values[i]);
+			TestAssertDoubleEq(((float *) bulk_result->buffers[1])[i], values[i]);
+		}
+	}
+	DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter);
+	TestAssertTrue(r.is_done);
+
+	/* Reverse decompression. */
 	iter =
 		gorilla_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), FLOAT4OID);
-	for (DecompressResult r = gorilla_decompression_iterator_try_next_reverse(iter); !r.is_done;
-		 r = gorilla_decompression_iterator_try_next_reverse(iter))
+	for (int i = TEST_ELEMENTS - 1; i >= 0; i--)
 	{
-		TestAssertTrue(!r.is_null);
-		TestAssertInt64Eq(DatumGetFloat4(r.val), i - 1);
-		i -= 1;
+		DecompressResult r = gorilla_decompression_iterator_try_next_reverse(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertDoubleEq(DatumGetFloat4(r.val), values[i]);
+		}
 	}
-	TestAssertInt64Eq(i, 0);
+	r = gorilla_decompression_iterator_try_next_reverse(iter);
+	TestAssertTrue(r.is_done);
 }
 
 static uint64
@@ -1868,6 +1943,86 @@ test_uuid()
 }
 
 static void
+test_compressed_columns_to_postgres_data()
+{
+	/* Test 1-byte, 2-byte, 4-byte, and 8-byte fixed-width columnar datum extraction */
+	uint8 validity[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+	/* 1-byte integers */
+	uint8 data1[4] = { 0x12, 0x7F, 0x80, 0xFE };
+	Datum out1 = 0;
+	bool null1 = false;
+	CompressedColumnValues col1 = {
+		.decompression_type = 1,
+		.output_value = &out1,
+		.output_isnull = &null1,
+		.buffers = { validity, data1, NULL, NULL },
+	};
+	for (int i = 0; i < 4; i++)
+	{
+		compressed_columns_to_postgres_data(&col1, 1, i);
+		TestAssertTrue(!null1);
+		TestAssertInt64Eq((uint8) out1, data1[i]);
+	}
+
+	/* 2-byte integers */
+	uint16 data2[4] = { 0x1234, 0x7FFF, 0x8000, 0xFCDE };
+	Datum out2 = 0;
+	bool null2 = false;
+	CompressedColumnValues col2 = {
+		.decompression_type = 2,
+		.output_value = &out2,
+		.output_isnull = &null2,
+		.buffers = { validity, data2, NULL, NULL },
+	};
+	for (int i = 0; i < 4; i++)
+	{
+		compressed_columns_to_postgres_data(&col2, 1, i);
+		TestAssertTrue(!null2);
+		TestAssertInt64Eq((uint16) out2, data2[i]);
+	}
+
+	/* 4-byte integers */
+	uint32 data4[4] = { 0x12345678, 0x7FFFFFFF, 0x80000000, 0xFEDCBA98 };
+	Datum out4 = 0;
+	bool null4 = false;
+	CompressedColumnValues col4 = {
+		.decompression_type = 4,
+		.output_value = &out4,
+		.output_isnull = &null4,
+		.buffers = { validity, data4, NULL, NULL },
+	};
+	for (int i = 0; i < 4; i++)
+	{
+		compressed_columns_to_postgres_data(&col4, 1, i);
+		TestAssertTrue(!null4);
+		TestAssertInt64Eq((uint32) out4, data4[i]);
+	}
+
+#ifdef USE_FLOAT8_BYVAL
+	/* 8-byte integers / floats */
+	uint64 data8[4] = { 0x123456789ABCDEF0ULL,
+						0x7FFFFFFFFFFFFFFFULL,
+						0x8000000000000000ULL,
+						0xFEDCBA9876543210ULL };
+	Datum out8 = 0;
+	bool null8 = false;
+	CompressedColumnValues col8 = {
+		.decompression_type = 8,
+		.output_value = &out8,
+		.output_isnull = &null8,
+		.buffers = { validity, data8, NULL, NULL },
+	};
+	for (int i = 0; i < 4; i++)
+	{
+		compressed_columns_to_postgres_data(&col8, 1, i);
+		TestAssertTrue(!null8);
+		TestAssertInt64Eq((uint64) out8, data8[i]);
+	}
+#endif
+}
+
+static void
 pointless_tests_to_satisfy_codecov()
 {
 	TestEnsureError(tsl_array_decompress_all(UnassignedDatum, InvalidOid, CurrentMemoryContext));
@@ -1887,11 +2042,15 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_string_dictionary();
 	test_bit_array_reverse_empty();
 	test_gorilla_int();
-	test_gorilla_float();
+	test_gorilla_float(/* have_nulls = */ false, /* have_random = */ false);
+	test_gorilla_float(/* have_nulls = */ false, /* have_random = */ true);
+	test_gorilla_float(/* have_nulls = */ true, /* have_random = */ false);
+	test_gorilla_float(/* have_nulls = */ true, /* have_random = */ true);
 	test_gorilla_double(/* have_nulls = */ false, /* have_random = */ false);
 	test_gorilla_double(/* have_nulls = */ false, /* have_random = */ true);
 	test_gorilla_double(/* have_nulls = */ true, /* have_random = */ false);
 	test_gorilla_double(/* have_nulls = */ true, /* have_random = */ true);
+	test_compressed_columns_to_postgres_data();
 	test_delta();
 	test_delta2();
 	test_delta3(/* have_nulls = */ false, /* have_random = */ false);
