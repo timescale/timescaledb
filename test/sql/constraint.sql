@@ -719,3 +719,21 @@ INSERT INTO trunc_fk_child VALUES ('2025-01-01', 1);
 INSERT INTO trunc_fk_child VALUES ('2025-04-01', 10);
 DROP TABLE trunc_fk_child;
 DROP TABLE trunc_fk_parent;
+
+-- Foreign key on chunks created by a user that does not own the hypertable
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE fk_owner_parent(id int PRIMARY KEY);
+INSERT INTO fk_owner_parent VALUES (1);
+CREATE TABLE fk_owner_child(time timestamptz NOT NULL, id int REFERENCES fk_owner_parent(id));
+SELECT create_hypertable('fk_owner_child', 'time');
+GRANT INSERT ON fk_owner_child TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO fk_owner_child VALUES ('2025-01-01 00:00:00+00', 1);
+\set ON_ERROR_STOP 0
+INSERT INTO fk_owner_child VALUES ('2025-01-01 00:00:00+00', 2);
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT conname, convalidated FROM pg_constraint
+WHERE contype = 'f' AND conrelid IN (SELECT show_chunks('fk_owner_child'));
+DROP TABLE fk_owner_child;
+DROP TABLE fk_owner_parent;
