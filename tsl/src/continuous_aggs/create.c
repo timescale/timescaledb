@@ -403,6 +403,7 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 	/*  Create the materialization table.  */
 	SWITCH_TO_TS_USER(mat_rel->schemaname, uid, saved_uid, sec_ctx);
 	*mataddress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
+	RESTORE_USER(uid, saved_uid, sec_ctx);
 	CommandCounterIncrement();
 	mat_relid = mataddress->objectId;
 
@@ -411,7 +412,6 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 		transformRelOptions(UnassignedDatum, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(mat_relid, toast_options);
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
@@ -497,10 +497,10 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	 */
 	SWITCH_TO_TS_USER(viewrel->schemaname, uid, saved_uid, sec_ctx);
 	address = DefineRelation(create, RELKIND_VIEW, owner, NULL, NULL);
+	RESTORE_USER(uid, saved_uid, sec_ctx);
 	CommandCounterIncrement();
 	StoreViewQuery(address.objectId, selquery, false);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 	return address;
 }
 
