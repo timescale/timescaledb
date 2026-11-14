@@ -1,0 +1,1 @@
+Fixes: #0000 Analyze expressions of columns added to continuous aggregates as the calling user

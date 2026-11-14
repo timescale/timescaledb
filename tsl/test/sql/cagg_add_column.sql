@@ -427,3 +427,18 @@ DROP MATERIALIZED VIEW cagg_parent;
 DROP TABLE hier_src;
 
 DROP TABLE metrics;
+
+-- ADD COLUMN as non-superuser
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE user_src (ts timestamptz NOT NULL, val int);
+SELECT create_hypertable('user_src', 'ts');
+CREATE MATERIALIZED VIEW cagg_user
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket(INTERVAL '1 hour', ts) AS bucket, sum(val) AS sum_val
+FROM user_src GROUP BY bucket
+WITH NO DATA;
+ALTER MATERIALIZED VIEW cagg_user
+    ADD COLUMN min_val int GENERATED ALWAYS AS (min(val)) STORED;
+SELECT * FROM cagg_user;
+DROP MATERIALIZED VIEW cagg_user;
+DROP TABLE user_src;

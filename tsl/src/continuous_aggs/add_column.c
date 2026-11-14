@@ -12,7 +12,9 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/parsenodes.h>
+#include <parser/analyze.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <tcop/tcopprot.h>
@@ -29,6 +31,7 @@
 #include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
+#include "utils.h"
 
 #include "add_column.h"
 
@@ -61,7 +64,7 @@ get_stored_generated_constraint(ColumnDef *coldef)
  *      and the no-GENERATED-at-all case).
  *   2. No other column-level constraints (NOT NULL / COLLATE / STORAGE /
  *      COMPRESSION) are allowed -- the mat-HT ALTER strips them silently
- *      and the SELECT we feed DefineView wouldn't carry them either, so
+ *      and the SELECT we store in the view wouldn't carry them either, so
  *      they'd be ignored. Reject explicitly.
  *
  * Everything else (must-be-aggregate, columns-must-exist, type-matches,
@@ -143,7 +146,7 @@ add_columns_to_mat_hypertable(Oid mat_ht_oid, AlterTableStmt *stmt)
 
 /*
  * Rebuild a CAgg-owned view (partial/direct/user) by appending
- * `new_targets` to its SELECT list and feeding the result back into DefineView.
+ * `new_targets` to its SELECT list and storing the result as the new view query.
  */
 static void
 rebuild_cagg_view(NameData schema, NameData name, List *new_targets)
@@ -168,23 +171,48 @@ rebuild_cagg_view(NameData schema, NameData name, List *new_targets)
 
 	select->targetList = list_concat(select->targetList, new_targets);
 
-	ViewStmt *vstmt = makeNode(ViewStmt);
-	vstmt->view = makeRangeVar(pstrdup(NameStr(schema)), pstrdup(NameStr(name)), -1);
-	vstmt->aliases = NIL;
-	vstmt->query = (Node *) select;
-	vstmt->replace = true;
-	vstmt->options = NIL;
-	vstmt->withCheckOption = NO_CHECK_OPTION;
+	/* Analyze as the calling user since this can run user code */
+	Query *query = parse_analyze_fixedparams(raw, view_def, NULL, 0, NULL);
 
-	/* Partial and direct views live in `_timescaledb_internal`, which the
-	 * invoking user generally doesn't have CREATE rights on. Switch to the
-	 * catalog owner for the duration of DefineView. */
-	Oid uid = InvalidOid;
-	Oid saved_uid = InvalidOid;
-	int sec_ctx = 0;
-	SWITCH_TO_TS_USER(NameStr(schema), uid, saved_uid, sec_ctx);
-	DefineView(vstmt, view_def, 0, strlen(view_def));
-	RESTORE_USER(uid, saved_uid, sec_ctx);
+	/* Add the view columns that are not part of the view yet */
+	List *atcmds = NIL;
+	int natts = ts_get_relnatts(view_oid);
+	int attno = 0;
+	ListCell *lc;
+	foreach (lc, query->targetList)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+
+		if (tle->resjunk || ++attno <= natts)
+		{
+			continue;
+		}
+
+		Oid collation = exprCollation((Node *) tle->expr);
+		if (!OidIsValid(collation) && type_is_collatable(exprType((Node *) tle->expr)))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INDETERMINATE_COLLATION),
+					 errmsg("could not determine which collation to use for view column \"%s\"",
+							tle->resname),
+					 errhint("Use the COLLATE clause to set the collation explicitly.")));
+		}
+
+		AlterTableCmd *cmd = makeNode(AlterTableCmd);
+		cmd->subtype = AT_AddColumnToView;
+		cmd->def = (Node *) makeColumnDef(tle->resname,
+										  exprType((Node *) tle->expr),
+										  exprTypmod((Node *) tle->expr),
+										  collation);
+		atcmds = lappend(atcmds, cmd);
+	}
+
+	if (atcmds != NIL)
+	{
+		AlterTableInternal(view_oid, atcmds, true);
+		CommandCounterIncrement();
+	}
+	StoreViewQuery(view_oid, query, true);
 	CommandCounterIncrement();
 }
 
