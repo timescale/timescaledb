@@ -706,7 +706,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 													0));
 	}
 
-	Oid uid, saved_uid, owner;
+	Oid saved_uid, owner;
 
 	Assert(chunk->hypertable_relid == ht->main_table_relid);
 
@@ -715,19 +715,6 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the parent hypertable */
 	stmt.relation->relpersistence = rel->rd_rel->relpersistence;
 	owner = rel->rd_rel->relowner;
-
-	/*
-	 * If the chunk is created in the internal schema, become the catalog
-	 * owner, otherwise become the hypertable owner
-	 */
-	if (strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
-	{
-		uid = ts_catalog_database_info_get()->owner_uid;
-	}
-	else
-	{
-		uid = owner;
-	}
 
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 
@@ -738,17 +725,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 		EventTriggerDDLCommandStart((Node *) &stmt);
 	}
 
-	if (uid != saved_uid)
-	{
-		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
-
-	address = DefineRelation(&stmt, chunk->relkind, owner, NULL, NULL);
-
-	if (uid != saved_uid)
-	{
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-	}
+	address = ts_relation_define(&stmt, chunk->relkind, owner);
 
 	/* Invoke ddl_command_end triggers and clean up the event trigger state */
 	if (ts_guc_enable_event_triggers)
