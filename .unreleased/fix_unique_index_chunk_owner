@@ -1,0 +1,1 @@
+Fixes: #0000 Check ownership before validating a unique index on a compressed chunk

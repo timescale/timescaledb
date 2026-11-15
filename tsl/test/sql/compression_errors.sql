@@ -572,3 +572,21 @@ CREATE UNIQUE INDEX ok_idx ON :CHUNK (device_id, ts);
 SELECT indisunique FROM pg_index WHERE indexrelid::regclass::text LIKE '%ok_idx';
 DROP TABLE i9720;
 
+
+-- CREATE UNIQUE INDEX on a compressed chunk by a user that does not own it
+CREATE TABLE unique_idx_owner(device_id int NOT NULL, ts timestamptz NOT NULL, v float8);
+SELECT create_hypertable('unique_idx_owner', 'ts');
+ALTER TABLE unique_idx_owner SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
+INSERT INTO unique_idx_owner VALUES (1, '2026-01-01 00:00:00+00', 1.0), (1, '2026-01-01 00:00:00+00', 2.0);
+SELECT count(compress_chunk(ch)) FROM show_chunks('unique_idx_owner') ch;
+
+SELECT format('%I.%I', chunk_schema, chunk_name) AS "CHUNK"
+FROM timescaledb_information.chunks WHERE hypertable_name = 'unique_idx_owner' \gset
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX not_owner_idx ON :CHUNK (device_id, ts);
+CREATE UNIQUE INDEX not_owner_idx ON :CHUNK ((device_id + 1), ts);
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE unique_idx_owner;

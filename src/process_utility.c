@@ -3838,6 +3838,14 @@ process_index_start(ProcessUtilityArgs *args)
 
 				if (chunk && ts_chunk_is_compressed(chunk))
 				{
+					/* The check below runs the index expressions as the chunk owner */
+					if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+					{
+						aclcheck_error(ACLCHECK_NOT_OWNER,
+									   get_relkind_objtype(get_rel_relkind(relid)),
+									   get_rel_name(relid));
+					}
+
 					/*
 					 * Expression index elements are still raw parse trees at that point
 					 * and cannot be passed to deparse_expression directly, so run the
