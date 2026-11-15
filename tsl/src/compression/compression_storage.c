@@ -59,7 +59,6 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 						 CompressionSettings *settings)
 {
 	ObjectAddress tbladdress;
-	CatalogSecurityContext sec_ctx;
 	Datum toast_options;
 #if PG18_LT
 	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
@@ -96,9 +95,7 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
 	create->relation->relpersistence = get_rel_persistence(src_chunk->fd.relid);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
-	ts_catalog_restore_user(&sec_ctx);
+	tbladdress = ts_relation_define(create, RELKIND_RELATION, owner);
 	CommandCounterIncrement();
 	Oid table_id = tbladdress.objectId;
 	ts_copy_relation_acl(src_chunk->hypertable_relid, table_id, owner);
