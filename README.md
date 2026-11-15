@@ -357,7 +357,7 @@ Learn TimescaleDB with complete, standalone examples using real-world datasets. 
 - **[Application Events](docs/getting-started/events-uuidv7/)** - Event logging with UUIDv7
 
 Or try some of our workshops
-- **[AI Workshop: EV Charging Station Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/AI-Workshop)** - Integrate PostgreSQL with AI capabilities for managing and analyzing EV charging station data
+- **AI Workshop: EV Charging Station Analysis** - Integrate PostgreSQL with AI capabilities for managing and analyzing EV charging station data
 - **[Time-Series Workshop: Financial Data Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/TimeSeries-Workshop-Finance/)** - Work with cryptocurrency tick data, create candlestick charts
 
 ## Want TimescaleDB hosted and managed for you? Try Tiger Cloud
