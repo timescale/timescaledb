@@ -787,8 +787,10 @@ SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS 
 SELECT ts_test_bgw_job_function_call_string(:job_func);
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 
--- Remove the procedure and let's check it errors out when we try to call the function that gets the proc name
-DROP PROCEDURE custom_proc(jobid int, args jsonb);
+-- Point the job at a procedure that does not exist (dropping the procedure
+-- is blocked while a job depends on it) and check that building the call
+-- string errors out.
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'custom_proc_missing' WHERE id = :job_proc;
 \set ON_ERROR_STOP 0
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 \set ON_ERROR_STOP 1

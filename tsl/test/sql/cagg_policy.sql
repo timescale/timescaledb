@@ -741,8 +741,18 @@ SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 
 CALL run_job(:job_id);
 SELECT count(*) FROM issue_6902;
 
--- test untyped interval error handling
+-- show_policies called for several caggs in the same target list
 CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
+CREATE MATERIALIZED VIEW cagg_show1 WITH (tsdb.continuous)
+AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW cagg_show2 WITH (tsdb.continuous)
+AS SELECT time_bucket('1 hour', time) FROM m GROUP BY 1 WITH NO DATA;
+SELECT timescaledb_experimental.add_policies('cagg_show1', refresh_start_offset => '10 days'::interval, refresh_end_offset => '1 day'::interval, drop_after => '30 days'::interval);
+SELECT timescaledb_experimental.add_policies('cagg_show2', refresh_start_offset => '10 days'::interval, refresh_end_offset => '1 day'::interval);
+SELECT timescaledb_experimental.show_policies('cagg_show1'), timescaledb_experimental.show_policies('cagg_show2');
+SELECT timescaledb_experimental.show_policies('cagg_show2'), timescaledb_experimental.show_policies('cagg_show1');
+
+-- test untyped interval error handling
 CREATE MATERIALIZED VIEW cagg_error WITH (tsdb.continuous)
 AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1;
 SELECT timescaledb_experimental.add_policies('cagg_error', drop_after => '20 days');

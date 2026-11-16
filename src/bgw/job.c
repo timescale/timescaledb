@@ -7,7 +7,10 @@
 
 #include <unistd.h>
 #include <access/xact.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_authid.h>
+#include <catalog/pg_proc.h>
+#include <catalog/pg_type_d.h>
 #include <executor/execdebug.h>
 #include <executor/instrument.h>
 #include <miscadmin.h>
@@ -149,17 +152,12 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner, Jsonb *config)
 				 errhint("Use a FUNCTION instead")));
 	}
 
-	Oid save_userid;
-	int save_sec_context;
-	GetUserIdAndSecContext(&save_userid, &save_sec_context);
-	SetUserIdAndSecContext(owner, save_sec_context | SECURITY_RESTRICTED_OPERATION);
-	int save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
+	TSSecurityContext sctx;
+	ts_security_context_enter(owner, &sctx);
 
 	job_execute_function(funcexpr);
 
-	AtEOXact_GUC(false, save_nestlevel);
-	SetUserIdAndSecContext(save_userid, save_sec_context);
+	ts_security_context_exit(&sctx);
 }
 
 /* Run the check function on a configuration. It will generate errors if there
@@ -1044,6 +1042,43 @@ zero_guc(const char *guc_name)
 	}
 }
 
+/*
+ * Resolve the routine that a job's proc_schema and proc_name refer to, using
+ * the (integer, jsonb) job signature, or InvalidOid if there is none.
+ *
+ * This is a plain catalog lookup, unlike ts_bgw_job_get_funcid, which goes
+ * through name resolution and therefore checks schema USAGE as the current
+ * user. The DDL hooks call this for every job row as whoever issued the
+ * statement, and a job in a schema that user cannot use must not make an
+ * unrelated DROP, RENAME or SET SCHEMA fail.
+ */
+Oid
+ts_bgw_job_get_funcid_from_catalog(const NameData *proc_schema, const NameData *proc_name)
+{
+	Oid argtypes[] = { INT4OID, JSONBOID };
+	Oid nspoid = get_namespace_oid(NameStr(*proc_schema), true);
+	HeapTuple tuple;
+	Oid funcid;
+
+	if (!OidIsValid(nspoid))
+	{
+		return InvalidOid;
+	}
+
+	tuple = SearchSysCache3(PROCNAMEARGSNSP,
+							PointerGetDatum(NameStr(*proc_name)),
+							PointerGetDatum(buildoidvector(argtypes, lengthof(argtypes))),
+							ObjectIdGetDatum(nspoid));
+	if (!HeapTupleIsValid(tuple))
+	{
+		return InvalidOid;
+	}
+
+	funcid = ((Form_pg_proc) GETSTRUCT(tuple))->oid;
+	ReleaseSysCache(tuple);
+	return funcid;
+}
+
 Oid
 ts_bgw_job_get_funcid(BgwJob *job)
 {
@@ -1405,7 +1440,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	Relation rel;
 	TupleDesc desc;
 	Datum values[Natts_bgw_job] = { 0 };
-	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_bgw_job] = { false };
 	int32 job_id;
 	NameData app_name = { 0 };
@@ -1486,8 +1520,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = CStringGetTextDatum(timezone);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
 	name_len =
 		snprintf(NameStr(app_name), NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
@@ -1501,7 +1533,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(&app_name);
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	/* This is where we would add a call to recordDependencyOnOwner, but it
 	 * cannot support dependencies on anything but built-in classes since

@@ -1671,6 +1671,9 @@ ts_cagg_variable_current_bucket_start(int64 timeval, const ContinuousAggBucketFu
 	return ts_time_value_to_internal(generic_time_bucket(bf, val_beg), TIMESTAMPOID);
 }
 
+/*
+ * Allows the CAgg owner, superusers, and the database owner.
+ */
 Oid
 ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {

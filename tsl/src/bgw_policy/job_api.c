@@ -399,6 +399,18 @@ job_alter(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_permission_check(job, "alter");
 
+	/* The background worker runs the check function as the job owner, so only the
+	 * job owner can change it */
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_CHECK_CONFIG) && !has_privs_of_role(GetUserId(), job->fd.owner))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("insufficient permissions to change the config check function of job %d",
+						job_id),
+				 errdetail("Only the owner of job %d can change its config check function.",
+						   job_id)));
+	}
+
 	if (!PG_ARGISNULL(ALTER_JOB_ARG_SCHEDULE_INTERVAL))
 	{
 		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(ALTER_JOB_ARG_SCHEDULE_INTERVAL);
@@ -460,7 +472,7 @@ job_alter(PG_FUNCTION_ARGS)
 						 errmsg("function with OID %d does not exist", check)));
 			}
 
-			if (object_aclcheck(ProcedureRelationId, check, GetUserId(), ACL_EXECUTE) !=
+			if (object_aclcheck(ProcedureRelationId, check, job->fd.owner, ACL_EXECUTE) !=
 				ACLCHECK_OK)
 			{
 				ereport(ERROR,

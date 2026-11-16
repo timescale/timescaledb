@@ -820,3 +820,14 @@ $$;
 -- clean up jobs
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
+
+-- A non-superuser that owns the database can start/stop/restart background
+-- workers; superuser is no longer required, only database ownership.
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT _timescaledb_functions.stop_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+SELECT _timescaledb_functions.stop_background_workers();
