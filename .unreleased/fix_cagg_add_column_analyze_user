@@ -1,0 +1,1 @@
+Fixes: #11029 Analyze expressions of columns added to continuous aggregates as the calling user
