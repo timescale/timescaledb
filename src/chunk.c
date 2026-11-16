@@ -1732,10 +1732,34 @@ ts_chunk_find_for_point(const Hypertable *ht, const Point *p, LOCKMODE lockmode)
 	}
 
 	/* The chunk might be dropped, so we don't fail if we haven't found it. */
-	return ts_chunk_get_by_id_with_slice_lock(chunk_id,
-											  lockmode,
-											  lockmode == NoLock ? NULL : &slice_lock,
-											  /* fail_if_not_found = */ false);
+	Chunk *chunk = ts_chunk_get_by_id_with_slice_lock(chunk_id,
+													  lockmode,
+													  lockmode == NoLock ? NULL : &slice_lock,
+													  /* fail_if_not_found = */ false);
+	if (chunk != NULL)
+	{
+		ts_chunk_check_parent(chunk->fd.relid, ht->main_table_relid);
+	}
+
+	return chunk;
+}
+
+/*
+ * Make sure a relation found through the chunk catalog really inherits from
+ * the hypertable. Queries only check permissions on the hypertable, so the
+ * catalog entry alone must not be enough to reach a table.
+ */
+void
+ts_chunk_check_parent(Oid chunk_relid, Oid hypertable_relid)
+{
+	if (ts_inheritance_parent_relid(chunk_relid) != hypertable_relid)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_CORRUPTED),
+				 errmsg("relation \"%s\" is not a chunk of hypertable \"%s\"",
+						get_rel_name(chunk_relid),
+						get_rel_name(hypertable_relid))));
+	}
 }
 
 /*
@@ -1778,6 +1802,8 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, LOCKMODE chunk_l
 														  /* fail_if_not_found = */ false);
 		if (chunk != NULL)
 		{
+			ts_chunk_check_parent(chunk->fd.relid, ht->main_table_relid);
+
 			/*
 			 * Chunk was not created by us but by someone else, so we can
 			 * release the lock early.

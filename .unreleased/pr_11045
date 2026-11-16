@@ -1,0 +1,1 @@
+Fixes: #11045 Check that chunks found in the catalog are child tables of their hypertable

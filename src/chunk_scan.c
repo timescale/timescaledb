@@ -97,6 +97,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		Chunk *chunk = MemoryContextAllocZero(orig_mcxt, sizeof(Chunk));
 
 		ts_chunk_formdata_fill(&chunk->fd, ti);
+		ts_chunk_check_parent(chunk->fd.relid, hs->main_table_relid);
 
 		chunk->cube = NULL;
 		chunk->hypertable_relid = hs->main_table_relid;

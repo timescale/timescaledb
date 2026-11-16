@@ -509,3 +509,53 @@ SELECT * FROM hypertable_su;
 
 CREATE INDEX ON hypertable_su (time, temp);
 ALTER TABLE hypertable_su ADD COLUMN val2 integer;
+--a chunk catalog entry for a table that is not a child of the hypertable
+--must not give the hypertable owner access to that table
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+CREATE TABLE private_table (time TIMESTAMPTZ NOT NULL, value INT);
+INSERT INTO private_table VALUES ('2024-01-01 12:00+00', 1), ('2024-01-01 13:00+00', 2);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE catalog_relid_test (time TIMESTAMPTZ NOT NULL, value INT);
+SELECT create_hypertable('catalog_relid_test', 'time', chunk_time_interval => INTERVAL '1 day');
+        create_hypertable         
+----------------------------------
+ (12,public,catalog_relid_test,t)
+
+INSERT INTO catalog_relid_test VALUES ('2024-01-05 12:00+00', 5);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+WITH c AS (
+	INSERT INTO _timescaledb_catalog.chunk (relid, hypertable_id, creation_time)
+	SELECT 'private_table'::regclass, h.id, now()
+	FROM _timescaledb_catalog.hypertable h WHERE h.table_name = 'catalog_relid_test'
+	RETURNING id, hypertable_id)
+INSERT INTO _timescaledb_catalog.dimension_slice (chunk_id, dimension_id, range_start, range_end)
+SELECT c.id, d.id,
+	_timescaledb_functions.to_unix_microseconds('2024-01-01T00:00:00+00'),
+	_timescaledb_functions.to_unix_microseconds('2024-01-02T00:00:00+00')
+FROM c JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = c.hypertable_id;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT * FROM catalog_relid_test ORDER BY time;
+ERROR:  relation "private_table" is not a chunk of hypertable "catalog_relid_test"
+UPDATE catalog_relid_test SET value = 10 WHERE value = 1;
+ERROR:  relation "private_table" is not a chunk of hypertable "catalog_relid_test"
+DELETE FROM catalog_relid_test WHERE value = 2;
+ERROR:  relation "private_table" is not a chunk of hypertable "catalog_relid_test"
+INSERT INTO catalog_relid_test VALUES ('2024-01-01 14:00+00', 3);
+ERROR:  relation "private_table" is not a chunk of hypertable "catalog_relid_test"
+\set ON_ERROR_STOP 1
+--queries that do not touch the entry still work
+SELECT value FROM catalog_relid_test WHERE time >= '2024-01-05T00:00:00+00';
+ value 
+-------
+     5
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT value FROM private_table ORDER BY value;
+ value 
+-------
+     1
+     2
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DELETE FROM _timescaledb_catalog.chunk WHERE relid = 'private_table'::regclass;

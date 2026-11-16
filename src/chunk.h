@@ -152,6 +152,7 @@ extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
 extern int32 ts_chunk_point_find_chunk_id(const Hypertable *ht, const Point *p,
 										  const ScanTupLock *slice_lock);
 extern Chunk *ts_chunk_find_for_point(const Hypertable *ht, const Point *p, LOCKMODE lockmode);
+extern void ts_chunk_check_parent(Oid chunk_relid, Oid hypertable_relid);
 extern Chunk *ts_chunk_create_for_point(const Hypertable *ht, const Point *p,
 										LOCKMODE chunk_lockmode);
 List *ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs);
