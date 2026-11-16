@@ -1,0 +1,56 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_wp_enable s1_recompress s2_select s3_wp_release s1_show
+count
+-----
+    1
+
+step s3_wp_enable: 
+   SELECT debug_waitpoint_enable('recompress_in_memory_before_swap');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_recompress: 
+   SELECT count(compress_chunk(c, recompress => true)) AS recompressed
+   FROM show_chunks('sensor_data') c;
+ <waiting ...>
+step s2_select: 
+   SELECT count(*) FROM sensor_data;
+
+count
+-----
+ 3600
+
+step s3_wp_release: 
+   SELECT debug_waitpoint_release('recompress_in_memory_before_swap');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_recompress: <... completed>
+recompressed
+------------
+           1
+
+step s1_show: 
+   SELECT _timescaledb_functions.chunk_status_text(c) AS status
+   FROM show_chunks('sensor_data') c;
+   SELECT count(*) FROM sensor_data;
+   SELECT count(*) AS leftover_relations FROM pg_class
+   WHERE relname LIKE 'compress_new_%' OR relname LIKE 'compress_old_%';
+
+status      
+------------
+{COMPRESSED}
+
+count
+-----
+ 3600
+
+leftover_relations
+------------------
+                 0
+

@@ -28,6 +28,9 @@ Oid create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_de
 						  CompressionSettings *settings);
 NameData build_compressed_relation_name(const Chunk *chunk);
 void rename_compressed_chunk_for_replacement(Oid compressed_relid);
+Oid create_replacement_compress_chunk(Chunk *src_chunk, Oid old_compressed_relid,
+									  CompressionSettings *settings);
+void replace_compressed_chunk(Chunk *src_chunk, Oid old_compressed_relid, Oid new_compressed_relid);
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
