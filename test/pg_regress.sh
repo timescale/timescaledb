@@ -21,7 +21,9 @@ EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
 PG_REGRESS=${PG_REGRESS:-pg_regress}
 PG_REGRESS_DIFF_OPTS=-u
 TEST_SCHEDULE=${TEST_SCHEDULE:-}
-TEMP_SCHEDULE=${CURRENT_DIR}/temp_schedule
+# Keep the filtered schedule next to the suite's own schedule so that
+# suites running at the same time do not overwrite each other's schedule.
+TEMP_SCHEDULE=${TEST_SCHEDULE}.temp
 SCHEDULE=
 TESTS=${TESTS:-}
 IGNORES=${IGNORES:-}

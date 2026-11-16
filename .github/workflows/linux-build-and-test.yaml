@@ -261,10 +261,38 @@ jobs:
     - name: make installcheck
       if: matrix.installcheck
       run: |
-        set -o pipefail
-        make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
-            | tee installcheck.log
+        # Run the suites of installcheck in three lanes at the same time. The
+        # isolation tests and the solo tests mostly wait, so running them next
+        # to the regression tests uses cores that would otherwise be idle.
+        # Suites sharing a temp instance stay in the same lane, and each lane
+        # writes its own server log.
+        lane() {
+          local name=$1
+          shift
+          if [ -n "$name" ]; then
+            printf "log_filename = 'postmaster-%s.log'\n" "$name" > "lane-$name.conf"
+            PG_REGRESS_OPTS="--temp-config=$PWD/lane-$name.conf"
+            export PG_REGRESS_OPTS
+          fi
+          make -k -C build "$@" IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
+              SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }}
+        }
+
+        lane "" regresscheck-t regresscheck-shared provecheck-t > installcheck-tsl.log 2>&1 &
+        tsl=$!
+        lane isolation-t isolationcheck-t > installcheck-isolation-t.log 2>&1 &
+        isolation_t=$!
+        lane apache regresscheck isolationcheck provecheck > installcheck-apache.log 2>&1 &
+        apache=$!
+
+        rc=0
+        wait $tsl || rc=1
+        wait $isolation_t || rc=1
+        wait $apache || rc=1
+
+        cat installcheck-tsl.log installcheck-isolation-t.log installcheck-apache.log > installcheck.log
+        cat installcheck.log
+        exit $rc
 
     - name: Wait for checks to finish
       wait-all:
@@ -354,7 +382,7 @@ jobs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: postmaster.*
+        path: postmaster*.*
 
     - name: Stack trace Linux
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'Linux'
@@ -410,11 +438,11 @@ jobs:
       # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
       if: always() && contains(matrix.name, 'Flaky')
       run: |
-        ! jq 'select(
+        ! cat postmaster*.json | jq 'select(
                 (.state_code == "XX000" and .error_severity != "LOG" and (.message | test("TestFailure") | not))
                 or (.message | test("resource was not closed"))
             ) | [.message, .func_name,  .statement] | @tsv
-        ' -r postmaster.json | grep .
+        ' -r | grep .
 
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only

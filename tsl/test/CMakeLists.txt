@@ -94,15 +94,19 @@ elseif(REQUIRE_ALL_TESTS)
 endif()
 
 if(PG_ISOLATION_REGRESS)
+  # The isolation tests get their own temp instance and work directories so
+  # they can run at the same time as regresscheck-t without removing its
+  # cluster, its setup marker or its dump directory.
   add_custom_target(
     isolationcheck-t
     COMMAND
       ${CMAKE_COMMAND} -E env ${PG_ISOLATION_REGRESS_ENV}
-      EXE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      EXE_DIR=${CMAKE_CURRENT_BINARY_DIR}/isolation
+      TEST_OUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/isolation
       SPECS_DIR=${CMAKE_CURRENT_BINARY_DIR}/isolation/specs
       ${PRIMARY_TEST_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_BASE}
       ${PG_ISOLATION_REGRESS_OPTS_EXTRA} ${PG_ISOLATION_REGRESS_OPTS_INOUT}
-      ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+      --temp-instance=${TEST_CLUSTER}-isolation
       --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
     USES_TERMINAL)
 
