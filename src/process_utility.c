@@ -3819,8 +3819,16 @@ process_index_start(ProcessUtilityArgs *args)
 			 * present on the chunk that would not be considered by postgres validity
 			 * check. We need to check for constraint violations ourselves in those
 			 * cases.
+			 *
+			 * That validation runs the index expression as the chunk owner, so
+			 * the caller has to pass the same ownership check that DefineIndex
+			 * would apply later.
 			 */
-			Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+			Oid relid = RangeVarGetRelidExtended(stmt->relation,
+												 AccessShareLock,
+												 RVR_MISSING_OK,
+												 RangeVarCallbackOwnsRelation,
+												 NULL);
 
 			if (OidIsValid(relid))
 			{
@@ -3833,9 +3841,7 @@ process_index_start(ProcessUtilityArgs *args)
 					 * and cannot be passed to deparse_expression directly, so run the
 					 * standard PostgreSQL transformation first.
 					 */
-					Relation rel = table_open(chunk->fd.relid, AccessShareLock);
 					IndexStmt *transformed = transformIndexStmt(chunk->fd.relid, stmt, NULL);
-					table_close(rel, NoLock);
 					validate_index_constraints(chunk, transformed);
 				}
 			}
