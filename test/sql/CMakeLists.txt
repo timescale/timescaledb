@@ -163,6 +163,21 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
+# Slowest parallel tests, slowest first. Keep this roughly in sync with the test
+# times reported by pg_regress so that slow tests share parallel groups.
+set(SLOW_TESTS
+    plan_hashagg
+    copy_memory_usage
+    ts_merge-${TEST_VERSION_SUFFIX}
+    plan_ordered_append
+    parallel-${TEST_VERSION_SUFFIX}
+    append-${TEST_VERSION_SUFFIX}
+    alter_table_memory
+    rowsecurity-${TEST_VERSION_SUFFIX}
+    query
+    copy
+    plan_expand_hypertable-${TEST_VERSION_SUFFIX})
+
 if(NOT TEST_GROUP_SIZE)
   set(PARALLEL_GROUP_SIZE 20)
 else()
@@ -176,6 +191,8 @@ generate_test_schedule(
   ${TEST_FILES}
   SOLO
   ${SOLO_TESTS}
+  SLOW
+  ${SLOW_TESTS}
   GROUP_SIZE
   ${PARALLEL_GROUP_SIZE})
 

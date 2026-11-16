@@ -13,13 +13,21 @@
 # Names of tests that should be run as solo tests. Note that these are test
 # names, not file names.
 #
+# SLOW <test> ...
+#
+# Names of the slowest parallel tests, slowest first. A parallel group takes as
+# long as its slowest test, so these are put together in the first groups
+# instead of being spread out over many groups. The remaining tests follow in
+# alphabetical order. A test missing from this list only makes the schedule a
+# bit slower, never wrong.
+#
 # GROUP_SIZE
 #
 # Size of each group in the test schedule.
 function(generate_test_schedule OUTPUT_FILE)
   set(options)
   set(oneValueArgs GROUP_SIZE)
-  set(multiValueArgs TEST_FILES SOLO)
+  set(multiValueArgs TEST_FILES SOLO SLOW)
   cmake_parse_arguments(_generate "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
@@ -40,9 +48,19 @@ function(generate_test_schedule OUTPUT_FILE)
     endif()
   endforeach()
 
+  # Slow tests go first, in the order given, followed by everything else.
+  set(_ordered)
+  foreach(_slow ${_generate_SLOW})
+    if("${_slow}.sql" IN_LIST _generate_TEST_FILES)
+      list(APPEND _ordered "${_slow}.sql")
+      list(REMOVE_ITEM _generate_TEST_FILES "${_slow}.sql")
+    endif()
+  endforeach()
+  list(APPEND _ordered ${_generate_TEST_FILES})
+
   # Generate groups of tests
   set(_members 0)
-  foreach(_file ${_generate_TEST_FILES})
+  foreach(_file ${_ordered})
     string(REGEX REPLACE "(.+)\.sql" "\\1" _test ${_file})
     if(NOT (_test IN_LIST _generate_SOLO))
       if(_members EQUAL 0)

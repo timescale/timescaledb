@@ -315,6 +315,54 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
+# Slowest parallel tests, slowest first. Keep this roughly in sync with the test
+# times reported by pg_regress so that slow tests share parallel groups.
+set(SLOW_TESTS
+    compression_indexscan
+    compression_merge
+    compression_allocation
+    insert_memory_usage
+    columnar_scan_memory
+    vector_agg_memory
+    skip_scan
+    decompress_memory
+    cagg
+    columnar_scan_cost-${TEST_VERSION_SUFFIX}
+    vector_agg_grouping
+    transparent_decompression-${TEST_VERSION_SUFFIX}
+    direct_compress_copy
+    compression_update_delete-${TEST_VERSION_SUFFIX}
+    merge_chunks
+    ordered_append-${TEST_VERSION_SUFFIX}
+    compress_bitmap_scan
+    compression_sorted_merge_distinct
+    compress_batch_size
+    vector_agg_functions
+    compression_sorted_merge
+    compression_hypertable
+    policy_generalization
+    cagg_direct_compress
+    compression_uuid
+    memoize
+    compression_defaults
+    direct_compress_insert
+    transparent_decompression_queries-${TEST_VERSION_SUFFIX}
+    decompress_index
+    direct_compress_memory
+    skip_scan_dagg
+    decompress_vector_qual
+    direct_compress_debug
+    vector_agg_segmentby
+    uncompressed_size
+    plan_skip_scan-${TEST_VERSION_SUFFIX}
+    compress_bloom_sparse-${TEST_VERSION_SUFFIX}
+    compression_bgw
+    compression
+    compression_algos
+    foreign_keys_test-${TEST_VERSION_SUFFIX}
+    skip_scan_bugs
+    compress_qualpushdown_saop)
+
 if(NOT TEST_GROUP_SIZE)
   set(PARALLEL_GROUP_SIZE 10)
 else()
@@ -328,5 +376,7 @@ generate_test_schedule(
   ${TEST_FILES}
   SOLO
   ${SOLO_TESTS}
+  SLOW
+  ${SLOW_TESTS}
   GROUP_SIZE
   ${PARALLEL_GROUP_SIZE})
