@@ -27,7 +27,7 @@ jobs:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
     name: Update test PG${{ matrix.pg }}
-    runs-on: 'ubuntu-latest'
+    runs-on: 'ubuntu-24.04'
     strategy:
       matrix:
         pg: [15, 16, 17, 18]
