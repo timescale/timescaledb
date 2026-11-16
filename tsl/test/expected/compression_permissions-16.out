@@ -451,7 +451,38 @@ WARNING:  current_user=idx_owner rolsuper=f
 WARNING:  current_user=idx_owner rolsuper=f
 \set ON_ERROR_STOP 1
 RESET ROLE;
+SELECT c::text AS chunk_name FROM public.show_chunks('io.ht') c \gset
+-- A unique index created directly on the compressed chunk is still
+-- validated as the chunk owner
+CREATE UNIQUE INDEX io_chunk_index ON :chunk_name (time, io.loguser(c));
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+WARNING:  current_user=idx_owner rolsuper=f
+-- A role without any privilege on the chunk must be rejected before its
+-- index expression is evaluated as the chunk owner
+CREATE ROLE idx_other LOGIN;
+CREATE SCHEMA io_other AUTHORIZATION idx_other;
+SET ROLE idx_other;
+GRANT USAGE ON SCHEMA io_other TO PUBLIC;
+CREATE FUNCTION io_other.loguser(x int) RETURNS int LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE u text; s bool;
+BEGIN
+  u := current_user;
+  SELECT rolsuper INTO s FROM pg_roles WHERE rolname = current_user;
+  RAISE WARNING 'current_user=% rolsuper=%', u, s;
+  RETURN x;
+END $$;
+SET search_path = pg_catalog, pg_temp;
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX io_other_index ON :chunk_name (time, io_other.loguser(c));
+ERROR:  must be owner of table _hyper_4_15_chunk
+\set ON_ERROR_STOP 1
+RESET ROLE;
 -- cleanup
+DROP SCHEMA io_other CASCADE;
+NOTICE:  drop cascades to function io_other.loguser(integer)
+DROP ROLE idx_other;
 DROP SCHEMA io CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DROP ROLE idx_owner;
