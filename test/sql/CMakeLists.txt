@@ -101,6 +101,11 @@ set(SOLO_TESTS
 
 list(APPEND SOLO_TESTS loader)
 
+# DROP OWNED BY also revokes privileges on databases, so running it next to
+# other tests drops the grants they gave the shared test roles on their own
+# databases.
+list(APPEND SOLO_TESTS drop_owned-${TEST_VERSION_SUFFIX})
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
