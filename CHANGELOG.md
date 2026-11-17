@@ -2,16 +2,11 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.32.1 (2026-11-17)
+## 2.32.1 (2026-11-19)
 
-This release contains performance improvements and bug fixes since the 2.32.0 release. We recommend that you upgrade at the next available opportunity.
+This release contains performance improvements, bug and security fixes since the 2.32.0 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.32.1**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
+This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12 and 16.16 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)) and above, and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
 
 **Bugfixes**
 * [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
@@ -23,11 +18,40 @@ This release contains performance improvements and bug fixes since the 2.32.0 re
 * [#11035](https://github.com/timescale/timescaledb/pull/11035) Do not switch to catalog owner for constraint drops and view updates
 * [#11042](https://github.com/timescale/timescaledb/pull/11042) Check ownership before validating a unique index on a compressed chunk
 
-**New Settings**
+## 2.31.1 (2026-11-18)
 
-**GUCs**
+This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12 and 16.16 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)), and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
 
-**Thanks**
+**Bugfixes**
+* [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
+
+## 2.30.3 (2026-11-18)
+
+This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12 and 16.16 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)), and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
+
+**Bugfixes**
+* [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
+
+## 2.29.3 (2026-11-18)
+
+This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12 and 16.16 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)), and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
+
+**Bugfixes**
+* [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
+
+## 2.28.4 (2026-11-17)
+
+This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12, 16.16 and 15.20 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)), and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
+
+**Bugfixes**
+* [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
+
+## 2.27.3 (2026-11-17)
+
+This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12, 16.16 and 15.20 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)), and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
+
+**Bugfixes**
+* [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
 
 ## 2.32.0 (2026-11-11)
 
