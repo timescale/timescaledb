@@ -1542,3 +1542,22 @@ CREATE MATERIALIZED VIEW cagg_sensordata WITH (tsdb.continuous) AS
 SELECT s.id, s.name,time_bucket('15 minutes', sd.time) as bucket, avg(sd.value) FROM sensordata sd JOIN sensor s USING(id) GROUP BY s.id, bucket WITH NO DATA;
 
 SELECT * FROM cagg_sensordata;
+
+-- CREATE INDEX on a continuous aggregate checks tablespace permissions
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE idx_tblspc(time timestamptz NOT NULL, value float) WITH (timescaledb.hypertable);
+CREATE MATERIALIZED VIEW cagg_idx_tblspc WITH (tsdb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, avg(value) FROM idx_tblspc GROUP BY bucket WITH NO DATA;
+\set ON_ERROR_STOP 0
+CREATE INDEX cagg_idx_tblspc_idx ON cagg_idx_tblspc(bucket) TABLESPACE tablespace1;
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE INDEX cagg_idx_tblspc_idx ON cagg_idx_tblspc(bucket) TABLESPACE tablespace1;
+DROP MATERIALIZED VIEW cagg_idx_tblspc;
+DROP TABLE idx_tblspc;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLESPACE tablespace1;
