@@ -185,4 +185,4 @@ GRANT INSERT ON attopt_insert TO :ROLE_DEFAULT_PERM_USER_2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 INSERT INTO attopt_insert VALUES ('2025-01-01 00:00:00+00', 1);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SELECT a.attname, a.attoptions FROM show_chunks('attopt_insert') ch JOIN pg_attribute a ON (a.attrelid = ch AND a.attname = 'device');
+SELECT a.attname, (SELECT array_agg(o) FROM unnest(a.attoptions) o WHERE o NOT LIKE 'pg_attver=%') AS attoptions FROM show_chunks('attopt_insert') ch JOIN pg_attribute a ON (a.attrelid = ch AND a.attname = 'device');
