@@ -1,0 +1,1 @@
+Fixes: #11091 Fix a NULL tenant value disabling granular refresh tracking on other hypertables
