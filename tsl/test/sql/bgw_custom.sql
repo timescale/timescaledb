@@ -730,10 +730,13 @@ $$;
 -- Hold the lock so any worker running proc_that_blocks waits on it.
 SELECT pg_advisory_lock(8584);
 
+-- Stop the scheduler while the jobs are added. A running scheduler could
+-- start one of them before the workers are started below.
+SELECT _timescaledb_functions.stop_background_workers();
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_1 \gset
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_2 \gset
 
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 -- wait for both jobs to be picked up and blocked on the lock
 CALL wait_for_job_status(:job_id_1, 'Running');
 CALL wait_for_job_status(:job_id_2, 'Running');
