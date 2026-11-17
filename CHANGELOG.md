@@ -2,7 +2,7 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.28.4 (2026-11-17)
+## 2.28.5 (2026-11-17)
 
 This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12, 16.16 and 15.20 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)), and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
 
