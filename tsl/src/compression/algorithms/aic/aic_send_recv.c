@@ -7,7 +7,7 @@
 #include "aic_send_recv.h"
 #include "aic_blocks.h"
 #include "aic_internal.h"
-#include "aic_validity.h"
+#include "compression/algorithms/common/validity.h"
 #include <guc.h>
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
@@ -42,15 +42,16 @@ aic_recv_validate(const AICCompressed *compressed)
 		size_t validity_size = bitmap_words * sizeof(uint64);
 		uint64 *bitmap = palloc(validity_size);
 		size_t n_valid_runs;
-		size_t decoded = aic_validity_bitmap_decode(&si,
-													total_count,
-													compressed->null_count,
-													bitmap,
-													(AICGlobalFlags) compressed->flags,
-													&n_valid_runs);
+		CmValidityFlags validity_flags = compressed->flags & CM_VALIDITY_MASK;
+		size_t decoded = cm_validity_bitmap_decode(&si,
+												   total_count,
+												   compressed->null_count,
+												   bitmap,
+												   validity_flags,
+												   &n_valid_runs);
 		CheckCompressedData(
-			(decoded == validity_size && (compressed->flags & AIC_FLAG_NULL_SUMMARY) == 0) ||
-			(decoded < validity_size && (compressed->flags & AIC_FLAG_NULL_SUMMARY) != 0));
+			(decoded == validity_size && (compressed->flags & AIC_FLAG_VALIDITY_SUMMARY) == 0) ||
+			(decoded < validity_size && (compressed->flags & AIC_FLAG_VALIDITY_SUMMARY) != 0));
 		pfree(bitmap);
 	}
 

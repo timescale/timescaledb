@@ -111,7 +111,7 @@ AIC_TFN(aic_encode_dfor_block_)(AICCompressorImpl *impl)
 		AIC_TY zz_hi = (AIC_TY) 0;
 		for (i = 0; i < n_delta_residuals; ++i)
 		{
-			AIC_TY zz = AIC_TFN(aic_zigzag_encode_)(deltas[i]);
+			AIC_TY zz = AIC_TFN(cm_zigzag_encode_)(deltas[i]);
 			deltas[i] = zz;
 			zz_lo = (zz < zz_lo) ? zz : zz_lo;
 			zz_hi = (zz > zz_hi) ? zz : zz_hi;
@@ -119,7 +119,7 @@ AIC_TFN(aic_encode_dfor_block_)(AICCompressorImpl *impl)
 		/* this will be used as the FL base value */
 		delta_residual_base = (int64) zz_lo;
 		/* this is the bitwidth used for the FL encoding of the delta reisuals */
-		W_delta_residuals = aic_bit_width_u64((uint64) (AIC_TY) (zz_hi - zz_lo));
+		W_delta_residuals = cm_bit_width_u64((uint64) (AIC_TY) (zz_hi - zz_lo));
 	}
 	else
 	{
