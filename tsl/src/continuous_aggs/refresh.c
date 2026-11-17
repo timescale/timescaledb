@@ -967,6 +967,8 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	 * lives here rather than in anything the batches own. */
 	CaggRefreshStats stats = { 0 };
 
+	context->execution.refresh_window_start = refresh_window->start;
+
 	List *refresh_window_list =
 		continuous_agg_split_refresh_window(cagg,
 											refresh_window,
@@ -1199,6 +1201,30 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+/* Decide under the cagg tuple lock, using the whole invocation's window. */
+static bool
+refresh_window_needs_tenant_flush(const ContinuousAgg *cagg,
+								  const ContinuousAggRefreshExecutionState *execution)
+{
+	int64 late_window_start, late_window_end;
+
+        /* fetch the values based on current now() calculation. we should check the passed in
+         * window against that */
+	(void) ts_hypertable_cagg_settings_get_tenant_tracking_window(cagg->data.raw_hypertable_id,
+																  &late_window_start,
+																  &late_window_end);
+
+	/* The late window is empty when its start lands after its end, e.g. offsets
+	 * '1 month' / '29 days' on March 15 give [Feb 15, Feb 14); with no window to
+	 * compare against, always flush. */
+	if (late_window_start >= late_window_end)
+	{
+		return true;
+	}
+
+	return execution->refresh_window_start < late_window_end;
+}
+
 /*
  * Transaction 2, Step 1: drain the in-memory per-tenant invalidation tracker
  * and persist it into _timescaledb_catalog.continuous_aggs_tenant_tracking,
@@ -1212,9 +1238,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
  * Runs under the per-cagg serialization lock (ts_lock_continuous_agg_tuple), so
  * the rows are persisted with a single batched insert to keep the lock hold
  * time short.
- * The generation is rotated and entries are flushed only once per
- * refresh call (i.e. if it is split into batches, we will do this only
- * once )
+ * Only the first batch reaching txn2 can flush: when the job starts before
+ * the late window's end, or the late window is empty/inapplicable.
  * PERF TODO: the batch still forms and inserts one tuple at a time; consider
  * heap_multi_insert for very large snapshots.
  */
@@ -1264,7 +1289,7 @@ process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
 	/* fetch cagg information again. settings could have changed .e.g. granular refresh */
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_hypertable_id, false);
 
-	/* Transaction 2, Step 1: drain the per-tenant invalidation tracker while we
+	/* Transaction 2, Step 1: decide whether to drain the tenant tracker once while we
 	 * hold the per-cagg serialization lock taken just above. The lock above ensures that
 	 * only 1 refresh will ever attempt to flush tracking entries.
 	 * NOTE: when we support multiple caggs with granular refresh, we have to modify the
@@ -1290,9 +1315,13 @@ process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
 	 * cagg1 could flush the shared tracker while DDL disables cagg2.
 	 * NEEDS change when we support multiple caggs with granular refresh.
 	 */
-	if (cagg->data.granular_refresh_enabled && !execution->tenant_tracking_flushed)
+	if (cagg->data.granular_refresh_enabled && !execution->tenant_flush_decided)
 	{
-		execution->tenant_tracking_flushed = flush_tenant_tracking(cagg);
+		execution->tenant_flush_decided = true;
+		if (refresh_window_needs_tenant_flush(cagg, execution))
+		{
+			execution->tenant_tracking_flushed = flush_tenant_tracking(cagg);
+		}
 	}
 
 	invalidation_process_cagg_log(cagg, refresh_window);
