@@ -1554,6 +1554,9 @@ SELECT time_bucket('1 day', time) AS bucket, avg(value) FROM idx_tblspc GROUP BY
 CREATE INDEX cagg_idx_tblspc_idx ON cagg_idx_tblspc(bucket) TABLESPACE tablespace1;
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- PG 16.6 releases the wrong tuple lock in GRANT ON TABLESPACE when it is the
+-- first tablespace lookup in the session (fixed in 16.7), so look it up first.
+SELECT has_tablespace_privilege(:'ROLE_DEFAULT_PERM_USER', 'tablespace1', 'CREATE');
 GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE INDEX cagg_idx_tblspc_idx ON cagg_idx_tblspc(bucket) TABLESPACE tablespace1;
