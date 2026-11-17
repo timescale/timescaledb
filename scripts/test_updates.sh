@@ -33,6 +33,11 @@ for version in ${ALL_VERSIONS}; do
   minor_version=$(echo "${version}" | awk -F. '{print $2}')
   patch_version=$(echo "${version}" | awk -F. '{print $3}')
 
+  # 2.28.4 has broken update scripts and was replaced by 2.28.5
+  if [ "${version}" = "2.28.4" ]; then
+    continue
+  fi
+
   # skip versions that are newer than the max version
   # We might have a tag for a newer version defined already but the post release
   # adjustment have not been merged yet. So we want to skip those versions.
