@@ -449,10 +449,6 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 	}
 
 	Assert(sjob->handle != NULL);
-	if (bgw_register != NULL)
-	{
-		bgw_register(sjob->handle, scheduler_mctx);
-	}
 
 	status = WaitForBackgroundWorkerStartup(sjob->handle, &pid);
 	switch (status)
@@ -461,7 +457,14 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 			bgw_scheduler_on_postmaster_death();
 			break;
 		case BGWH_STARTED:
-			/* all good */
+			/*
+			 * Only pass the handle on once the worker has started. If it
+			 * already stopped, the handle is freed below.
+			 */
+			if (bgw_register != NULL)
+			{
+				bgw_register(sjob->handle, scheduler_mctx);
+			}
 			break;
 		case BGWH_STOPPED:
 			StartTransactionCommand();
