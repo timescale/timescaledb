@@ -919,8 +919,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 void
 cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 {
-	int sec_ctx;
-	Oid uid, saved_uid;
 	Query *result_view_query;
 
 	/* User view query of the user defined CAGG. */
@@ -966,10 +964,8 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 											  mat_ht->fd.id);
 	}
 
-	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(user_view_oid, result_view_query, true);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 }
 
 /*
@@ -996,9 +992,6 @@ sync_target_list_names(List *targetList, TupleDesc desc)
 void
 cagg_rename_view_columns(ContinuousAgg *agg)
 {
-	int sec_ctx;
-	Oid uid, saved_uid;
-
 	/*
 	 * This function is called from the process_rename start handler after
 	 * ExecRenameStmt has already been called on the user view, direct view,
@@ -1021,10 +1014,8 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 
 	sync_target_list_names(direct_query->targetList, RelationGetDescr(direct_view_rel));
 
-	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(direct_view_oid, direct_query, true);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	/*
 	 * Do not close the relation before StoreViewQuery since it can otherwise
@@ -1062,10 +1053,8 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 		}
 	}
 
-	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(user_view_oid, user_query, true);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	relation_close(user_view_rel, NoLock);
 }
