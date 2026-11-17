@@ -90,7 +90,6 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *sr
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 	TupleDesc desc;
-	CatalogSecurityContext sec_ctx;
 
 	Datum values[Natts_compression_chunk_size];
 	bool nulls[Natts_compression_chunk_size] = { false };
@@ -121,9 +120,7 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *sr
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_frozen_immediately)] =
 		Int64GetDatum(rowcnt_frozen);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
 }
 

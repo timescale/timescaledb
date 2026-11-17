@@ -1012,11 +1012,7 @@ simple8brle_decompression_iterator_max_elements(Simple8bRleDecompressionIterator
 	for (i = 0; i < compressed->num_blocks; i++)
 	{
 		uint8 selector = bit_array_iter_next(&selectors, SIMPLE8B_BITS_PER_SELECTOR);
-		if (selector == 0)
-		{
-			elog(ERROR, "invalid selector 0");
-		}
-
+		CheckCompressedData(selector != 0);
 		if (simple8brle_selector_is_rle(selector) && iter->compressed_data)
 		{
 			CheckCompressedData(simple8brle_rledata_repeatcount(iter->compressed_data[i]) > 0);

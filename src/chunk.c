@@ -225,14 +225,11 @@ static void
 chunk_insert_relation(Relation rel, const Chunk *chunk)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	FormData_chunk fd = chunk->fd;
 
 	new_tuple = chunk_formdata_make_tuple(&fd, RelationGetDescr(rel));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 
 	heap_freetuple(new_tuple);
 }
@@ -709,7 +706,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 													0));
 	}
 
-	Oid uid, saved_uid;
+	Oid saved_uid, owner;
 
 	Assert(chunk->hypertable_relid == ht->main_table_relid);
 
@@ -717,26 +714,9 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the parent hypertable */
 	stmt.relation->relpersistence = rel->rd_rel->relpersistence;
-
-	/*
-	 * If the chunk is created in the internal schema, become the catalog
-	 * owner, otherwise become the hypertable owner
-	 */
-	if (strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
-	{
-		uid = ts_catalog_database_info_get()->owner_uid;
-	}
-	else
-	{
-		uid = rel->rd_rel->relowner;
-	}
+	owner = rel->rd_rel->relowner;
 
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-
-	if (uid != saved_uid)
-	{
-		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
 
 	/* Prepare event trigger state and invoke ddl_command_start triggers */
 	if (ts_guc_enable_event_triggers)
@@ -745,7 +725,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 		EventTriggerDDLCommandStart((Node *) &stmt);
 	}
 
-	address = DefineRelation(&stmt, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
+	address = ts_relation_define(&stmt, chunk->relkind, owner);
 
 	/* Invoke ddl_command_end triggers and clean up the event trigger state */
 	if (ts_guc_enable_event_triggers)
@@ -760,7 +740,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 	CommandCounterIncrement();
 
 	/* Copy acl from hypertable to chunk relation record */
-	copy_hypertable_acl_to_relid(ht, rel->rd_rel->relowner, address.objectId);
+	copy_hypertable_acl_to_relid(ht, owner, address.objectId);
 
 	if (chunk->relkind == RELKIND_RELATION)
 	{
@@ -770,13 +750,15 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 		 */
 		create_toast_table(&stmt, address.objectId);
 
-		/*
-		 * Some options require being table owner to set for example statistics
-		 * so we have to set them before restoring security context
-		 */
+		/* The inserting user may not own the chunk */
+		if (owner != saved_uid)
+		{
+			SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+		}
+
 		set_attoptions(rel, address.objectId);
 
-		if (uid != saved_uid)
+		if (owner != saved_uid)
 		{
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 		}
@@ -895,7 +877,9 @@ chunk_set_replica_identity(const Chunk *chunk)
 		.def = (Node *) &stmt,
 		.subtype = AT_ReplicaIdentity,
 	};
-	CatalogSecurityContext sec_ctx;
+	Oid owner = ch_rel->rd_rel->relowner;
+	Oid saved_uid;
+	int sec_ctx;
 
 	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
 	{
@@ -920,9 +904,17 @@ chunk_set_replica_identity(const Chunk *chunk)
 		}
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	/* Run as the chunk owner since the inserting user may not own the chunk */
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
 	ts_alter_table_with_event_trigger(chunk->fd.relid, NULL, list_make1(&cmd), false);
-	ts_catalog_restore_user(&sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
+	}
 	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
 }
@@ -3161,7 +3153,6 @@ static void
 chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 {
 	FormData_chunk form;
-	CatalogSecurityContext sec_ctx;
 
 	/*
 	 * chunk_delete locked this chunk row for us. Check the lock result before
@@ -3297,9 +3288,7 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		ts_compression_settings_delete_by_compress_relid(relid);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 }
 
 static void
@@ -3522,16 +3511,13 @@ static void
 chunk_update_catalog_tuple(ItemPointer tid, FormData_chunk *update)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	Catalog *catalog = ts_catalog_get();
 	Oid table = catalog_get_table_id(catalog, CHUNK);
 	Relation chunk_rel = relation_open(table, RowExclusiveLock);
 
 	new_tuple = chunk_formdata_make_tuple(update, chunk_rel->rd_att);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(chunk_rel, tid, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	relation_close(chunk_rel, NoLock);
 }
@@ -5602,9 +5588,21 @@ TS_FUNCTION_INFO_V1(ts_merge_chunks_concurrently);
 Datum
 ts_merge_chunks_concurrently(PG_FUNCTION_ARGS)
 {
-	return DirectFunctionCall2(ts_cm_functions->merge_chunks,
-							   PG_GETARG_DATUM(0),
-							   BoolGetDatum(true));
+	LOCAL_FCINFO(merge_fcinfo, 2);
+
+	InitFunctionCallInfoData(*merge_fcinfo, NULL, 2, InvalidOid, NULL, NULL);
+
+	if (PG_ARGISNULL(0))
+	{
+		FC_SET_NULL(merge_fcinfo, 0);
+	}
+	else
+	{
+		FC_SET_ARG(merge_fcinfo, 0, PG_GETARG_DATUM(0));
+	}
+	FC_SET_ARG(merge_fcinfo, 1, BoolGetDatum(true));
+
+	return ts_cm_functions->merge_chunks(merge_fcinfo);
 }
 
 void
