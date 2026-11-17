@@ -2,6 +2,33 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.32.1 (2026-11-17)
+
+This release contains performance improvements and bug fixes since the 2.32.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.32.1**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+
+**Bugfixes**
+* [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
+* [#11019](https://github.com/timescale/timescaledb/pull/11019) Fix internal error when a job commits inside run_job
+* [#11028](https://github.com/timescale/timescaledb/pull/11028) Create chunk indexes without switching to the catalog owner
+* [#11029](https://github.com/timescale/timescaledb/pull/11029) Analyze expressions of columns added to continuous aggregates as the calling user
+* [#11031](https://github.com/timescale/timescaledb/pull/11031) Create indexes on continuous aggregates as the calling user
+* [#11032](https://github.com/timescale/timescaledb/pull/11032) Add foreign keys to chunks as the chunk owner
+* [#11035](https://github.com/timescale/timescaledb/pull/11035) Do not switch to catalog owner for constraint drops and view updates
+* [#11042](https://github.com/timescale/timescaledb/pull/11042) Check ownership before validating a unique index on a compressed chunk
+
+**New Settings**
+
+**GUCs**
+
+**Thanks**
+
 ## 2.32.0 (2026-11-11)
 
 This release includes security fixes, performance improvements, and bug fixes since 2.31.0. As part of our ongoing proactive security reviews, this release includes a larger set of security fixes than usual. We recommend that you upgrade as soon as possible.
