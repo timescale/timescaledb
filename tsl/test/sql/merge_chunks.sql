@@ -285,10 +285,15 @@ select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_c
 
 -- Set seed to consistently generate same data and same set of chunks
 select setseed(0.2);
--- Test merge with bigger data set and chunks with more blocks
+-- Test merge with bigger data set and chunks with more blocks. Build the
+-- indexes after the insert since that is much faster.
+drop index mergeme_time_idx;
+drop index mergeme_device_time_idx;
 insert into mergeme (time, device, temp)
 select t, ceil(random()*10), random()*40
 from generate_series('2024-01-01'::timestamptz, '2024-01-04', '0.5s') t;
+create index mergeme_device_time_idx on mergeme (device, time desc);
+create index mergeme_time_idx on mergeme (time desc);
 
 -- Compress two chunks, one using access method
 select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
