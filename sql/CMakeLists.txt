@@ -68,11 +68,13 @@ set(MOD_FILES
     updates/2.26.4--2.27.0.sql
     updates/2.27.0--2.27.1.sql
     updates/2.27.1--2.27.2.sql
-    updates/2.27.2--2.28.0.sql
+    updates/2.27.2--2.27.3.sql
+    updates/2.27.3--2.28.0.sql
     updates/2.28.0--2.28.1.sql
     updates/2.28.1--2.28.2.sql
     updates/2.28.2--2.28.3.sql
-    updates/2.28.3--2.29.0.sql
+    updates/2.28.3--2.28.4.sql
+    updates/2.28.4--2.29.0.sql
     updates/2.29.0--2.29.1.sql
     updates/2.29.1--2.29.2.sql
     updates/2.29.2--2.30.0.sql
