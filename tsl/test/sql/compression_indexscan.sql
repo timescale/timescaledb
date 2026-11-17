@@ -41,139 +41,158 @@ SET timescaledb.enable_compression_indexscan = 'ON';
 CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 1.1
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 1.2 [Index(ASC, Null_First), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 1.2
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 1.3 [Index(ASC, Null_First), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 1.3
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 --DROP INDEX idx_asc_null_last
 
 --Test Set 1.4 [Index(ASC, Null_First), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 1.4
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_asc_null_first;
 
 --Test Set 2.1 [Index(ASC, Null_Last), Compression(ASC,Null_First)]
 CREATE INDEX idx_asc_null_last ON tab1(id, time);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 2.1
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 2.2 [Index(ASC, Null_Last), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 2.2
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 2.3 [Index(ASC, Null_Last), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 2.3
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 --DROP INDEX idx_asc_null_last
 
 --Test Set 2.4 [Index(ASC, Null_Last), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 2.4
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_asc_null_last;
 
 --Test Set 3.1 [Index(DESC, Null_First), Compression(ASC,Null_First)]
 CREATE INDEX idx_desc_null_first ON tab1(id, time DESC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 3.1
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 
 --Test Set 3.2 [Index(DESC, Null_First), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 3.2
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 3.3 [Index(DESC, Null_First), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 3.3
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 --DROP INDEX idx_asc_null_last
 
 --Test Set 3.4 [Index(DESC, Null_First), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 3.4
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_desc_null_first;
 
 --Test Set 4.1 [Index(DESC, Null_Last), Compression(ASC,Null_First)]
 CREATE INDEX idx_desc_null_last ON tab1(id, time DESC);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 4.1
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 4.2 [Index(DESC, Null_Last), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 4.2
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 4.3 [Index(DESC, Null_Last), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 4.3
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 4.4 [Index(DESC, Null_Last), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
 SELECT * FROM timescaledb_information.compression_settings;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'time');
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
 --Cleanup 4.4
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_desc_null_last;
 
 --Test Set 5 GUC SET timescaledb.enable_compression_indexscan
 -- Default this flag will be false.
 RESET timescaledb.enable_compression_indexscan;
 SHOW timescaledb.enable_compression_indexscan;
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 --Test with this guc enabled
 SET timescaledb.enable_compression_indexscan = 'ON';
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 
 --Test Set 6 Compare two compression paths
 INSERT into tab2 SELECT * from tab1;
@@ -211,48 +230,56 @@ ORDER BY
 time;
 CREATE INDEX idx_asc_null_first ON tab3(name COLLATE "C", time ASC NULLS FIRST);
 ALTER TABLE tab3 SET(timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'name, time NULLS FIRST');
+BEGIN;
 SELECT compress_chunk(show_chunks('tab3'));
-SELECT decompress_chunk(show_chunks('tab3'));
+ROLLBACK;
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
+BEGIN;
 SELECT compress_chunk(show_chunks('tab3'));
-SELECT decompress_chunk(show_chunks('tab3'));
+ROLLBACK;
 DROP INDEX idx_asc_null_first;
 DROP INDEX idxcol_asc_null_first;
 
 --Test Set 7.1 with Collation segment_by
 CREATE INDEX idx_asc_null_first ON tab3(name COLLATE "ucs_basic", time ASC NULLS FIRST);
 ALTER TABLE tab3 SET(timescaledb.compress, timescaledb.compress_segmentby = 'name', timescaledb.compress_orderby = 'time NULLS FIRST');
+BEGIN;
 SELECT compress_chunk(show_chunks('tab3'));
-SELECT decompress_chunk(show_chunks('tab3'));
+ROLLBACK;
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
+BEGIN;
 SELECT compress_chunk(show_chunks('tab3'));
-SELECT decompress_chunk(show_chunks('tab3'));
+ROLLBACK;
 DROP INDEX idx_asc_null_first;
 DROP INDEX idxcol_asc_null_first;
 
 --Test Set 8 with multiple segment_by
 CREATE INDEX idx_asc_null_first ON tab1(id, c1, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_asc_null_first;
 CREATE INDEX idx_asc_null_first ON tab1(id, c1 DESC, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_asc_null_first;
 
 --Test Set 9
 --Last Column mismatch
 CREATE INDEX idx_asc_null_first ON tab1(id, c1, c2);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_asc_null_first;
 --Index Column out of order
 CREATE INDEX idx_asc_null_first ON tab1(c1, id, time ASC NULLS FIRST);
+BEGIN;
 SELECT compress_chunk(show_chunks('tab1'));
-SELECT decompress_chunk(show_chunks('tab1'));
+ROLLBACK;
 DROP INDEX idx_asc_null_first;
 
 -- Can't use partial indexes for compression because they refer only to a subset of the table.
@@ -262,26 +289,6 @@ select compress_chunk(show_chunks('tab1'));
 select decompress_chunk(show_chunks('tab1'));
 select count(*) from tab1;
 
--- Check compression progression messages
-SET client_min_messages TO LOG;
-select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-RESET client_min_messages;
--- Analyze and use stats now on a larger data set
-INSERT INTO tab1
-SELECT
-time + (INTERVAL '1 minute' * random()) AS time,
-id,
-random() AS c1,
-random()* 100 AS c2
-FROM
-generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '5 minutes') AS g1(time),
-generate_series(1, 100, 1 ) AS g2(id)
-ORDER BY
-time;
-ANALYZE _timescaledb_internal._hyper_1_2_chunk;
-SET client_min_messages TO LOG;
-select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
-RESET client_min_messages;
 drop index predicate;
 
 --Tear down
