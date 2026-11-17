@@ -2,6 +2,26 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.31.1 (2026-11-17)
+
+This release contains performance improvements and bug fixes since the 2.31.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.31.1**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+
+**Bugfixes**
+* 
+
+**New Settings**
+
+**GUCs**
+
+**Thanks**
+
 ## 2.31.0 (2026-10-20)
 
 This release contains performance improvements and bug fixes since the 2.30.2 release. We recommend that you upgrade at the next available opportunity.
