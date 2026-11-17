@@ -143,8 +143,8 @@ AIC_TFN(aic_analyze_delta_range_)(const AIC_STY *buf, uint32 n, uint16 S,
 			bmax = (AIC_TY) buf[i];
 		}
 	}
-	*bases_min_out = aic_sign_extend_u64((uint64) bmin, (uint8) (sizeof(AIC_TY) * 8));
-	*w_bases_out = aic_bit_width_u64((uint64) (AIC_TY) (bmax - bmin));
+	*bases_min_out = cm_sign_extend_u64((uint64) bmin, (uint8) (sizeof(AIC_TY) * 8));
+	*w_bases_out = cm_bit_width_u64((uint64) (AIC_TY) (bmax - bmin));
 	/* calculate the stride-S deltas and their min/max */
 	deltas_out[0] = d0;
 	for (i = 1; i < n_deltas; ++i)
@@ -160,8 +160,8 @@ AIC_TFN(aic_analyze_delta_range_)(const AIC_STY *buf, uint32 n, uint16 S,
 			dmax = d;
 		}
 	}
-	*dmin_out = aic_sign_extend_u64((uint64) dmin, (uint8) (sizeof(AIC_TY) * 8));
-	*dmax_out = aic_sign_extend_u64((uint64) dmax, (uint8) (sizeof(AIC_TY) * 8));
+	*dmin_out = cm_sign_extend_u64((uint64) dmin, (uint8) (sizeof(AIC_TY) * 8));
+	*dmax_out = cm_sign_extend_u64((uint64) dmax, (uint8) (sizeof(AIC_TY) * 8));
 }
 
 /* zz_lo from the staged stride-S deltas if zigzag is used, this is used
@@ -174,7 +174,7 @@ AIC_TFN(aic_analyze_zigzag_lo_)(const AIC_TY *deltas, uint32 n_deltas, uint64 *z
 	uint32 i;
 	for (i = 0; i < n_deltas; ++i)
 	{
-		AIC_TY zz = AIC_TFN(aic_zigzag_encode_)(deltas[i]);
+		AIC_TY zz = AIC_TFN(cm_zigzag_encode_)(deltas[i]);
 		zz_min = (zz < zz_min) ? zz : zz_min;
 	}
 	*zz_lo_out = (uint64) zz_min;
@@ -197,13 +197,13 @@ AIC_TFN(aic_analyze_)(const AIC_STY *buf, uint32 n, fl_elem_width_t T, AICAnalyz
 		/* this can only happen if the block doesn't have enough
 		 * elements to trigger the RLE mode */
 		result->type = AIC_BT_RLE;
-		result->cost = 4 + aic_block_header_scalar_len(a.vmin);
+		result->cost = 4 + cm_block_header_scalar_len(a.vmin);
 		result->W = 0;
 		result->vmin = a.vmin;
 		return;
 	}
 	/* store the bitwidth of the residuals (v[i] - vmin) */
-	a.W = aic_bit_width_u64((uint64) vmax - (uint64) vmin);
+	a.W = cm_bit_width_u64((uint64) vmax - (uint64) vmin);
 	a.S = aic_dfor_stride(n, T);
 	/* we don't need DFOR if we don't have at least a full stride of values */
 	a.dfor_valid = (n > (uint32) a.S);
@@ -254,7 +254,7 @@ AIC_TFN(aic_analyze_)(const AIC_STY *buf, uint32 n, fl_elem_width_t T, AICAnalyz
 			uint64 residual_or = 0;
 			AIC_TFN(aic_analyze_residuals_both_)
 			(buf, n, vmin, a.W, result->residuals, &residual_or, &n_high);
-			a.skip_pfor_main = (aic_popcount64(residual_or) >= AIC_PFOR_POPCOUNT_THRESHOLD_U64) ||
+			a.skip_pfor_main = (cm_popcount64(residual_or) >= AIC_PFOR_POPCOUNT_THRESHOLD_U64) ||
 							   (n_high >= (n / 2));
 		}
 		else

@@ -65,7 +65,7 @@ AIC_TFN(aic_dfor_reconstruct_)(uint8 *dest, uint16 S, uint32 n, bool zigzag)
 		for (uint32 i = S; i < n; ++i)
 		{
 			AIC_TY zz = v[i];
-			v[i] = (AIC_TY) (v[i - S] + AIC_TFN(aic_zigzag_decode_)(zz));
+			v[i] = (AIC_TY) (v[i - S] + AIC_TFN(cm_zigzag_decode_)(zz));
 		}
 	}
 	else
@@ -106,7 +106,7 @@ AIC_TFN(aic_dict_reconstruct_)(uint8 *dest, const AIC_TY *keys, const uint16 *id
 		for (uint32 i = 0; i < n; ++i)
 		{
 			uint32 zz = (uint32) idx[i];
-			prev += aic_zigzag_decode_uint32(zz);
+			prev += cm_zigzag_decode_uint32(zz);
 			v[i] = keys[prev & idx_mask];
 		}
 	}

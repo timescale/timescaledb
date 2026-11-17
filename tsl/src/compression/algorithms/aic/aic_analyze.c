@@ -4,7 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include "aic_analyze.h"
-#include "aic_utils.h"
+#include "compression/algorithms/common/utils.h"
 #include "compression/algorithms/fastlanes/fastlanes.h"
 #include "compression/algorithms/fastlanes/fastlanes_types.h"
 
@@ -104,7 +104,7 @@ typedef struct AICAnalysis
 static inline int
 aic_dfor_bit_savings(uint8 W, int64 dmin, int64 dmax)
 {
-	return (int) W - (int) aic_bit_width_u64((uint64) dmax - (uint64) dmin);
+	return (int) W - (int) cm_bit_width_u64((uint64) dmax - (uint64) dmin);
 }
 
 /*
@@ -132,7 +132,7 @@ aic_dfor_stride(uint32 n, fl_elem_width_t T)
 static inline int32
 aic_cost_for(uint32 n, uint8 W, int64 vmin, fl_elem_width_t T)
 {
-	return 4 + aic_block_header_scalar_len(vmin) + (int32) fl_result_bytes(n, W, T);
+	return 4 + cm_block_header_scalar_len(vmin) + (int32) fl_result_bytes(n, W, T);
 }
 
 /*
@@ -158,22 +158,21 @@ aic_cost_dfor(uint32 n, const AICAnalysis *a, fl_elem_width_t T, AICDforResult *
 		uint64 zz_hi = zz_dmax > zz_dmin ? zz_dmax : zz_dmin;
 		uint64 zz_lo = a->zz_lo;
 
-		W_delta_residuals = (uint32) aic_bit_width_u64(zz_hi - zz_lo);
-		delta_residual_base_len =
-			aic_block_header_scalar_len(aic_sign_extend_u64(zz_lo, (uint8) T));
+		W_delta_residuals = (uint32) cm_bit_width_u64(zz_hi - zz_lo);
+		delta_residual_base_len = cm_block_header_scalar_len(cm_sign_extend_u64(zz_lo, (uint8) T));
 		dfor->delta_residual_base = (int64) zz_lo;
 	}
 	else
 	{
 		/* we have the exact size because we did the stride-S analysis previously */
-		W_delta_residuals = (uint32) aic_bit_width_u64((uint64) a->dmax - (uint64) a->dmin);
-		delta_residual_base_len = aic_block_header_scalar_len(a->dmin);
+		W_delta_residuals = (uint32) cm_bit_width_u64((uint64) a->dmax - (uint64) a->dmin);
+		delta_residual_base_len = cm_block_header_scalar_len(a->dmin);
 		dfor->delta_residual_base = a->dmin;
 	}
 	dfor->S = a->S;
 	dfor->zigzag = a->use_zigzag;
 	dfor->W_delta_residuals = (uint8) W_delta_residuals;
-	return 5 + aic_block_header_scalar_len(dfor->bases_min) +
+	return 5 + cm_block_header_scalar_len(dfor->bases_min) +
 		   (int32) fl_result_bytes(a->S, dfor->W_bases, T) + delta_residual_base_len +
 		   (int32) fl_result_bytes(n - a->S, (uint8) W_delta_residuals, T);
 }
@@ -267,7 +266,7 @@ aic_dict_probe(uint32 n, const AICAnalysis *a, fl_elem_width_t T, AICAnalyzeResu
 	Assert(K >= 2);
 
 	/* check which idx storage is tighter, raw or zigzag+delta */
-	w_idx = aic_bit_width_u64((uint64) (K - 1));
+	w_idx = cm_bit_width_u64((uint64) (K - 1));
 	idx_cost = (int32) fl_result_bytes(n, w_idx, FL_ELEM_W8);
 	if (a->W > AIC_DICT_ZIGZAG_MIN_BITWIDTH && K > AIC_DICT_ZIGZAG_MIN_K)
 	{
@@ -279,11 +278,11 @@ aic_dict_probe(uint32 n, const AICAnalysis *a, fl_elem_width_t T, AICAnalyzeResu
 		for (i = 1; i < n; ++i)
 		{
 			int32 dlt = (int32) r->dict.idx[i] - (int32) r->dict.idx[i - 1];
-			uint32 zz = aic_zigzag_encode_uint32((uint32) dlt);
+			uint32 zz = cm_zigzag_encode_uint32((uint32) dlt);
 			r->dict.idx_zz[i] = (uint16) zz;
 			zz_or |= (uint64) zz;
 		}
-		w_zz = aic_bit_width_u64(zz_or);
+		w_zz = cm_bit_width_u64(zz_or);
 		zz_encoded_cost = (int32) fl_result_bytes(n, w_zz, FL_ELEM_W16);
 		if (zz_encoded_cost < idx_cost)
 		{
@@ -293,7 +292,7 @@ aic_dict_probe(uint32 n, const AICAnalysis *a, fl_elem_width_t T, AICAnalyzeResu
 		}
 	}
 
-	dict_cost = 5 + aic_block_header_scalar_len(a->vmin) +
+	dict_cost = 5 + cm_block_header_scalar_len(a->vmin) +
 				(int32) fl_result_bytes((uint32) K, a->W, T) + idx_cost;
 	if (dict_cost >= r->cost)
 	{
@@ -332,7 +331,7 @@ static inline int32
 aic_pfor_search(uint32 n, uint8 W, int64 vmin, fl_elem_width_t T, AICAnalyzeResult *r)
 {
 	const uint64 *residuals = r->residuals;
-	int32 hdr = 5 + aic_block_header_scalar_len(vmin);
+	int32 hdr = 5 + cm_block_header_scalar_len(vmin);
 	int shift = (W > 8) ? W - 8 : 0;
 	uint64 low_or = 0;
 	uint64 acc = 0;
@@ -421,7 +420,7 @@ aic_pfor_search(uint32 n, uint8 W, int64 vmin, fl_elem_width_t T, AICAnalyzeResu
 	 * we can store, and there is a bit gap (no values stored at these
 	 * bits) then we can narrow the 'b' bitwidth until we reach the next
 	 * bit set below the window. */
-	p = aic_bit_width_u64(low_or);
+	p = cm_bit_width_u64(low_or);
 	if (shift > 0 && (int) p < shift && exact_exc[0] <= AIC_PFOR_MAX_EXCEPTIONS)
 	{
 		int32 c = hdr + (int32) fl_result_bytes(n, p, T) + exact_exc[0] +
