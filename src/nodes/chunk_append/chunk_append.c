@@ -92,18 +92,18 @@ build_nested_oids(PlannerInfo *root, List *children)
 	return nested_oids;
 }
 
-typedef struct ChildrenOrderContext
+typedef struct OrderedAppendChildCmpContext
 {
 	PlannerInfo *root;
 	bool reverse;
-} ChildrenOrderContext;
+} OrderedAppendChildCmpContext;
 
 static int
-ordered_child_cmp(const void *left, const void *right, void *arg)
+ordered_append_child_cmp(const void *left, const void *right, void *arg)
 {
 	Path *lhs = (Path *) lfirst((const ListCell *) left);
 	Path *rhs = (Path *) lfirst((const ListCell *) right);
-	ChildrenOrderContext *context = (ChildrenOrderContext *) arg;
+	OrderedAppendChildCmpContext *context = (OrderedAppendChildCmpContext *) arg;
 	const Chunk *lhs_chunk = ts_planner_chunk_fetch(context->root, lhs->parent);
 	const Chunk *rhs_chunk = ts_planner_chunk_fetch(context->root, rhs->parent);
 
@@ -138,26 +138,6 @@ ordered_child_cmp(const void *left, const void *right, void *arg)
 	}
 
 	return cmp;
-}
-
-/*
- * Order the children along the first dimension, in the direction required
- * by the first pathkey.
- */
-static void
-sort_children_by_first_dimension(PlannerInfo *root, List *children, List *pathkeys)
-{
-	PathKey *pk = linitial_node(PathKey, pathkeys);
-	ChildrenOrderContext context = {
-		.root = root,
-		.reverse = pk->pk_cmptype == COMPARE_GT,
-	};
-
-	qsort_arg(children->elements,
-			  list_length(children),
-			  sizeof(ListCell),
-			  ordered_child_cmp,
-			  &context);
 }
 
 /*
@@ -579,7 +559,17 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	 */
 	if (ordered && path->cpath.path.pathkeys != NIL)
 	{
-		sort_children_by_first_dimension(root, children, path->cpath.path.pathkeys);
+		PathKey *pk = linitial_node(PathKey, path->cpath.path.pathkeys);
+		OrderedAppendChildCmpContext context = {
+			.root = root,
+			.reverse = pk->pk_cmptype == COMPARE_GT,
+		};
+
+		qsort_arg(children->elements,
+				  list_length(children),
+				  sizeof(ListCell),
+				  ordered_append_child_cmp,
+				  &context);
 	}
 
 	if (!ordered)
