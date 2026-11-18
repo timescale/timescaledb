@@ -821,7 +821,7 @@ process_alterviewschema(ProcessUtilityArgs *args)
 	 * dispatched as a view operation. */
 	if (ts_continuous_agg_find_by_relid(relid) != NULL)
 	{
-		ts_cagg_permissions_check(relid, GetUserId());
+		ts_cagg_permissions_check(relid, GetUserId(), false);
 	}
 
 	ts_continuous_agg_rename_view(schema, name, stmt->newschema, name, &stmt->objectType);
@@ -2192,7 +2192,7 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 			 * aggregate rather than the underlying view, which is what PG's own
 			 * ownership check below would report after we rewrite the drop into
 			 * a DROP VIEW. */
-			ts_cagg_permissions_check(cagg->relid, GetUserId());
+			ts_cagg_permissions_check(cagg->relid, GetUserId(), false);
 
 			/* If there is at least one cagg, the drop should be treated as a
 			 * DROP VIEW. */
@@ -2427,7 +2427,7 @@ process_rename_view(Oid relid, RenameStmt *stmt)
 	 * as a view rename. */
 	if (ts_continuous_agg_find_by_relid(relid) != NULL)
 	{
-		ts_cagg_permissions_check(relid, GetUserId());
+		ts_cagg_permissions_check(relid, GetUserId(), false);
 	}
 
 	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname, &stmt->renameType);
@@ -2505,7 +2505,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			/* Check ownership up front so the error refers to the continuous
 			 * aggregate rather than one of the internal views, which is what
 			 * the ExecRenameStmt calls below would otherwise report. */
-			ts_cagg_permissions_check(relid, GetUserId());
+			ts_cagg_permissions_check(relid, GetUserId(), false);
 
 			/* Block renaming granular refresh column */
 			Hypertable *raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
@@ -3871,16 +3871,9 @@ process_index_start(ProcessUtilityArgs *args)
 	{
 		/*
 		 * The database owner must not be allowed to create an index on a
-		 * continuous aggregate it does not own, so require actual ownership
-		 * instead of ts_cagg_permissions_check().
+		 * continuous aggregate it does not own.
 		 */
-		if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("must be owner of continuous aggregate \"%s\"",
-							get_rel_name(cagg->relid))));
-		}
+		ts_cagg_permissions_check(cagg->relid, GetUserId(), false);
 	}
 	else
 	{
@@ -5165,7 +5158,11 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 		return DDL_CONTINUE;
 	}
 
-	ts_cagg_permissions_check(view_relid, GetUserId());
+	/*
+	 * The database owner must not be allowed to alter a continuous aggregate
+	 * it does not own.
+	 */
+	ts_cagg_permissions_check(view_relid, GetUserId(), false);
 
 	/*
 	 * CAgg add column handler.

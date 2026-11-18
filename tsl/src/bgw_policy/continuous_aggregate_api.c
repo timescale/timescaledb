@@ -712,7 +712,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	JsonbInState parse_state = { 0 };
 
 	/* Verify that the owner can create a background worker */
-	owner_id = ts_cagg_permissions_check(cagg_oid, GetUserId());
+	owner_id = ts_cagg_permissions_check(cagg_oid, GetUserId(), true);
 	ts_bgw_job_validate_job_owner(owner_id);
 
 	cagg = ts_continuous_agg_find_by_relid(cagg_oid);
@@ -965,7 +965,7 @@ policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists)
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
 	}
 
-	ts_cagg_permissions_check(cagg_oid, GetUserId());
+	ts_cagg_permissions_check(cagg_oid, GetUserId(), true);
 	mat_htid = cagg->data.mat_hypertable_id;
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
 														   FUNCTIONS_SCHEMA_NAME,

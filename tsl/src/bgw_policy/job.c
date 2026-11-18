@@ -433,7 +433,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 		policy_continuous_aggregate_get_mat_hypertable_id(config), true);
 	if (cagg != NULL)
 	{
-		ts_cagg_permissions_check(cagg->relid, GetUserId());
+		ts_cagg_permissions_check(cagg->relid, GetUserId(), true);
 	}
 
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
