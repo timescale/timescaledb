@@ -31,7 +31,8 @@ extern TSDLLEXPORT void ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, Time
 extern bool ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job);
 
 extern TimestampTz ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job);
-extern TSDLLEXPORT void ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result);
+extern TSDLLEXPORT void ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result,
+															TimestampTz next_start);
 
 extern TSDLLEXPORT TimestampTz ts_get_next_scheduled_execution_slot(BgwJob *job,
 																	TimestampTz finish_time);
