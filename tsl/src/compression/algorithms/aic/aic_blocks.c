@@ -7,6 +7,7 @@
 #include <string.h>
 #include "aic_blocks.h"
 #include "aic_internal.h"
+#include "compression/algorithms/common/dict.h"
 #include "compression/algorithms/common/utils.h"
 #include "compression/algorithms/fastlanes/fastlanes.h"
 #include "compression/algorithms/fastlanes/fastlanes_types.h"
@@ -866,7 +867,8 @@ aic_block_pfor_prepare(AICBlockPFOR *block, uint32 header, StringInfo si, fl_ele
 }
 
 /* decompression: the per-type reconstruct/broadcast helpers are emitted
- * from the aic_blocks_impl.h template */
+ * from the aic_blocks_impl.h template, the dictionary reconstruct from
+ * the common/dict_impl.h template */
 
 /* clang format would reorder the headers which is not desired here */
 /* clang-format off */
@@ -882,6 +884,18 @@ aic_block_pfor_prepare(AICBlockPFOR *block, uint32 header, StringInfo si, fl_ele
 #define AIC_TY uint64
 #define AIC_STY int64
 #include "aic_blocks_impl.h"
+
+#define CM_DICT_TY uint16
+#include "compression/algorithms/common/dict_impl.h"
+#undef CM_DICT_TY
+
+#define CM_DICT_TY uint32
+#include "compression/algorithms/common/dict_impl.h"
+#undef CM_DICT_TY
+
+#define CM_DICT_TY uint64
+#include "compression/algorithms/common/dict_impl.h"
+#undef CM_DICT_TY
 
 /* clang-format on */
 
@@ -1064,9 +1078,7 @@ aic_block_dict_decompress(const AICBlockDICT *block, uint8 *dest, uint8 *scratch
 	uint16 K = (uint16) (((header >> 14) & 0xFF) + 1);
 	uint8 W_idx = (header >> 22) & 0x7F;
 	bool zigzag_idxs = (bool) ((header >> 29) & 0x1);
-	fl_elem_width_t idx_T = zigzag_idxs ? FL_ELEM_W16 : FL_ELEM_W8;
 	uint32 num_elements = (size_t) block->count_idx + 1;
-	uint32 idx_mask = ((uint32) 1 << cm_bit_width_u64((uint64) (K - 1))) - 1;
 	const uint8 *body = block->keys_body;
 
 	/* copy the 'body' holding the keys into the aligned scratch buffer */
@@ -1082,59 +1094,44 @@ aic_block_dict_decompress(const AICBlockDICT *block, uint8 *dest, uint8 *scratch
 		fl_unpack_ffor(scratch_buffer, keys.uint64_elem, K, W, T, block->key_base_value);
 	}
 
-	/* the idx_mask bounds the maximum key index to the next power
-	 * of two minus one, which keeps the keys[] access in
-	 * aic_dict_reconstruct_* branch-less instead of a per-element
-	 * bounds check. out-of-range key indexes only occur on corrupt
-	 * input: the non-zigzag case cannot read past the block's maximum
-	 * capacity anyway, but the zigzag case's delta/prefix sum stream
-	 * can easily go over it. so the idx_mask is more important there.
-	 *
-	 * the below memset clears the keys between the first invalid slot
-	 * (K) and the idx_mask clamp, so corrupt blocks decode these slots
-	 * to zero instead of leaking stale buffer contents.
-	 */
-	if (K <= idx_mask)
-	{
-		size_t elem_bytes = (size_t) ((uint8) T / 8);
-		uint32 undefined_slots = idx_mask - K + 1;
-
-		memset((uint8 *) keys.uint64_elem + (size_t) K * elem_bytes,
-			   0,
-			   (size_t) undefined_slots * elem_bytes);
-	}
-
-	/* the indices into the index array, scratch reused */
-	const uint8 *idx_comp = body + block->packed_keys_size;
-	memcpy(scratch_buffer, idx_comp, block->packed_idx_size);
-	fl_unpack(scratch_buffer, idx, num_elements, W_idx, idx_T);
+	/* the indices into the index array, and the idx_mask */
+	uint32 idx_mask = cm_dict_unpack_indices(body + block->packed_keys_size,
+											 block->packed_idx_size,
+											 num_elements,
+											 K,
+											 W_idx,
+											 zigzag_idxs,
+											 keys.uint64_elem,
+											 (size_t) ((uint8) T / 8),
+											 scratch_buffer,
+											 idx);
 
 	/* gather with separately generated functions */
 	switch (T)
 	{
 		case FL_ELEM_W16:
-			aic_dict_reconstruct_uint16(dest,
-										keys.uint16_elem,
-										idx,
-										num_elements,
-										idx_mask,
-										zigzag_idxs);
+			cm_dict_reconstruct_uint16(dest,
+									   keys.uint16_elem,
+									   idx,
+									   num_elements,
+									   idx_mask,
+									   zigzag_idxs);
 			break;
 		case FL_ELEM_W32:
-			aic_dict_reconstruct_uint32(dest,
-										keys.uint32_elem,
-										idx,
-										num_elements,
-										idx_mask,
-										zigzag_idxs);
+			cm_dict_reconstruct_uint32(dest,
+									   keys.uint32_elem,
+									   idx,
+									   num_elements,
+									   idx_mask,
+									   zigzag_idxs);
 			break;
 		case FL_ELEM_W64:
-			aic_dict_reconstruct_uint64(dest,
-										keys.uint64_elem,
-										idx,
-										num_elements,
-										idx_mask,
-										zigzag_idxs);
+			cm_dict_reconstruct_uint64(dest,
+									   keys.uint64_elem,
+									   idx,
+									   num_elements,
+									   idx_mask,
+									   zigzag_idxs);
 			break;
 		default:
 			CheckCompressedData(false);

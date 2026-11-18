@@ -279,26 +279,13 @@ AIC_TFN(aic_encode_dict_block_)(AICCompressorImpl *impl)
 	 * the 'ar->dict.keys' array */
 	block->data.dict.packed_keys_size =
 		fl_pack(keys_src, block->data.dict.keys_body, K, ar->W, impl->elem_width);
-	/* the analyzer staged the indexes up to n; fl_pack reads
-	 * fl_input_count() elements, so zero the padding above n */
-	uint32 staged_idx = fl_input_count(n, idx_T);
-	if (staged_idx > n)
-	{
-		if (zigzag_idxs)
-		{
-			memset(&ar->dict.idx_zz[n], 0, (size_t) (staged_idx - n) * sizeof(uint16));
-		}
-		else
-		{
-			memset(&ar->dict.idx[n], 0, (size_t) (staged_idx - n) * sizeof(uint8));
-		}
-	}
-	/* the idx elem width depends on the zigzag choice, in both
-	 * cases we pack without a base value, because zero is
-	 * the min idx */
-	block->data.dict.packed_idx_size =
-		zigzag_idxs ? fl_pack(ar->dict.idx_zz, block->data.dict.idx_body, n, w_idx, FL_ELEM_W16) :
-					  fl_pack(ar->dict.idx, block->data.dict.idx_body, n, w_idx, FL_ELEM_W8);
+	/* the indexes, staged by the analyzer */
+	block->data.dict.packed_idx_size = cm_dict_pack_indices(ar->dict.idx,
+															ar->dict.idx_zz,
+															n,
+															w_idx,
+															zigzag_idxs,
+															block->data.dict.idx_body);
 }
 
 /* the PFOR encoder needs to encode 1) the base/body values from which

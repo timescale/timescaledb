@@ -9,6 +9,7 @@
 #include "aic/aic_analyze.h"
 #include "aic/aic_blocks.h"
 #include "aic/aic_internal.h"
+#include "common/dict.h"
 #include "common/utils.h"
 #include "common/validity.h"
 #include "compression/arrow_c_data_interface.h"
