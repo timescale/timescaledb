@@ -37,6 +37,10 @@ for version in ${ALL_VERSIONS}; do
   if [ "${version}" = "2.28.4" ]; then
     continue
   fi
+  # 2.31.1 has broken update scripts and was replaced by 2.31.2
+  if [ "${version}" = "2.31.1" ]; then
+    continue
+  fi
 
   # skip versions that are newer than the max version
   # We might have a tag for a newer version defined already but the post release
