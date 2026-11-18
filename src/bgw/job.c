@@ -735,7 +735,8 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	{
 		BgwJobStat *stat = ts_bgw_job_stat_find(updated_job->fd.id);
 
-		if (stat != NULL)
+		/* Keep the wait stored after a crash */
+		if (stat != NULL && stat->fd.consecutive_crashes == 0)
 		{
 			TimestampTz next_start = DatumGetTimestampTz(
 				DirectFunctionCall2(timestamptz_pl_interval,
