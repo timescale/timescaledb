@@ -81,7 +81,8 @@ set(MOD_FILES
     updates/2.29.3--2.30.0.sql
     updates/2.30.0--2.30.1.sql
     updates/2.30.1--2.30.2.sql
-    updates/2.30.2--2.31.0.sql
+    updates/2.30.2--2.30.3.sql
+    updates/2.30.3--2.31.0.sql
     updates/2.31.0--2.32.0.sql
     updates/2.32.0--2.32.1.sql)
 
