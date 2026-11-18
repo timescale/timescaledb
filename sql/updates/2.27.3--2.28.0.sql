@@ -298,6 +298,10 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_lo
     ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey
         FOREIGN KEY (materialization_id)
         REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+-- Remove entries of dropped continuous aggregates
+DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges range WHERE NOT EXISTS (
+    SELECT FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = range.materialization_id
+);
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges
     ADD CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey
         FOREIGN KEY (materialization_id)
