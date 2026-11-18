@@ -1,0 +1,1 @@
+Fixes: #11134 Fix scheduler warning when cancelling a job whose worker already exited
