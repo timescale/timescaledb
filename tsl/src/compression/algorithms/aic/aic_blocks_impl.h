@@ -17,7 +17,6 @@
  *   aic_rle_broadcast_{AIC_TY}
  *   aic_delta_rle_broadcast_{AIC_TY}
  *   aic_dfor_reconstruct_{AIC_TY}
- *   aic_dict_reconstruct_{AIC_TY}
  *   aic_pfor_reconstruct_{AIC_TY}
  */
 
@@ -73,49 +72,6 @@ AIC_TFN(aic_dfor_reconstruct_)(uint8 *dest, uint16 S, uint32 n, bool zigzag)
 		for (uint32 i = S; i < n; ++i)
 		{
 			v[i] = v[i - S] + v[i];
-		}
-	}
-}
-
-/* aic_dict_reconstruct_.. : write each element's dictionary value,
- * selected by its unpacked index, into dest.
- *
- * depending on the zigzag flag we either use the indexes as-is
- * or decode them from the delta-coded index form. the zigzag
- * flag also determines the index array's element type: zigzag
- * indexes are uint16, non-zigzag indexes are uint8.
- *
- * delta endoced indices arrive as zigzag deltas and are
- * prefix-summed on the fly.
- *
- * the idx_mask is a cheap way to ensure that the index is in
- * close range of the dictionary keys. this offers a cheap
- * branch-less optimisation for the non-zigzag case, and
- * more importantly, it prevents the zigzag case from going
- * wildly out of range (in case of corrupt data)
- */
-static inline void
-AIC_TFN(aic_dict_reconstruct_)(uint8 *dest, const AIC_TY *keys, const uint16 *idx_area, uint32 n,
-							   uint32 idx_mask, bool zigzag_idxs)
-{
-	AIC_TY *v = (AIC_TY *) dest;
-	if (zigzag_idxs)
-	{
-		const uint16 *idx = idx_area;
-		uint32 prev = 0;
-		for (uint32 i = 0; i < n; ++i)
-		{
-			uint32 zz = (uint32) idx[i];
-			prev += cm_zigzag_decode_uint32(zz);
-			v[i] = keys[prev & idx_mask];
-		}
-	}
-	else
-	{
-		const uint8 *idx = (const uint8 *) idx_area;
-		for (uint32 i = 0; i < n; ++i)
-		{
-			v[i] = keys[(uint32) idx[i] & idx_mask];
 		}
 	}
 }
