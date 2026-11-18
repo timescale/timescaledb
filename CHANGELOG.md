@@ -2,6 +2,13 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.31.1 (2026-11-18)
+
+This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12 and 16.16 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)), and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
+
+**Bugfixes**
+* [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
+
 ## 2.31.0 (2026-10-20)
 
 This release contains performance improvements and bug fixes since the 2.30.2 release. We recommend that you upgrade at the next available opportunity.
