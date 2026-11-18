@@ -96,6 +96,74 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
 DROP MATERIALIZED VIEW metrics_by_bucket;
 DROP TABLE metrics;
 
+-- TEST 1c: a NULL start offset leaves the window unbounded below, so the
+-- seeded window starts at the smallest internal time value.  Late data is
+-- tracked however old it is, while recent data (newer than now - 1 day) is
+-- still gated out by the end offset.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- sensor_a (2020) and sensor_ancient (1900) are both late; sensor_recent is not.
+INSERT INTO conditions VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 1),
+  ('1900-01-01 00:00+00', 'sensor_ancient', 2);
+INSERT INTO conditions VALUES (now(), 'sensor_recent', 3);
+
+-- Expected: unbounded below, non-empty, and two tracked tenants.
+SELECT late_threshold_start = '-9223372036854775808'::int8 AS window_unbounded_below,
+       late_threshold_start < late_threshold_end           AS window_nonempty,
+       nentries
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions');
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- The same for an integer-time hypertable: metrics_now() is a constant 1000
+-- and the end offset is 100, so the seeded window is [int8 min, 900).
+CREATE TABLE metrics(t bigint NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('metrics', 't', chunk_time_interval => 100);
+SELECT set_integer_now_func('metrics', 'metrics_now');
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = 100
+);
+
+CREATE MATERIALIZED VIEW metrics_by_bucket
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket(100, t) AS bucket, sensor_id, avg(value)
+  FROM metrics
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW metrics_by_bucket SET (timescaledb.enable_granular_refresh = true);
+
+-- t = 0 is below any bounded window used above; t = 950 is too recent.
+INSERT INTO metrics VALUES (0, 'sensor_a', 1);
+INSERT INTO metrics VALUES (950, 'sensor_recent', 2);
+
+SELECT late_threshold_start AS window_start,
+       late_threshold_end   AS window_end,
+       nentries
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
+
+DROP MATERIALIZED VIEW metrics_by_bucket;
+DROP TABLE metrics;
+
 -- TEST 2: only late-arriving data (inside the window) is tracked; recent data
 -- (newer than now - 1 day) is gated out at the commit drain, so its tenant
 -- never enters the tracker.

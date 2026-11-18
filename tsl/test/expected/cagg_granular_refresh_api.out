@@ -108,14 +108,7 @@ ALTER TABLE metrics SET (
     timescaledb.cagg_granular_refresh_end_offset = '-5 days'
 );
 ERROR:  invalid granular refresh offset
--- Error: NULL is not a valid offset value.
-ALTER TABLE metrics SET (
-    timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.cagg_granular_refresh_column = 'device_id',
-    timescaledb.cagg_granular_refresh_start_offset = NULL,
-    timescaledb.cagg_granular_refresh_end_offset = '5 days'
-);
-ERROR:  invalid input syntax for type interval: "null"
+-- Error: NULL is not a valid end offset. Only the start offset can be NULL.
 ALTER TABLE metrics SET (
     timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.cagg_granular_refresh_column = 'device_id',
@@ -123,6 +116,21 @@ ALTER TABLE metrics SET (
     timescaledb.cagg_granular_refresh_end_offset = NULL
 );
 ERROR:  invalid input syntax for type interval: "null"
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = NULL
+);
+ERROR:  invalid input syntax for type interval: "null"
+-- Error: a NULL start offset does not relax the checks on the end offset.
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = '-5 days'
+);
+ERROR:  invalid granular refresh offset
 -- Error: timescaledb options only apply to hypertables.
 CREATE TABLE plain_table (time timestamptz NOT NULL, device_id integer);
 ALTER TABLE plain_table SET (
@@ -242,6 +250,83 @@ HINT:  Only timescaledb.cagg_granular_refresh_start_offset and timescaledb.cagg_
 -------------------+-----------------+-------------------------+-------------------------------+-----------------------------
  public            | metrics         | device_id               | 25 days                       | 2 days
 
+-- A NULL start offset leaves the late-arrival window unbounded below. Set on
+-- its own, the end offset keeps its stored value.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_start_offset = NULL);
+:GRC 'metrics';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics         | device_id               |                               | 2 days
+
+SELECT granular_refresh_start_offset IS NULL AS start_offset_is_null
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable_name = 'metrics';
+ start_offset_is_null 
+----------------------
+ t
+
+-- With no lower bound there is nothing for the end offset to cross, so an end
+-- offset larger than any earlier start offset is accepted.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = '10 years');
+:GRC 'metrics';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics         | device_id               |                               | 10 years
+
+-- Restore the end offset the tests below expect.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = '2 days');
+:GRC 'metrics';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics         | device_id               |                               | 2 days
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+-- Error: the end offset is still validated while the start offset is NULL.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = '-1 day');
+ERROR:  invalid granular refresh offset
+DETAIL:  timescaledb.cagg_granular_refresh_end_offset must not be negative.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = NULL);
+ERROR:  invalid input syntax for type interval: "null"
+-- Error: a start offset replacing NULL is checked against the stored end
+-- offset again.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_start_offset = '1 day');
+ERROR:  invalid granular refresh window
+DETAIL:  timescaledb.cagg_granular_refresh_start_offset (1 day) must be greater than timescaledb.cagg_granular_refresh_end_offset (2 days).
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- The failed attempts left the NULL start offset in place.
+:GRC 'metrics';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics         | device_id               |                               | 2 days
+
+-- Back to a bounded window.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_start_offset = '25 days');
+:GRC 'metrics';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics         | device_id               | 25 days                       | 2 days
+
+-- Granular refresh can be enabled with a NULL start offset right away.
+CREATE TABLE metrics_unbounded (time timestamptz NOT NULL, device_id integer, value float8);
+SELECT create_hypertable('metrics_unbounded', 'time', chunk_time_interval => '1 day'::interval);
+       create_hypertable        
+--------------------------------
+ (2,public,metrics_unbounded,t)
+
+ALTER TABLE metrics_unbounded SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = '5 days'
+);
+:GRC 'metrics_unbounded';
+ hypertable_schema |  hypertable_name  | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-------------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics_unbounded | device_id               |                               | 5 days
+
+DROP TABLE metrics_unbounded;
 -- Error: once configured, ALTER subcommands on the tracking column
 -- are restricted: ALTER...TYPE, RENAME, and DROP are blocked.
 -- Unlike a column referenced by an existing continuous aggregate's view,
@@ -272,7 +357,7 @@ CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
 SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
     create_hypertable     
 --------------------------
- (2,public,metrics_int,t)
+ (3,public,metrics_int,t)
 
 \set ON_ERROR_STOP 0
 -- Error: offsets must not be negative.
@@ -283,14 +368,7 @@ ALTER TABLE metrics_int SET (
     timescaledb.cagg_granular_refresh_end_offset = -1000
 );
 ERROR:  invalid granular refresh offset
--- Error: NULL is not a valid offset value.
-ALTER TABLE metrics_int SET (
-    timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.cagg_granular_refresh_column = 'sensor',
-    timescaledb.cagg_granular_refresh_start_offset = NULL,
-    timescaledb.cagg_granular_refresh_end_offset = 1000
-);
-ERROR:  invalid input syntax for type bigint: "null"
+-- Error: NULL is not a valid end offset. Only the start offset can be NULL.
 ALTER TABLE metrics_int SET (
     timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.cagg_granular_refresh_column = 'sensor',
@@ -330,6 +408,49 @@ ERROR:  invalid granular refresh window
 -------------------+-----------------+-------------------------+-------------------------------+-----------------------------
  public            | metrics_int     | sensor                  | 40000                         | 2000
 
+-- A NULL start offset works for integer offsets too, and lifts the bound on
+-- the end offset.
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = NULL);
+:GRC 'metrics_int';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics_int     | sensor                  |                               | 2000
+
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_end_offset = 90000);
+:GRC 'metrics_int';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics_int     | sensor                  |                               | 90000
+
+-- Error: a start offset replacing NULL is checked against the stored end
+-- offset, which is now 90000.
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = 40000);
+ERROR:  invalid granular refresh window
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = 95000);
+:GRC 'metrics_int';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics_int     | sensor                  | 95000                         | 90000
+
+DROP TABLE metrics_int;
+-- Enabling an integer-time hypertable with a NULL start offset.
+CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
+SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
+    create_hypertable     
+--------------------------
+ (4,public,metrics_int,t)
+
+ALTER TABLE metrics_int SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = 1000
+);
+:GRC 'metrics_int';
+ hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------------+-----------------+-------------------------+-------------------------------+-----------------------------
+ public            | metrics_int     | sensor                  |                               | 1000
+
 DROP TABLE metrics_int;
 DROP TABLE metrics;
 ----------------------------------------------------------------------
@@ -339,7 +460,7 @@ CREATE TABLE sensors (time timestamptz NOT NULL, sensor_id integer, temp float8)
 SELECT create_hypertable('sensors', 'time', chunk_time_interval => '1 day'::interval);
   create_hypertable   
 ----------------------
- (3,public,sensors,t)
+ (5,public,sensors,t)
 
 CREATE MATERIALIZED VIEW sensors_hourly
 WITH (timescaledb.continuous) AS
@@ -452,7 +573,7 @@ CREATE TABLE readings (time timestamptz NOT NULL, sensor_id integer, location te
 SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::interval);
    create_hypertable   
 -----------------------
- (5,public,readings,t)
+ (7,public,readings,t)
 
 ALTER TABLE readings SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -482,7 +603,7 @@ CREATE TABLE devices (time timestamptz NOT NULL, device_id integer, value float8
 SELECT create_hypertable('devices', 'time', chunk_time_interval => '1 day'::interval);
   create_hypertable   
 ----------------------
- (7,public,devices,t)
+ (9,public,devices,t)
 
 ALTER TABLE devices SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -533,7 +654,7 @@ SELECT create_hypertable('events', 'time', chunk_time_interval => '1 day'::inter
 WARNING:  column type "timestamp without time zone" used for "event_time" does not follow best practices
   create_hypertable   
 ----------------------
- (10,public,events,t)
+ (12,public,events,t)
 
 \set ON_ERROR_STOP 0
 ALTER TABLE events SET (
@@ -559,7 +680,7 @@ SELECT create_hypertable('char_widths', 'time', chunk_time_interval => '1 day'::
 WARNING:  column type "character varying" used for "unpadded" does not follow best practices
      create_hypertable     
 ---------------------------
- (11,public,char_widths,t)
+ (13,public,char_widths,t)
 
 \set ON_ERROR_STOP 0
 ALTER TABLE char_widths SET (
@@ -590,7 +711,7 @@ SELECT create_hypertable('vc_width', 'time', chunk_time_interval => '1 day'::int
 WARNING:  column type "character varying" used for "sensor" does not follow best practices
    create_hypertable    
 ------------------------
- (12,public,vc_width,t)
+ (14,public,vc_width,t)
 
 ALTER TABLE vc_width SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -624,7 +745,7 @@ CREATE TABLE meters (time timestamptz NOT NULL, meter_id integer, value float8);
 SELECT create_hypertable('meters', 'time', chunk_time_interval => '1 day'::interval);
   create_hypertable   
 ----------------------
- (13,public,meters,t)
+ (15,public,meters,t)
 
 -- Disabling when nothing is configured is a no-op, not an error.
 ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
@@ -780,7 +901,7 @@ CREATE TABLE readings (time timestamptz NOT NULL, sensor_id integer, value float
 SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::interval);
    create_hypertable    
 ------------------------
- (15,public,readings,t)
+ (17,public,readings,t)
 
 ALTER TABLE readings SET (
     timescaledb.cagg_enable_granular_refresh = true,
@@ -843,7 +964,7 @@ SELECT count(*) FROM readings_hourly;
 BEGIN;
 DROP TABLE readings CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_2_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_2_chunk
 ROLLBACK;
 :GRC 'readings';
  hypertable_schema | hypertable_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
@@ -859,5 +980,5 @@ SELECT count(*) FROM readings_hourly;
      4
 
 DROP MATERIALIZED VIEW readings_hourly;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_2_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_2_chunk
 DROP TABLE readings;
