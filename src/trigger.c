@@ -146,8 +146,7 @@ create_trigger_handler(const Trigger *trigger, void *arg)
 void
 ts_trigger_create_all_on_chunk(const Chunk *chunk)
 {
-	int sec_ctx;
-	Oid saved_uid;
+	TSSecurityContext secctx;
 	Oid owner;
 
 	/* We do not create triggers on foreign table chunks */
@@ -159,19 +158,11 @@ ts_trigger_create_all_on_chunk(const Chunk *chunk)
 	Assert(chunk->relkind == RELKIND_RELATION);
 	owner = ts_rel_get_owner(chunk->hypertable_relid);
 
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
+	ts_security_context_enter(owner, 0, &secctx);
 
 	for_each_trigger(chunk->hypertable_relid, create_trigger_handler, (Chunk *) chunk);
 
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-	}
+	ts_security_context_exit(&secctx);
 }
 
 static bool

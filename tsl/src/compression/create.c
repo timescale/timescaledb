@@ -1890,32 +1890,6 @@ validate_hypertable_for_compression(Hypertable *ht)
 	table_close(rel, AccessShareLock);
 }
 
-typedef struct DefaultFnSecurityContext
-{
-	Oid save_userid;
-	int save_sec_context;
-	int save_nestlevel;
-} DefaultFnSecurityContext;
-
-static void
-default_fn_security_enter(const Hypertable *ht, DefaultFnSecurityContext *ctx)
-{
-	GetUserIdAndSecContext(&ctx->save_userid, &ctx->save_sec_context);
-	SetUserIdAndSecContext(ts_rel_get_owner(ht->main_table_relid),
-						   ctx->save_sec_context | SECURITY_RESTRICTED_OPERATION);
-	ctx->save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
-}
-
-static void
-default_fn_security_exit(const DefaultFnSecurityContext *ctx)
-{
-	/* Roll back any GUC changes made by the default function */
-	AtEOXact_GUC(false, ctx->save_nestlevel);
-	/* Restore the caller's identity and security context */
-	SetUserIdAndSecContext(ctx->save_userid, ctx->save_sec_context);
-}
-
 /*
  * Get the default segment by value for a hypertable
  */
@@ -1934,7 +1908,7 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 	int32 confidence = -1;
 
 	TSSecurityContext secctx;
-	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), &secctx);
+	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), 0, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -2029,8 +2003,8 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	Datum values[] = { PointerGetDatum(segmentby) };
 	char nulls[] = { segmentby == NULL ? 'n' : 'v' };
 
-	DefaultFnSecurityContext secctx;
-	default_fn_security_enter(ht, &secctx);
+	TSSecurityContext secctx;
+	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), 0, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -2088,7 +2062,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 		confidence = DatumGetInt32(datum);
 	}
 
-	default_fn_security_exit(&secctx);
+	ts_security_context_exit(&secctx);
 
 	pfree(command.data);
 

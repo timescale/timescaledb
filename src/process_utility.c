@@ -3058,7 +3058,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 
 		/* Run index constraint validation as chunk owner in security-restricted context */
 		TSSecurityContext sctx;
-		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), &sctx);
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), 0, &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -3114,7 +3114,7 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 		}
 
 		TSSecurityContext sctx;
-		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), &sctx);
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), 0, &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
