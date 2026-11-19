@@ -643,43 +643,6 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 }
 
 /*
- * Become the user that owns the catalog schema.
- *
- * This might be necessary for users that do operations that require changes to
- * the catalog.
- *
- * The caller should pass a CatalogSecurityContext where the current security
- * context will be saved. The original security context can later be restored
- * with ts_catalog_restore_user().
- */
-TSDLLEXPORT bool
-ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info,
-									  CatalogSecurityContext *sec_ctx)
-{
-	GetUserIdAndSecContext(&sec_ctx->saved_uid, &sec_ctx->saved_security_context);
-
-	if (sec_ctx->saved_uid != database_info->owner_uid)
-	{
-		SetUserIdAndSecContext(database_info->owner_uid,
-							   sec_ctx->saved_security_context | SECURITY_LOCAL_USERID_CHANGE);
-		return true;
-	}
-
-	return false;
-}
-
-/*
- * Restore the security context of the original user after becoming the catalog
- * owner. The user should pass the original CatalogSecurityContext that was used
- * with ts_catalog_database_info_become_owner().
- */
-TSDLLEXPORT void
-ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
-{
-	SetUserIdAndSecContext(sec_ctx->saved_uid, sec_ctx->saved_security_context);
-}
-
-/*
  * Insert a new row into a catalog table.
  */
 void

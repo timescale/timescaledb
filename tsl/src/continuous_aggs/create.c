@@ -372,8 +372,6 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 							 bool create_addl_index, IntoClause *into, int64 matpartcol_interval,
 							 ObjectAddress *mataddress)
 {
-	Oid uid, saved_uid;
-	int sec_ctx;
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
 	Datum toast_options;
@@ -401,8 +399,7 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 	create->if_not_exists = false;
 
 	/*  Create the materialization table.  */
-	SWITCH_TO_TS_USER(mat_rel->schemaname, uid, saved_uid, sec_ctx);
-	*mataddress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
+	*mataddress = ts_relation_define(create, RELKIND_RELATION, owner);
 	CommandCounterIncrement();
 	mat_relid = mataddress->objectId;
 
@@ -411,7 +408,6 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 		transformRelOptions(UnassignedDatum, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(mat_relid, toast_options);
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
@@ -461,8 +457,6 @@ get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo, Query 
 static ObjectAddress
 create_view_for_query(Query *selquery, RangeVar *viewrel)
 {
-	Oid uid, saved_uid;
-	int sec_ctx;
 	ObjectAddress address;
 	CreateStmt *create;
 	List *selcollist = NIL;
@@ -495,12 +489,10 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	/*
 	 * Create the view. Viewname is in viewrel.
 	 */
-	SWITCH_TO_TS_USER(viewrel->schemaname, uid, saved_uid, sec_ctx);
-	address = DefineRelation(create, RELKIND_VIEW, owner, NULL, NULL);
+	address = ts_relation_define(create, RELKIND_VIEW, owner);
 	CommandCounterIncrement();
 	StoreViewQuery(address.objectId, selquery, false);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 	return address;
 }
 
