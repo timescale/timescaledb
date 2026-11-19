@@ -9,6 +9,7 @@ This release contains performance improvements, bug and security fixes since the
 This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.12 and 16.16 ([announcement](https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/)) and above, and is fully backward compatible with older Postgres minor versions. Previous TimescaleDB patch versions are affected by a background worker issue on these newer PostgreSQL minor releases: every job run by the scheduler fails. We strongly recommend that, before upgrading PostgreSQL, you first upgrade TimescaleDB to this version.
 
 **Bugfixes**
+* [#10971](https://github.com/timescale/timescaledb/pull/10971), [#11086](https://github.com/timescale/timescaledb/pull/11086) Keep the wait after a job crash when the scheduler reloads jobs
 * [#11015](https://github.com/timescale/timescaledb/pull/11015) Fix background jobs failing on new PostgreSQL minor releases
 * [#11019](https://github.com/timescale/timescaledb/pull/11019) Fix internal error when a job commits inside run_job
 * [#11028](https://github.com/timescale/timescaledb/pull/11028) Create chunk indexes without switching to the catalog owner
@@ -18,6 +19,9 @@ This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.1
 * [#11035](https://github.com/timescale/timescaledb/pull/11035) Do not switch to catalog owner for constraint drops and view updates
 * [#11042](https://github.com/timescale/timescaledb/pull/11042) Check ownership before validating a unique index on a compressed chunk
 * [#11094](https://github.com/timescale/timescaledb/pull/11094) Fix update to 2.28.0 failing with leftover materialization ranges of dropped continuous aggregates
+
+**Thanks**
+* @erikdarlingdata for reporting crashed jobs being delayed by job list reloads
 
 ## 2.31.1 (2026-11-18)
 
