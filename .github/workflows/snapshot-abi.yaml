@@ -26,7 +26,7 @@ name: ABI Test Against Snapshot
 
 jobs:
   config:
-    runs-on: ubuntu-26.04
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
@@ -44,7 +44,7 @@ jobs:
 
   abi_snapshot_test:
     name: ABI Snapshot Test PG${{ matrix.pg }}
-    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu/env=ue1
     needs: config
 
     env:
