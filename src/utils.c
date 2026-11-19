@@ -2255,42 +2255,40 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 ObjectAddress
 ts_relation_define(CreateStmt *stmt, char relkind, Oid owner)
 {
-	const char *schema_name = stmt->relation->schemaname;
+	const char *schema_name;
 	ObjectAddress address;
 	Oid uid = owner;
-	Oid saved_uid;
-	int sec_ctx;
+	TSSecurityContext secctx;
 
-	if (schema_name && strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
+	/* Resolve the schema with the caller's search_path */
+	if (stmt->relation->schemaname == NULL)
+	{
+		stmt->relation->schemaname =
+			get_namespace_name(RangeVarGetCreationNamespace(stmt->relation));
+	}
+	schema_name = stmt->relation->schemaname;
+
+	if (strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
 	{
 		uid = ts_catalog_database_info_get()->owner_uid;
 	}
 
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-
-	if (uid != saved_uid)
-	{
-		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
-
+	ts_security_context_enter(uid, 0, &secctx);
 	address = DefineRelation(stmt, relkind, owner, NULL, NULL);
-
-	if (uid != saved_uid)
-	{
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-	}
+	ts_security_context_exit(&secctx);
 
 	return address;
 }
 
-/* Enter/exit security context for internally called procedures */
+/*
+ * Run as another user with a restricted search_path. All user switches go
+ * through this function.
+ */
 void
-ts_security_context_enter(Oid owner_userid, TSSecurityContext *ctx)
+ts_security_context_enter(Oid uid, int sec_flags, TSSecurityContext *ctx)
 {
-	/* Run as owner in security-restricted context */
 	GetUserIdAndSecContext(&ctx->save_userid, &ctx->save_sec_context);
-	SetUserIdAndSecContext(owner_userid, ctx->save_sec_context | SECURITY_RESTRICTED_OPERATION);
-	/* Lock down search_path */
+	SetUserIdAndSecContext(uid, ctx->save_sec_context | SECURITY_RESTRICTED_OPERATION | sec_flags);
 	ctx->save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 }
