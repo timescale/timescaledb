@@ -402,3 +402,4 @@ typedef struct TSSecurityContext
 
 extern TSDLLEXPORT void ts_security_context_enter(Oid owner_userid, TSSecurityContext *ctx);
 extern TSDLLEXPORT void ts_security_context_exit(const TSSecurityContext *ctx);
+extern TSDLLEXPORT ObjectAddress ts_relation_define(CreateStmt *stmt, char relkind, Oid owner);

@@ -51,6 +51,7 @@
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "time_utils.h"
+#include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "utils.h"
 #include "uuid.h"
@@ -2245,6 +2246,41 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 	ReleaseSysCache(tp);
 	return result;
 #endif
+}
+
+/*
+ * Create a relation as its owner. A relation in the internal schema is
+ * created as the catalog owner because users have no CREATE permission there.
+ */
+ObjectAddress
+ts_relation_define(CreateStmt *stmt, char relkind, Oid owner)
+{
+	const char *schema_name = stmt->relation->schemaname;
+	ObjectAddress address;
+	Oid uid = owner;
+	Oid saved_uid;
+	int sec_ctx;
+
+	if (schema_name && strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
+	{
+		uid = ts_catalog_database_info_get()->owner_uid;
+	}
+
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+
+	if (uid != saved_uid)
+	{
+		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
+
+	address = DefineRelation(stmt, relkind, owner, NULL, NULL);
+
+	if (uid != saved_uid)
+	{
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
+	}
+
+	return address;
 }
 
 /* Enter/exit security context for internally called procedures */
