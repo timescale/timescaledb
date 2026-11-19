@@ -197,16 +197,7 @@ m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG18_LATEST, "coverage": True}))
 
-# test building against PG19
-m["include"].append(
-    build_debug_config(
-        {
-            "pg": PG19_LATEST,
-            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
-            "pginstallcheck": True,
-        }
-    )
-)
+m["include"].append(build_debug_config({"pg": PG19_LATEST}))
 
 # Also test on ARM. The custom arm64 runner is only available in the
 # timescale/timescaledb repository.
