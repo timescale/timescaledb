@@ -400,6 +400,25 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 	create->accessMethod = into->accessMethod;
 	create->if_not_exists = false;
 
+#if PG18_GE
+	/*
+	 * Since PG18 a NOT NULL column needs a pg_constraint row, which
+	 * DefineRelation only creates from nnconstraints. Parse analysis would
+	 * normally fill that list, but we bypass it.
+	 */
+	ListCell *lc;
+	foreach (lc, matcolinfo->matcollist)
+	{
+		ColumnDef *col = lfirst_node(ColumnDef, lc);
+
+		if (col->is_not_null)
+		{
+			create->nnconstraints =
+				lappend(create->nnconstraints, makeNotNullConstraint(makeString(col->colname)));
+		}
+	}
+#endif
+
 	/*  Create the materialization table.  */
 	SWITCH_TO_TS_USER(mat_rel->schemaname, uid, saved_uid, sec_ctx);
 	*mataddress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);

@@ -1561,3 +1561,32 @@ DROP MATERIALIZED VIEW cagg_idx_tblspc;
 DROP TABLE idx_tblspc;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP TABLESPACE tablespace1;
+
+-- TEST that chunks of the materialization hypertable inherit NOT NULL of the
+-- time bucket columns (issue #11020). Selecting the bucket twice gives two
+-- NOT NULL columns of which only one is the time dimension.
+CREATE TABLE notnull_ht(time timestamptz NOT NULL, value float) WITH (timescaledb.hypertable);
+INSERT INTO notnull_ht VALUES ('2026-01-01', 1), ('2026-03-01', 2);
+CREATE MATERIALIZED VIEW notnull_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, time_bucket('1 day', time) AS bucket2, avg(value)
+FROM notnull_ht GROUP BY 1;
+
+SELECT count(*) AS chunk_columns, bool_and(a.attnotnull) AS all_notnull
+FROM show_chunks('notnull_cagg') ch
+JOIN pg_attribute a ON a.attrelid = ch AND a.attname IN ('bucket', 'bucket2');
+
+-- since PG18 NOT NULL is a pg_constraint row, which must exist on the
+-- materialization hypertable and be inherited by its chunks
+SELECT count(*) AS relation_columns,
+       current_setting('server_version_num')::int < 180000 OR bool_and(c.oid IS NOT NULL) AS has_constraint,
+       current_setting('server_version_num')::int < 180000 OR bool_and(c.convalidated) AS is_valid
+FROM (
+  SELECT format('%I.%I', h.schema_name, h.table_name)::regclass AS rel
+  FROM _timescaledb_catalog.continuous_agg ca
+  JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'notnull_cagg'
+  UNION ALL
+  SELECT show_chunks('notnull_cagg')
+) r
+JOIN pg_attribute a ON a.attrelid = r.rel AND a.attname IN ('bucket', 'bucket2')
+LEFT JOIN pg_constraint c ON c.conrelid = a.attrelid AND c.contype = 'n' AND c.conkey = ARRAY[a.attnum];
