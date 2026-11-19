@@ -1,1 +1,0 @@
-Fixes: #11031 Create indexes on continuous aggregates as the calling user
