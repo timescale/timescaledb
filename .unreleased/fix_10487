@@ -1,0 +1,1 @@
+Fixes: #10487 Race condition because of different planner and execution snapshots

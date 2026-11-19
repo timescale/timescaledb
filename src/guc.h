@@ -24,6 +24,7 @@ extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;
 extern bool ts_guc_enable_qual_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
+extern TSDLLEXPORT bool ts_guc_scan_uncompressed_chunks;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
