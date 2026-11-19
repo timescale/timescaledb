@@ -17,6 +17,7 @@ This release is compatible with the latest PostgreSQL minor releases, 18.7, 17.1
 * [#11032](https://github.com/timescale/timescaledb/pull/11032) Add foreign keys to chunks as the chunk owner
 * [#11035](https://github.com/timescale/timescaledb/pull/11035) Do not switch to catalog owner for constraint drops and view updates
 * [#11042](https://github.com/timescale/timescaledb/pull/11042) Check ownership before validating a unique index on a compressed chunk
+* [#11094](https://github.com/timescale/timescaledb/pull/11094) Fix update to 2.28.0 failing with leftover materialization ranges of dropped continuous aggregates
 
 ## 2.31.1 (2026-11-18)
 
