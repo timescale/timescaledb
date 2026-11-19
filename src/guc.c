@@ -108,6 +108,7 @@ bool ts_guc_enable_hypertable_expansion_for_dml = true;
 TSDLLEXPORT bool ts_guc_enable_deferred_chunk_append = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
+TSDLLEXPORT bool ts_guc_scan_uncompressed_chunks = false;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
@@ -750,6 +751,18 @@ _guc_init(void)
 							 NULL,
 							 &ts_guc_enable_optimizations,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("scan_uncompressed_chunks"),
+							 "Scan the uncompressed part of fully compressed chunks",
+							 "Enable to avoid missing rows when another transaction changes the "
+							 "chunk status between planning and execution.",
+							 &ts_guc_scan_uncompressed_chunks,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
