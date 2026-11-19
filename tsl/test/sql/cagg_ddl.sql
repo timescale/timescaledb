@@ -1593,3 +1593,47 @@ FROM (
 ) r
 JOIN pg_attribute a ON a.attrelid = r.rel AND a.attname IN ('bucket', 'bucket2')
 LEFT JOIN pg_constraint c ON c.conrelid = a.attrelid AND c.contype = 'n' AND c.conkey = ARRAY[a.attnum];
+
+-- SET/DROP NOT NULL is allowed on materialization hypertables
+CREATE TABLE alter_notnull_ht(time timestamptz NOT NULL, device int, value float) WITH (timescaledb.hypertable);
+INSERT INTO alter_notnull_ht VALUES ('2025-01-01', 1, 1.0), ('2025-01-02', 2, 2.0);
+CREATE MATERIALIZED VIEW alter_notnull_cagg WITH (tsdb.continuous, tsdb.materialized_only = true) AS
+SELECT time_bucket('1 day', time) AS bucket, device, avg(value) AS avg_value
+FROM alter_notnull_ht GROUP BY 1, 2 WITH DATA;
+SELECT format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name) AS alter_notnull_mat
+FROM timescaledb_information.continuous_aggregates WHERE view_name = 'alter_notnull_cagg' \gset
+
+CREATE VIEW alter_notnull_cols AS
+SELECT c.relname, a.attname, a.attnotnull
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+WHERE (a.attrelid = :'alter_notnull_mat'::regclass OR a.attrelid IN (SELECT show_chunks(:'alter_notnull_mat')))
+  AND a.attname IN ('device', 'avg_value');
+
+ALTER TABLE :alter_notnull_mat ALTER COLUMN device SET NOT NULL;
+-- the constraint is propagated to the chunks
+SELECT * FROM alter_notnull_cols ORDER BY 1, 2;
+
+-- a refresh that produces a NULL for the constrained column fails
+INSERT INTO alter_notnull_ht VALUES ('2025-01-03', NULL, 3.0);
+\set VERBOSITY terse
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('alter_notnull_cagg', NULL, NULL);
+-- cannot drop NOT NULL from the time column
+ALTER TABLE :alter_notnull_mat ALTER COLUMN bucket DROP NOT NULL;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE :alter_notnull_mat ALTER COLUMN device DROP NOT NULL;
+SELECT * FROM alter_notnull_cols ORDER BY 1, 2;
+CALL refresh_continuous_aggregate('alter_notnull_cagg', NULL, NULL);
+SELECT * FROM alter_notnull_cagg ORDER BY 1, 2;
+
+-- existing NULLs are detected
+\set ON_ERROR_STOP 0
+ALTER TABLE :alter_notnull_mat ALTER COLUMN device SET NOT NULL;
+\set ON_ERROR_STOP 1
+\set VERBOSITY default
+
+DROP VIEW alter_notnull_cols;
+DROP MATERIALIZED VIEW alter_notnull_cagg;
+DROP TABLE alter_notnull_ht;
