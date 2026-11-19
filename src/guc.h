@@ -193,8 +193,6 @@ typedef enum
 } FeatureFlagType;
 
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
-extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
-extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
 
 #define TARGET_COMPRESSED_BATCH_SIZE 1000
 
