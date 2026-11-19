@@ -5,11 +5,9 @@
  */
 #include <postgres.h>
 #include <miscadmin.h>
-#include <parser/parse_func.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
-#include <utils/regproc.h>
 #include <utils/timestamp.h>
 #include <utils/varlena.h>
 
@@ -167,8 +165,6 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan = true;
 TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
-static char *ts_guc_default_segmentby_fn = NULL;
-static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
@@ -345,105 +341,6 @@ static void
 assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 {
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable, newval);
-}
-
-/*
- * The default segmentby and orderby functions are configured by name. Their
- * result is read as the first row of a one-row SPI result, so the function
- * must return a single jsonb value.
- */
-static const Oid segmentby_fn_argtypes[] = { REGCLASSOID };
-static const Oid orderby_fn_argtypes[] = { REGCLASSOID, TEXTARRAYOID };
-
-static Oid
-lookup_default_fn(const char *input_name, const Oid *argtypes, int nargs)
-{
-	if (strlen(input_name) == 0)
-	{
-		return InvalidOid;
-	}
-
-	List *namelist = stringToQualifiedNameList(input_name, NULL);
-	return LookupFuncName(namelist, nargs, argtypes, true);
-}
-
-static bool
-default_fn_returns_jsonb(Oid fnoid)
-{
-	return get_func_rettype(fnoid) == JSONBOID && !get_func_retset(fnoid);
-}
-
-static bool
-check_default_fn(char **newval, const Oid *argtypes, int nargs)
-{
-	if (!ts_extension_is_loaded_and_not_upgrading() || strlen(*newval) == 0)
-	{
-		return true;
-	}
-
-	Oid fnoid = lookup_default_fn(*newval, argtypes, nargs);
-
-	if (!OidIsValid(fnoid))
-	{
-		GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
-		return false;
-	}
-
-	if (!default_fn_returns_jsonb(fnoid))
-	{
-		GUC_check_errdetail("Function \"%s\" must return jsonb and must not return a set.",
-							*newval);
-		return false;
-	}
-
-	return true;
-}
-
-static Oid
-get_default_fn_oid(const char *gucname, const char *input_name, const Oid *argtypes, int nargs)
-{
-	Oid fnoid = lookup_default_fn(input_name, argtypes, nargs);
-
-	if (OidIsValid(fnoid) && !default_fn_returns_jsonb(fnoid))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter \"%s\": \"%s\"", gucname, input_name),
-				 errdetail("Function \"%s\" must return jsonb and must not return a set.",
-						   input_name)));
-	}
-
-	return fnoid;
-}
-
-static bool
-check_segmentby_func(char **newval, void **extra, GucSource source)
-{
-	return check_default_fn(newval, segmentby_fn_argtypes, lengthof(segmentby_fn_argtypes));
-}
-
-Oid
-ts_guc_default_segmentby_fn_oid()
-{
-	return get_default_fn_oid(MAKE_EXTOPTION("compression_segmentby_default_function"),
-							  ts_guc_default_segmentby_fn,
-							  segmentby_fn_argtypes,
-							  lengthof(segmentby_fn_argtypes));
-}
-
-static bool
-check_orderby_func(char **newval, void **extra, GucSource source)
-{
-	return check_default_fn(newval, orderby_fn_argtypes, lengthof(orderby_fn_argtypes));
-}
-
-Oid
-ts_guc_default_orderby_fn_oid()
-{
-	return get_default_fn_oid(MAKE_EXTOPTION("compression_orderby_default_function"),
-							  ts_guc_default_orderby_fn,
-							  orderby_fn_argtypes,
-							  lengthof(orderby_fn_argtypes));
 }
 
 /*
@@ -1629,32 +1526,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_segmentby_default_function"),
-							   /* short_desc= */ "Function that sets default segment_by",
-							   /* long_desc= */
-							   "Function to use for calculating default segment_by setting for "
-							   "compression",
-							   /* valueAddr= */ &ts_guc_default_segmentby_fn,
-							   /* Value= */ "_timescaledb_functions.get_segmentby_defaults",
-							   /* context= */ PGC_USERSET,
-							   /* flags= */ 0,
-							   /* check_hook= */ check_segmentby_func,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_orderby_default_function"),
-							   /* short_desc= */ "Function that sets default order_by",
-							   /* long_desc= */
-							   "Function to use for calculating default order_by setting for "
-							   "compression",
-							   /* valueAddr= */ &ts_guc_default_orderby_fn,
-							   /* Value= */ "_timescaledb_functions.get_orderby_defaults",
-							   /* context= */ PGC_USERSET,
-							   /* flags= */ 0,
-							   /* check_hook= */ check_orderby_func,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("license"),
 							   /* short_desc= */ "TimescaleDB license type",
