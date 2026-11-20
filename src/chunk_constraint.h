@@ -15,7 +15,10 @@ typedef struct DimensionSlice DimensionSlice;
 typedef struct Dimension Dimension;
 
 extern void ts_chunk_clone_check_constraints(Oid chunk_relid, Oid hypertable_oid);
-extern TSDLLEXPORT Constraint *ts_chunk_constraint_dimensional_create(const Dimension *dim,
+extern Expr *ts_chunk_constraint_bound_expr(Node *arg, Oid type, int64 bound,
+											StrategyNumber strategy);
+extern TSDLLEXPORT Constraint *ts_chunk_constraint_dimensional_create(Oid chunk_relid,
+																	  const Dimension *dim,
 																	  const DimensionSlice *slice,
 																	  const char *name);
 extern TSDLLEXPORT void ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk);
