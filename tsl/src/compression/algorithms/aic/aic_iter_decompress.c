@@ -7,7 +7,7 @@
 #include "aic_iter_decompress.h"
 #include "aic_blocks.h"
 #include "aic_internal.h"
-#include "aic_validity.h"
+#include "compression/algorithms/common/validity.h"
 #include "compression/algorithms/fastlanes/fastlanes_types.h"
 #include <guc.h>
 #include <utils/palloc.h>
@@ -228,15 +228,15 @@ aic_iter_create(Datum compressed, Oid element_type, bool forward, const AICCompr
 		size_t decoded;
 
 		it->validity_bitmap = palloc(validity_size);
-		decoded = aic_validity_bitmap_decode(&si,
-											 it->total_count,
-											 header->null_count,
-											 it->validity_bitmap,
-											 header->flags,
-											 &n_valid_runs);
+		decoded = cm_validity_bitmap_decode(&si,
+											it->total_count,
+											header->null_count,
+											it->validity_bitmap,
+											header->flags,
+											&n_valid_runs);
 		CheckCompressedData(
-			(decoded == validity_size && (header->flags & AIC_FLAG_NULL_SUMMARY) == 0) ||
-			(decoded < validity_size && (header->flags & AIC_FLAG_NULL_SUMMARY) != 0));
+			(decoded == validity_size && (header->flags & AIC_FLAG_VALIDITY_SUMMARY) == 0) ||
+			(decoded < validity_size && (header->flags & AIC_FLAG_VALIDITY_SUMMARY) != 0));
 	}
 
 	CheckCompressedData(header->num_blocks <=

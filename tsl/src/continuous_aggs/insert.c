@@ -77,7 +77,7 @@ typedef struct ContinuousAggsCacheInvalEntry
  *
  * The key is fixed-size and zero-padded so it can be used directly with
  * dynahash HASH_BLOBS; tenant keys longer than TENANT_TRACKER_KEY_MAXLEN are not buffered
- * (they set tenant_buffer_unencodable, which forces the tracker INVALID).
+ * (they mark the hypertable unencodable, which forces its tracker INVALID).
  */
 typedef struct TenantLocalKey
 {
@@ -112,6 +112,7 @@ typedef struct ContinuousAggsCacheHyperTenantColEntry
 {
 	int32 hypertable_id;
 	bool configured;
+	bool unencodable; /* a tenant could not be keyed this transaction */
 	NameData column_name;
 } ContinuousAggsCacheHyperTenantColEntry;
 
@@ -152,7 +153,6 @@ static HTAB *continuous_aggs_cache_hyper_tenant_col_htab = NULL;
 
 /* Per-transaction tenant buffer (drained to shared memory at commit). */
 static HTAB *tenant_local_htab = NULL;
-static bool tenant_buffer_unencodable = false;
 
 /*
  * Generation this backend currently pins, or NULL.  A flush will not drain a
@@ -246,6 +246,7 @@ tenant_tracking_column_for_hypertable(int32 hypertable_id)
 	{
 		const char *column_name;
 
+		entry->unencodable = false;
 		entry->configured =
 			ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id, &column_name);
 		if (entry->configured)
@@ -261,6 +262,32 @@ bool
 continuous_agg_tenant_tracking_enabled(int32 hypertable_id)
 {
 	return tenant_tracking_column_for_hypertable(hypertable_id) != NULL;
+}
+
+/*
+ * A tenant of this hypertable could not be keyed, so its tracking is incomplete
+ * for this transaction.  Only this hypertable's tracker is forced INVALID at
+ * commit; other hypertables written in the same transaction are unaffected.
+ */
+static void
+tenant_mark_unencodable(int32 hypertable_id)
+{
+	ContinuousAggsCacheHyperTenantColEntry *entry;
+
+	entry =
+		hash_search(continuous_aggs_cache_hyper_tenant_col_htab, &hypertable_id, HASH_FIND, NULL);
+	Ensure(entry != NULL, "tenant tracking column not resolved for hypertable %d", hypertable_id);
+	entry->unencodable = true;
+}
+
+static bool
+tenant_is_unencodable(int32 hypertable_id)
+{
+	ContinuousAggsCacheHyperTenantColEntry *entry;
+
+	entry =
+		hash_search(continuous_aggs_cache_hyper_tenant_col_htab, &hypertable_id, HASH_FIND, NULL);
+	return entry != NULL && entry->unencodable;
 }
 
 static void
@@ -386,7 +413,7 @@ continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 star
 
 	if (tenants_unknown && cache_entry->tenant_col.attno != InvalidAttrNumber)
 	{
-		tenant_buffer_unencodable = true;
+		tenant_mark_unencodable(cache_entry->hypertable_id);
 	}
 
 	cache_entry->value_is_set = true;
@@ -658,7 +685,7 @@ record_tenant_invalidation_values(const ContinuousAggsCacheInvalEntry *cache_ent
 		/* Cannot key this tenant -> tracking is incomplete for this transaction;
 		 * force the tracker INVALID at commit so the refresh falls back. */
 		pfree(key);
-		tenant_buffer_unencodable = true;
+		tenant_mark_unencodable(cache_entry->hypertable_id);
 		return;
 	}
 
@@ -726,7 +753,7 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 		/* A NULL tenant is a valid group but cannot be keyed -> tracking is
 		 * incomplete for this transaction; force the tracker INVALID at commit
 		 * so the refresh falls back. */
-		tenant_buffer_unencodable = true;
+		tenant_mark_unencodable(cache_entry->hypertable_id);
 		return;
 	}
 
@@ -767,7 +794,7 @@ continuous_agg_record_tenant_from_slot(int32 hypertable_id, Oid chunk_relid, Tup
 		/* A NULL tenant is a valid group but cannot be keyed -> tracking is
 		 * incomplete for this transaction; force the tracker INVALID at commit
 		 * so the refresh falls back. */
-		tenant_buffer_unencodable = true;
+		tenant_mark_unencodable(cache_entry->hypertable_id);
 		return;
 	}
 
@@ -859,7 +886,7 @@ tenant_local_htab_write(void)
 			continue;
 		}
 
-		if (tenant_buffer_unencodable)
+		if (tenant_is_unencodable(hypertable_id))
 		{
 			/* A tenant key could not be stored this transaction; force a
 			 * fall back for this hypertable's tracker (seqnum 0). */
@@ -1068,7 +1095,6 @@ cache_inval_cleanup(void)
 	continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
 	continuous_aggs_cache_hyper_tenant_col_htab = NULL;
 	tenant_local_htab = NULL;
-	tenant_buffer_unencodable = false;
 	continuous_aggs_invalidation_mctx = NULL;
 };
 

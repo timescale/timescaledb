@@ -308,7 +308,11 @@ job_run(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_permission_check(job, "run");
 
-	job_execute(job);
+	/* Transaction control is only allowed in a top-level CALL outside a transaction block */
+	bool atomic = !(fcinfo->context && IsA(fcinfo->context, CallContext) &&
+					!castNode(CallContext, fcinfo->context)->atomic);
+
+	job_execute_in_context(job, atomic);
 
 	PG_RETURN_VOID();
 }
@@ -641,7 +645,8 @@ job_alter(PG_FUNCTION_ARGS)
 			/* last finish time plus schedule interval */
 			BgwJobStat *stat = ts_bgw_job_stat_find(job->fd.id);
 
-			if (stat != NULL)
+			/* Keep the wait stored after a crash */
+			if (stat != NULL && stat->fd.consecutive_crashes == 0)
 			{
 				next_start_calculated = DatumGetTimestampTz(
 					DirectFunctionCall2(timestamptz_pl_interval,

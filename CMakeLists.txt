@@ -382,9 +382,9 @@ message(
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if(((${PG_VERSION_MAJOR} LESS "15") OR (${PG_VERSION_MAJOR} GREATER "18"))
+if(((${PG_VERSION_MAJOR} LESS "16") OR (${PG_VERSION_MAJOR} GREATER "19"))
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16, 17 and 18")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 16, 17, 18 and 19")
 endif()
 
 # Get PostgreSQL configuration from pg_config

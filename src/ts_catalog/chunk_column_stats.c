@@ -1063,13 +1063,10 @@ ts_chunk_column_stats_drop(const Hypertable *ht, const char *col_name, bool *dro
 static ScanTupleResult
 chunk_column_stats_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
 	int *count = data;
 
 	/* delete catalog entry */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 	*count = *count + 1;
 
 	return SCAN_CONTINUE;
