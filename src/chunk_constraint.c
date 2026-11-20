@@ -22,6 +22,7 @@
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/typcache.h>
 
 #include "compat/compat.h"
 #include "chunk.h"
@@ -39,6 +40,7 @@
 #include "partitioning.h"
 #include "process_utility.h"
 #include "ts_catalog/catalog.h"
+#include "utils.h"
 
 /*
  * Build the deterministic "<chunk_id>_<parent>" chunk-side name so DROP/RENAME
@@ -62,87 +64,107 @@ dimension_constraint_choose_name(char *dst, int32 dimension_slice_id)
 }
 
 /*
+ * Build "arg <op> bound" using the default btree operator class of the type.
+ * Types without one are compared as bigint.
+ */
+Expr *
+ts_chunk_constraint_bound_expr(Node *arg, Oid type, int64 bound, StrategyNumber strategy)
+{
+	TypeCacheEntry *tce = lookup_type_cache(type, TYPECACHE_BTREE_OPFAMILY);
+	int16 typlen;
+	bool typbyval;
+
+	if (!OidIsValid(tce->btree_opf))
+	{
+		tce = lookup_type_cache(INT8OID, TYPECACHE_BTREE_OPFAMILY);
+	}
+
+	Oid cmptype = tce->btree_opintype;
+	Oid opno = get_opfamily_member(tce->btree_opf, cmptype, cmptype, strategy);
+	Ensure(OidIsValid(opno), "no comparison operator for type %s", format_type_be(cmptype));
+
+	if (cmptype != type)
+	{
+		arg = (Node *) makeRelabelType((Expr *) arg, cmptype, -1, InvalidOid, COERCE_EXPLICIT_CAST);
+	}
+
+	get_typlenbyval(cmptype, &typlen, &typbyval);
+	Const *boundconst = makeConst(cmptype,
+								  -1,
+								  InvalidOid,
+								  typlen,
+								  ts_internal_to_time_value(bound, cmptype),
+								  false,
+								  typbyval);
+	OpExpr *opexpr = castNode(OpExpr,
+							  make_opclause(opno,
+											BOOLOID,
+											false,
+											(Expr *) arg,
+											(Expr *) boundconst,
+											InvalidOid,
+											InvalidOid));
+	opexpr->opfuncid = get_opcode(opno);
+
+	return (Expr *) opexpr;
+}
+
+/*
  * Create a dimensional CHECK constraint node for a partitioning dimension.
  */
 Constraint *
-ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlice *slice,
-									   const char *name)
+ts_chunk_constraint_dimensional_create(Oid chunk_relid, const Dimension *dim,
+									   const DimensionSlice *slice, const char *name)
 {
 	Constraint *constr = NULL;
 	Node *dimdef;
-	ColumnRef *colref;
 	List *compexprs = NIL;
 	Oid type;
+	Oid coltype;
+	int32 coltypmod;
+	Oid colcollation;
 
 	if (slice->fd.range_start == PG_INT64_MIN && slice->fd.range_end == PG_INT64_MAX)
 	{
 		return NULL;
 	}
 
-	colref = makeNode(ColumnRef);
-	colref->fields = list_make1(makeString(pstrdup(NameStr(dim->fd.column_name))));
-	colref->location = -1;
+	AttrNumber attno = get_attnum(chunk_relid, NameStr(dim->fd.column_name));
+	get_atttypetypmodcoll(chunk_relid, attno, &coltype, &coltypmod, &colcollation);
+	dimdef = (Node *) makeVar(1, attno, coltype, coltypmod, colcollation, 0);
+	type = coltype;
 
-	/* Convert the dimensional ranges to the appropriate text/string
-	 * representation for the time type. For dimensions with a
-	 * partitioning/time function, use the function's output type. */
+	/* Dimensions with a partitioning function compare the function result */
 	if (dim->partitioning != NULL)
 	{
-		/* Both open and closed dimensions can have a partitioning function */
-		PartitioningInfo *partinfo = dim->partitioning;
-		List *funcname = list_make2(makeString(NameStr(partinfo->partfunc.schema)),
-									makeString(NameStr(partinfo->partfunc.name)));
-		dimdef = (Node *) makeFuncCall(funcname, list_make1(colref), COERCE_EXPLICIT_CALL, -1);
+		PartitioningFunc *partfunc = &dim->partitioning->partfunc;
 
-		if (IS_OPEN_DIMENSION(dim))
-		{
-			/* The dimension has a time function to compute the time value so
-			 * need to convert the range values to the time type returned by
-			 * the partitioning function. */
-			type = partinfo->partfunc.rettype;
-		}
-		else
-		{
-			/* Closed dimension, just use the INT8 type */
-			type = INT8OID;
-		}
+		type = partfunc->rettype;
+		dimdef = (Node *) makeFuncExpr(partfunc->func_fmgr.fn_oid,
+									   type,
+									   list_make1(dimdef),
+									   InvalidOid,
+									   colcollation,
+									   COERCE_EXPLICIT_CALL);
 	}
-	else
-	{
-		/* Must be open dimension, since no partitioning function */
-		Assert(IS_OPEN_DIMENSION(dim));
-
-		dimdef = (Node *) colref;
-		type = dim->fd.column_type;
-	}
-
-	/*
-	 * We are forcing ISO datestyle here to prevent parsing errors with
-	 * certain timezone/datestyle combinations.
-	 */
-	int current_datestyle = DateStyle;
-	DateStyle = USE_ISO_DATES;
-	char *start_str = ts_internal_to_time_string(slice->fd.range_start, type);
-	char *end_str = ts_internal_to_time_string(slice->fd.range_end, type);
-	DateStyle = current_datestyle;
 
 	/* Elide range constraint for +INF or -INF */
 	if (slice->fd.range_start != PG_INT64_MIN)
 	{
-		A_Const *start_const = makeNode(A_Const);
-		memcpy(&start_const->val, makeString(start_str), sizeof(start_const->val));
-		start_const->location = -1;
-		A_Expr *ge_expr = makeSimpleA_Expr(AEXPR_OP, ">=", dimdef, (Node *) start_const, -1);
-		compexprs = lappend(compexprs, ge_expr);
+		compexprs = lappend(compexprs,
+							ts_chunk_constraint_bound_expr(dimdef,
+														   type,
+														   slice->fd.range_start,
+														   BTGreaterEqualStrategyNumber));
 	}
 
 	if (slice->fd.range_end != PG_INT64_MAX)
 	{
-		A_Const *end_const = makeNode(A_Const);
-		memcpy(&end_const->val, makeString(end_str), sizeof(end_const->val));
-		end_const->location = -1;
-		A_Expr *lt_expr = makeSimpleA_Expr(AEXPR_OP, "<", dimdef, (Node *) end_const, -1);
-		compexprs = lappend(compexprs, lt_expr);
+		compexprs = lappend(compexprs,
+							ts_chunk_constraint_bound_expr(dimdef,
+														   type,
+														   slice->fd.range_end,
+														   BTLessStrategyNumber));
 	}
 
 	constr = makeNode(Constraint);
@@ -154,17 +176,7 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 #if PG18_GE
 	constr->is_enforced = true;
 #endif
-
-	Assert(list_length(compexprs) >= 1);
-
-	if (list_length(compexprs) == 2)
-	{
-		constr->raw_expr = (Node *) makeBoolExpr(AND_EXPR, compexprs, -1);
-	}
-	else if (list_length(compexprs) == 1)
-	{
-		constr->raw_expr = linitial(compexprs);
-	}
+	constr->cooked_expr = nodeToString(make_ands_explicit(compexprs));
 
 	return constr;
 }
@@ -336,7 +348,7 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 			continue;
 		}
 
-		constr = ts_chunk_constraint_dimensional_create(dim, slice, name);
+		constr = ts_chunk_constraint_dimensional_create(chunk->fd.relid, dim, slice, name);
 		if (constr != NULL)
 		{
 			newconstrs = lappend(newconstrs, constr);
