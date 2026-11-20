@@ -760,11 +760,9 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	 * owner's behalf by a superuser or the database owner, so the caller is not
 	 * necessarily the owner.
 	 */
-	Oid cagg_owner = ts_rel_get_owner(cagg->relid);
-	Oid save_userid;
-	int save_sec_context;
-	GetUserIdAndSecContext(&save_userid, &save_sec_context);
-	SetUserIdAndSecContext(cagg_owner, save_sec_context | SECURITY_RESTRICTED_OPERATION);
+
+	TSSecurityContext sctx;
+	ts_security_context_enter(ts_rel_get_owner(cagg->relid), &sctx);
 
 	continuous_agg_refresh_init(&refresh,
 								cagg,
@@ -797,7 +795,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	}
 
 	/* Restore the caller's identity and security context */
-	SetUserIdAndSecContext(save_userid, save_sec_context);
+	ts_security_context_exit(&sctx);
 }
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"

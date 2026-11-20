@@ -59,7 +59,6 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 						 CompressionSettings *settings)
 {
 	ObjectAddress tbladdress;
-	CatalogSecurityContext sec_ctx;
 	Datum toast_options;
 #if PG18_LT
 	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
@@ -68,6 +67,8 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 #endif
 
 	Oid owner = ts_rel_get_owner(src_chunk->hypertable_relid);
+	Oid saved_uid;
+	int saved_sec_ctx;
 
 	CreateStmt *create;
 	RangeVar *compress_rel;
@@ -88,14 +89,13 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 	/* create the compression table */
 	/* NewRelationCreateToastTable calls CommandCounterIncrement */
 	NameData relname = build_compressed_relation_name(src_chunk);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	compress_rel = makeRangeVar(ts_chunk_get_schema_name(src_chunk), NameStr(relname), -1);
 
 	create->relation = compress_rel;
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
 	create->relation->relpersistence = get_rel_persistence(src_chunk->fd.relid);
 
-	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
+	tbladdress = ts_relation_define(create, RELKIND_RELATION, owner);
 	CommandCounterIncrement();
 	Oid table_id = tbladdress.objectId;
 	ts_copy_relation_acl(src_chunk->hypertable_relid, table_id, owner);
@@ -104,10 +104,19 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(table_id, toast_options);
 
+	/* Alter the table as its owner since the calling user may not own it */
+	GetUserIdAndSecContext(&saved_uid, &saved_sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(owner, saved_sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
 	modify_compressed_toast_table_storage(settings, column_defs, table_id);
 	set_statistics_on_compressed_chunk(table_id);
 	set_toast_tuple_target_on_chunk(table_id);
-	ts_catalog_restore_user(&sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(saved_uid, saved_sec_ctx);
+	}
 
 	create_compressed_chunk_indexes(table_id, settings);
 

@@ -342,3 +342,28 @@ DROP FUNCTION gf_userfn.time_bucket_gapfill(int, text);
 DROP FUNCTION gf_userfn.locf(int);
 DROP FUNCTION gf_userfn.interpolate(int);
 DROP SCHEMA gf_userfn;
+
+-- Fix use-after-free in locf()
+CREATE TABLE f1_g(t timestamptz NOT NULL, v text);
+INSERT INTO f1_g VALUES ('2020-01-01 10:00', 'realvalue');  -- 00:00..09:00 are gaps
+
+-- Should output valid previous value instead of garbage
+SELECT time_bucket_gapfill('1 hour'::interval, t,
+                           '2020-01-01 00:00'::timestamptz,
+                           '2020-01-01 11:00'::timestamptz) AS b,
+       locf( max(v), 'PREV-' || (SELECT string_agg(v, ',') FROM f1_g) ) AS filled
+FROM f1_g GROUP BY b ORDER BY b;
+
+DROP TABLE f1_g cascade;
+
+CREATE TABLE locf_nulls(t timestamptz NOT NULL, v text);
+INSERT INTO locf_nulls VALUES ('2020-01-01 02:00', 'hello');
+
+-- Should be no crash and no garbage
+SELECT time_bucket_gapfill('1 hour'::interval, t,
+                           '2020-01-01 00:00'::timestamptz,
+                           '2020-01-01 03:00'::timestamptz) AS b,
+       locf(max(v), NULL::text) AS filled
+FROM locf_nulls GROUP BY b ORDER BY b;
+
+DROP TABLE locf_nulls cascade;

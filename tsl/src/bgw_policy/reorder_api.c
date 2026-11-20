@@ -65,7 +65,7 @@ policy_reorder_get_index_name(const Jsonb *config)
 	if (index_name == NULL)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find index_name in config for job")));
 	}
 

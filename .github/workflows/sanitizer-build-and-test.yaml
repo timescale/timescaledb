@@ -56,7 +56,7 @@ env:
   EXTENSIONS: "postgres_fdw test_decoding"
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:

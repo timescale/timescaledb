@@ -1,2 +1,0 @@
-Fixes: #10887 Fix "repalloc called with invalid pointer" when compressing batches of more than 992 rows for certain data patterns
-Thanks: @owhiterabbito for reporting the compression error and analyzing the selector buffer size

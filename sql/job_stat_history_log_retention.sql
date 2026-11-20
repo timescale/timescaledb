@@ -89,7 +89,7 @@ VALUES
     INTERVAL '1h',
     '_timescaledb_functions',
     'policy_job_stat_history_retention',
-    pg_catalog.quote_ident(current_role)::regrole,
+    (SELECT datdba FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()),
     true,
     '{"drop_after":"1 month","max_successes_per_job":1000,"max_failures_per_job":1000}',
     '_timescaledb_functions',
@@ -97,3 +97,11 @@ VALUES
     true,
     '2000-01-01 00:00:00+00'::timestamptz
 ) ON CONFLICT (id) DO NOTHING;
+
+-- the retention job runs as the database owner and needs access to the history table
+DO $$
+BEGIN
+  EXECUTE pg_catalog.format('GRANT SELECT, DELETE ON _timescaledb_internal.bgw_job_stat_history TO %I',
+    (SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()));
+END
+$$;

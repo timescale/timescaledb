@@ -41,7 +41,6 @@ ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, 
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_continuous_aggs_jobs_refresh_ranges];
 	bool nulls[Natts_continuous_aggs_jobs_refresh_ranges] = { false };
-	CatalogSecurityContext sec_ctx;
 
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_materialization_id)] =
 		Int32GetDatum(materialization_id);
@@ -56,9 +55,7 @@ ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, 
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_created_at)] =
 		TimestampTzGetDatum(GetCurrentTimestamp());
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	table_close(rel, NoLock);
 }

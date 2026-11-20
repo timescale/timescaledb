@@ -7,7 +7,7 @@
 # This script will find patterns that are not idempotent and therefore
 # should be moved to the pre_install part.
 
-from pglast import parse_sql
+from pglast import parse_sql, parse_plpgsql
 from pglast.visitors import Visitor, Skip, Continue
 from pglast.stream import RawStream
 import sys
@@ -15,7 +15,7 @@ import re
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("filename", type=argparse.FileType("r"), nargs="+")
+parser.add_argument("filename", nargs="+")
 args = parser.parse_args()
 
 
@@ -111,6 +111,74 @@ class SQLVisitor(Visitor):
         return Skip
 
 
+class FuncCallVisitor(Visitor):
+    """Flag function calls that are resolved through search_path at runtime."""
+
+    def __init__(self, file):
+        self.errors = 0
+        self.file = file
+        super().__init__()
+
+    def error(self, node, hint):
+        self.errors += 1
+        print(
+            f"Invalid function call found in sql script({self.file}):\n",
+            RawStream()(node),
+        )
+        print(hint, "\n")
+
+    def visit_query(self, query):
+        for stmt in parse_sql(query):
+            self(stmt)
+
+    def visit_expr(self, expr):
+        self.visit_query(f"SELECT {expr}")
+
+    def visit_assign(self, assign):
+        # assignments have the form "target := expr" or "target = expr"
+        self.visit_expr(re.sub(r"^[^=]*?:?=", "", assign, count=1))
+
+    def visit_FuncCall(self, _ancestors, node):
+        if len(node.funcname) == 1 and node.funcname[0].sval == "format":
+            self.error(node, "Use pg_catalog.format()")
+
+    def visit_CreateFunctionStmt(self, _ancestors, node):
+        options = node.options or []
+        language = [o for o in options if o.defname == "language"]
+        body = [o for o in options if o.defname == "as"]
+        if language and body and language[0].arg.sval == "sql":
+            self.visit_query(body[0].arg[0].sval)
+
+
+# plpgsql stores expressions as raw text. Most are bare expressions, these
+# are full SQL statements and assignments have the target in front.
+PLPGSQL_STATEMENTS = {
+    ("PLpgSQL_stmt_execsql", "sqlstmt"),
+    ("PLpgSQL_stmt_perform", "expr"),
+    ("PLpgSQL_stmt_call", "expr"),
+    ("PLpgSQL_stmt_fors", "query"),
+    ("PLpgSQL_stmt_return_query", "query"),
+    ("PLpgSQL_stmt_open", "query"),
+    ("PLpgSQL_var", "cursor_explicit_expr"),
+}
+PLPGSQL_ASSIGNMENT = ("PLpgSQL_stmt_assign", "expr")
+
+
+def plpgsql_exprs(node, owner=None, field=None):
+    """Yield (owner node type, field, query) for all expressions in a plpgsql tree."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "PLpgSQL_expr":
+                yield owner, field, value["query"]
+            elif key.startswith("PLpgSQL_"):
+                yield from plpgsql_exprs(value, key, field)
+            else:
+                yield from plpgsql_exprs(value, owner, key)
+    elif isinstance(node, list):
+        for item in node:
+            yield from plpgsql_exprs(item, owner, field)
+
+
 # copied from pgspot
 def visit_sql(sql, file):
     # @extschema@ is placeholder in extension scripts for
@@ -125,20 +193,30 @@ def visit_sql(sql, file):
     sql = re.sub(r"^\\", "-- \\\\", sql, flags=re.MULTILINE)
 
     visitor = SQLVisitor(file)
+    funccalls = FuncCallVisitor(file)
     for stmt in parse_sql(sql):
         visitor(stmt)
-    return visitor.errors
+        funccalls(stmt)
+    for owner, field, query in plpgsql_exprs(parse_plpgsql(sql)):
+        if (owner, field) in PLPGSQL_STATEMENTS:
+            funccalls.visit_query(query)
+        elif (owner, field) == PLPGSQL_ASSIGNMENT:
+            funccalls.visit_assign(query)
+        else:
+            funccalls.visit_expr(query)
+    return visitor.errors + funccalls.errors
 
 
 def main(args):
     errors = 0
     error_files = []
-    for file in args.filename:
-        sql = file.read()
-        result = visit_sql(sql, file.name)
+    for filename in args.filename:
+        with open(filename, encoding="utf-8") as file:
+            sql = file.read()
+        result = visit_sql(sql, filename)
         if result > 0:
             errors += result
-            error_files.append(file.name)
+            error_files.append(filename)
 
     if errors > 0:
         numbering = "errors" if errors > 1 else "error"

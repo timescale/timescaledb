@@ -77,7 +77,7 @@ SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interva
 ----------------------------------------
  (1,public,test_continuous_agg_table,t)
 
-CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
+CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM public.test_continuous_agg_table $$;
 SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
  set_integer_now_func 
 ----------------------
@@ -521,7 +521,7 @@ SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time
 ------------------------------------------------
  (5,public,test_continuous_agg_table_w_grant,t)
 
-CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM public.test_continuous_agg_table_w_grant $$;
 SELECT set_integer_now_func('test_continuous_agg_table_w_grant', 'integer_now_test1');
  set_integer_now_func 
 ----------------------

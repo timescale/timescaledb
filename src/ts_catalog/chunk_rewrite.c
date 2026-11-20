@@ -64,14 +64,11 @@ ts_chunk_rewrite_add(Oid chunk_relid, Oid new_relid)
 	Catalog *catalog = ts_catalog_get();
 	Oid cat_relid = catalog_get_table_id(catalog, CHUNK_REWRITE);
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	Relation catrel;
 
 	catrel = table_open(cat_relid, RowExclusiveLock);
 	new_tuple = chunk_rewrite_make_tuple(chunk_relid, new_relid, catrel->rd_att);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(catrel, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	table_close(catrel, NoLock);
 }
@@ -155,13 +152,10 @@ ts_chunk_rewrite_delete_by_tid(const ItemPointer tid)
 {
 	Catalog *catalog = ts_catalog_get();
 	Oid cat_relid = catalog_get_table_id(catalog, CHUNK_REWRITE);
-	CatalogSecurityContext sec_ctx;
 	Relation catrel;
 
 	catrel = table_open(cat_relid, RowExclusiveLock);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid_only(catrel, tid);
-	ts_catalog_restore_user(&sec_ctx);
 	table_close(catrel, NoLock);
 }
 
@@ -236,7 +230,6 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 	unsigned int cleanup_count = 0;
 	unsigned int skipped_count = 0;
 	Oid userid = GetUserId();
-	CatalogSecurityContext sec_ctx;
 	ScanTupLock tuplock = {
 		.lockmode = LockTupleExclusive,
 		.waitpolicy = LockWaitSkip,
@@ -310,9 +303,7 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 
 					ItemPointer tid = ts_scanner_get_tuple_tid(ti);
 
-					ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 					ts_catalog_delete_tid_only(it.ctx.tablerel, tid);
-					ts_catalog_restore_user(&sec_ctx);
 					entry_cleaned = true;
 				}
 			}

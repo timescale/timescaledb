@@ -1,7 +1,7 @@
 # All PRs except trivial ones should require 2 approvals, since this a global setting
 # we cannot make this decision from github configuration alone. So we set the required
-# approved in github to 1 and make this check required which will enforce 2 approvals
-# unless overwritten or only CI files are touched.
+# approvals in github to 0 and make this check required which will enforce 2 approvals,
+# 1 approval when overwritten, and none when only CI and test files are touched.
 name: PR Approval Check
 "on":
   pull_request:
@@ -12,7 +12,7 @@ name: PR Approval Check
 jobs:
   check_approvals:
     name: Check for sufficient approvals
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,45 +26,53 @@ jobs:
           set -eu
           echo "PR number is $PR_NUMBER"
           BODY=$(gh pr view $PR_NUMBER -q .body --json body)
-          if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
-          then
-            # Get the list of modified files in this pull request
-            echo "Modified files: "
-            gh pr view $PR_NUMBER --json files
-            # Get the number of modified files, but exclude those that
-            # are workflow files. These require only a single
-            # reviewer.
-            files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith(".github") | not)] | length')
 
-            # Get the number of approvals in this pull request
-            echo "Reviews: "
-            gh pr view $PR_NUMBER --json reviews
-            approvals=$(gh api graphql -F owner=${{ github.repository_owner }} \
-               -F name=${{ github.event.repository.name }} -F number=$PR_NUMBER \
-               -f query='
-                  query($owner:String!, $name:String!, $number:Int!) {
-                    repository(owner:$owner, name:$name) {
-                      pullRequest(number:$number) {
-                        latestOpinionatedReviews(first: 100) {
-                          nodes { state authorAssociation }
-                        }
+          # Get the list of modified files in this pull request
+          echo "Modified files: "
+          gh pr view $PR_NUMBER --json files
+          # Get the number of modified files, but exclude those that
+          # are CI or test files.
+          files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(test("^(\\.github|scripts|test|tsl/test)/") | not)] | length')
+
+          # PRs touching only CI and test files need no approval,
+          # PRs with the disable-check trailer need 1, all others 2.
+          if [[ $files -eq 0 ]]; then
+            required=0
+          elif echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'; then
+            required=1
+          else
+            required=2
+          fi
+
+          # Get the number of approvals in this pull request
+          echo "Reviews: "
+          gh pr view $PR_NUMBER --json reviews
+          approvals=$(gh api graphql -F owner=${{ github.repository_owner }} \
+             -F name=${{ github.event.repository.name }} -F number=$PR_NUMBER \
+             -f query='
+                query($owner:String!, $name:String!, $number:Int!) {
+                  repository(owner:$owner, name:$name) {
+                    pullRequest(number:$number) {
+                      latestOpinionatedReviews(first: 100) {
+                        nodes { state authorAssociation }
                       }
                     }
                   }
-              ' --jq '[
-                  .data.repository.pullRequest.latestOpinionatedReviews.nodes[]
-                  | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
-                ] | length'
-            )
-            echo "approvals: $approvals, files: $files"
-            if [[ $approvals -lt 2 && $files -gt 0 ]] ; then
-              echo "This pull request requires 2 approvals before merging."
+                }
+            ' --jq '[
+                .data.repository.pullRequest.latestOpinionatedReviews.nodes[]
+                | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
+              ] | length'
+          )
+          echo "approvals: $approvals, required: $required, files: $files"
+          if [[ $approvals -lt $required ]] ; then
+            echo "This pull request requires $required approval(s) before merging."
+            if [[ $required -eq 2 ]]; then
               echo
-              echo "For trivial changes, you may disable this check by adding this trailer to the pull request message:"
+              echo "For trivial changes, you may reduce this to 1 approval by adding this trailer to the pull request message:"
               echo
               echo "Disable-check: approval-count"
               echo
-              exit 1
             fi
+            exit 1
           fi
-
