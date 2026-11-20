@@ -1,0 +1,1 @@
+Fixes: #11035 Do not switch to catalog owner for constraint drops and view updates

@@ -13,7 +13,6 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
-#include "annotations.h"
 #include "bgw/launcher_interface.h"
 #include "log.h"
 #include "params.h"
@@ -50,18 +49,28 @@ mock_wait(TimestampTz until)
 		 until,
 		 ts_params_get()->current_time);
 
+	MockWaitType wait_type = ts_params_get()->mock_wait_type;
 	ListCell *lc;
 
-	switch (ts_params_get()->mock_wait_type)
+	if (wait_type == WAIT_ON_JOB)
+	{
+		foreach (lc, bgw_handles)
+		{
+			BackgroundWorkerHandle *bgw_handle = lfirst(lc);
+			WaitForBackgroundWorkerShutdown(bgw_handle);
+		}
+	}
+
+	/*
+	 * The scheduler frees the handles of stopped jobs after this wait, so
+	 * never keep them past a wait, whatever the wait type.
+	 */
+	list_free(bgw_handles);
+	bgw_handles = NIL;
+
+	switch (wait_type)
 	{
 		case WAIT_ON_JOB:
-			foreach (lc, bgw_handles)
-			{
-				BackgroundWorkerHandle *bgw_handle = lfirst(lc);
-				WaitForBackgroundWorkerShutdown(bgw_handle);
-			}
-			bgw_handles = NIL;
-			TS_FALLTHROUGH;
 		case IMMEDIATELY_SET_UNTIL:
 			ts_params_set_time(until, false);
 			return true;

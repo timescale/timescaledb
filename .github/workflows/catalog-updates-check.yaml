@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
       - name: Install pglast
         run: |
-          python -m pip install pglast
+          python -m pip install pglast==7.21
 
       - name: Check sql file contents
         run: |

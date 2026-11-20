@@ -10,7 +10,7 @@ BEGIN
   IF FOUND THEN
     RAISE EXCEPTION 'catalog version mismatch'
       USING
-        DETAIL = format('current extension version is "%s" but catalog version is "%s"', '@START_VERSION@', catalog_version),
+        DETAIL = pg_catalog.format('current extension version is "%s" but catalog version is "%s"', '@START_VERSION@', catalog_version),
         HINT = 'Make sure the TimescaleDB version used to dump the database is the same as the one used to restore it.';
   END IF;
 END$$;

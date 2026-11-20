@@ -111,7 +111,7 @@ AIC_TFN(aic_encode_dfor_block_)(AICCompressorImpl *impl)
 		AIC_TY zz_hi = (AIC_TY) 0;
 		for (i = 0; i < n_delta_residuals; ++i)
 		{
-			AIC_TY zz = AIC_TFN(aic_zigzag_encode_)(deltas[i]);
+			AIC_TY zz = AIC_TFN(cm_zigzag_encode_)(deltas[i]);
 			deltas[i] = zz;
 			zz_lo = (zz < zz_lo) ? zz : zz_lo;
 			zz_hi = (zz > zz_hi) ? zz : zz_hi;
@@ -119,7 +119,7 @@ AIC_TFN(aic_encode_dfor_block_)(AICCompressorImpl *impl)
 		/* this will be used as the FL base value */
 		delta_residual_base = (int64) zz_lo;
 		/* this is the bitwidth used for the FL encoding of the delta reisuals */
-		W_delta_residuals = aic_bit_width_u64((uint64) (AIC_TY) (zz_hi - zz_lo));
+		W_delta_residuals = cm_bit_width_u64((uint64) (AIC_TY) (zz_hi - zz_lo));
 	}
 	else
 	{
@@ -279,26 +279,13 @@ AIC_TFN(aic_encode_dict_block_)(AICCompressorImpl *impl)
 	 * the 'ar->dict.keys' array */
 	block->data.dict.packed_keys_size =
 		fl_pack(keys_src, block->data.dict.keys_body, K, ar->W, impl->elem_width);
-	/* the analyzer staged the indexes up to n; fl_pack reads
-	 * fl_input_count() elements, so zero the padding above n */
-	uint32 staged_idx = fl_input_count(n, idx_T);
-	if (staged_idx > n)
-	{
-		if (zigzag_idxs)
-		{
-			memset(&ar->dict.idx_zz[n], 0, (size_t) (staged_idx - n) * sizeof(uint16));
-		}
-		else
-		{
-			memset(&ar->dict.idx[n], 0, (size_t) (staged_idx - n) * sizeof(uint8));
-		}
-	}
-	/* the idx elem width depends on the zigzag choice, in both
-	 * cases we pack without a base value, because zero is
-	 * the min idx */
-	block->data.dict.packed_idx_size =
-		zigzag_idxs ? fl_pack(ar->dict.idx_zz, block->data.dict.idx_body, n, w_idx, FL_ELEM_W16) :
-					  fl_pack(ar->dict.idx, block->data.dict.idx_body, n, w_idx, FL_ELEM_W8);
+	/* the indexes, staged by the analyzer */
+	block->data.dict.packed_idx_size = cm_dict_pack_indices(ar->dict.idx,
+															ar->dict.idx_zz,
+															n,
+															w_idx,
+															zigzag_idxs,
+															block->data.dict.idx_body);
 }
 
 /* the PFOR encoder needs to encode 1) the base/body values from which

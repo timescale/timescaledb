@@ -7,7 +7,8 @@
 #include <string.h>
 #include "aic_blocks.h"
 #include "aic_internal.h"
-#include "aic_utils.h"
+#include "compression/algorithms/common/dict.h"
+#include "compression/algorithms/common/utils.h"
 #include "compression/algorithms/fastlanes/fastlanes.h"
 #include "compression/algorithms/fastlanes/fastlanes_types.h"
 #include "compression/compression.h"
@@ -79,8 +80,8 @@ void
 aic_block_rle_init(AICBlockRLE *block, uint32 count, int64 base, int64 step, fl_elem_width_t T)
 {
 	/* the base and step values need to be sign-extended first */
-	base = aic_sign_extend_u64((uint64) base, (uint8) T);
-	step = aic_sign_extend_u64((uint64) step, (uint8) T);
+	base = cm_sign_extend_u64((uint64) base, (uint8) T);
+	step = cm_sign_extend_u64((uint64) step, (uint8) T);
 
 	block->header = 0;
 	block->header |= (AIC_BT_RLE & 0x7);
@@ -90,13 +91,13 @@ aic_block_rle_init(AICBlockRLE *block, uint32 count, int64 base, int64 step, fl_
 
 	if (base != 0)
 	{
-		uint8 bytes_needed = aic_signed_bytes_needed(base);
+		uint8 bytes_needed = cm_signed_bytes_needed(base);
 		block->header |= (bytes_needed & 0xF) << 3;
 	}
 
 	if (step != 0)
 	{
-		uint8 bytes_needed = aic_signed_bytes_needed(step);
+		uint8 bytes_needed = cm_signed_bytes_needed(step);
 		block->header |= (bytes_needed & 0xF) << 7;
 	}
 }
@@ -106,7 +107,7 @@ aic_block_for_init(AICBlockFOR *block, uint32 count, int64 base, uint8 W, fl_ele
 				   uint8 *body)
 {
 	/* sign extend base first */
-	base = aic_sign_extend_u64((uint64) base, (uint8) T);
+	base = cm_sign_extend_u64((uint64) base, (uint8) T);
 
 	block->header = 0;
 	block->header |= (AIC_BT_FOR & 0x7);
@@ -116,7 +117,7 @@ aic_block_for_init(AICBlockFOR *block, uint32 count, int64 base, uint8 W, fl_ele
 
 	if (base != 0)
 	{
-		uint8 bytes_needed = aic_signed_bytes_needed(base);
+		uint8 bytes_needed = cm_signed_bytes_needed(base);
 		block->header |= (bytes_needed & 0xF) << 3;
 	}
 
@@ -142,8 +143,8 @@ aic_block_dfor_init(AICBlockDFOR *block, uint32 count, uint16 S, int64 base, uin
 
 	uint32 n_delta_residuals = count - S;
 
-	base = aic_sign_extend_u64((uint64) base, (uint8) T);
-	delta_residual_base = aic_sign_extend_u64((uint64) delta_residual_base, (uint8) T);
+	base = cm_sign_extend_u64((uint64) base, (uint8) T);
+	delta_residual_base = cm_sign_extend_u64((uint64) delta_residual_base, (uint8) T);
 
 	block->header = 0;
 	block->header |= (AIC_BT_DFOR & 0x7);
@@ -160,13 +161,13 @@ aic_block_dfor_init(AICBlockDFOR *block, uint32 count, uint16 S, int64 base, uin
 
 	if (base != 0)
 	{
-		uint8 bytes_needed = aic_signed_bytes_needed(base);
+		uint8 bytes_needed = cm_signed_bytes_needed(base);
 		block->header |= (bytes_needed & 0xF) << 3;
 	}
 
 	if (delta_residual_base != 0)
 	{
-		uint8 bytes_needed = aic_signed_bytes_needed(delta_residual_base);
+		uint8 bytes_needed = cm_signed_bytes_needed(delta_residual_base);
 		block->header |= (bytes_needed & 0xF) << 20;
 	}
 
@@ -206,7 +207,7 @@ aic_block_dict_init(AICBlockDICT *block, uint32 count, uint16 K, int64 key_base,
 	Assert(W >= 2);
 	Assert(W_idx >= 1);
 
-	key_base = aic_sign_extend_u64((uint64) key_base, (uint8) T);
+	key_base = cm_sign_extend_u64((uint64) key_base, (uint8) T);
 
 	block->header = 0;
 	block->header |= (AIC_BT_DICT & 0x7);
@@ -223,7 +224,7 @@ aic_block_dict_init(AICBlockDICT *block, uint32 count, uint16 K, int64 key_base,
 
 	if (key_base != 0)
 	{
-		uint8 bytes_needed = aic_signed_bytes_needed(key_base);
+		uint8 bytes_needed = cm_signed_bytes_needed(key_base);
 		block->header |= (bytes_needed & 0xF) << 3;
 	}
 
@@ -244,11 +245,11 @@ aic_block_pfor_init(AICBlockPFOR *block, uint32 count, int64 base, uint8 W, uint
 	Assert(n_exc >= 1 && n_exc <= AIC_PFOR_MAX_EXCEPTIONS);
 	Assert(W_exc >= 1);
 
-	base = aic_sign_extend_u64((uint64) base, (uint8) T);
+	base = cm_sign_extend_u64((uint64) base, (uint8) T);
 
 	block->header = 0;
 
-	uint8 bytes_needed = aic_block_header_scalar_len(base);
+	uint8 bytes_needed = cm_block_header_scalar_len(base);
 
 	block->header |= (AIC_BT_PFOR & 0x7);
 	block->header |= (bytes_needed & 0xF) << 3;
@@ -376,18 +377,18 @@ aic_block_rle_serialize(const AICBlockRLE *block, uint8 *dest, size_t *max_size)
 	uint8 base_len_bytes = (header >> 3) & 0xF;
 	uint8 step_len_bytes = (header >> 7) & 0xF;
 
-	aic_store_le32(dest, block->header);
+	cm_store_le32(dest, block->header);
 	dest += sizeof(uint32);
 
 	if (base_len_bytes > 0)
 	{
-		aic_store_le64(dest, (uint64) block->base_value, base_len_bytes);
+		cm_store_le64(dest, (uint64) block->base_value, base_len_bytes);
 		dest += base_len_bytes;
 	}
 
 	if (step_len_bytes > 0)
 	{
-		aic_store_le64(dest, (uint64) block->step_value, step_len_bytes);
+		cm_store_le64(dest, (uint64) block->step_value, step_len_bytes);
 		dest += step_len_bytes;
 	}
 
@@ -410,12 +411,12 @@ aic_block_for_serialize(const AICBlockFOR *block, uint8 *dest, size_t *max_size)
 	uint32 header = block->header;
 	uint8 base_len_bytes = (header >> 3) & 0xF;
 
-	aic_store_le32(dest, block->header);
+	cm_store_le32(dest, block->header);
 	dest += sizeof(uint32);
 
 	if (base_len_bytes > 0)
 	{
-		aic_store_le64(dest, (uint64) block->base_value, base_len_bytes);
+		cm_store_le64(dest, (uint64) block->base_value, base_len_bytes);
 		dest += base_len_bytes;
 	}
 
@@ -445,7 +446,7 @@ aic_block_dfor_serialize(const AICBlockDFOR *block, uint8 *dest, size_t *max_siz
 	uint8 base_len_bytes = (header >> 3) & 0xF;
 	uint8 delta_residual_base_len_bytes = (header >> 20) & 0xF;
 
-	aic_store_le32(dest, block->header);
+	cm_store_le32(dest, block->header);
 	dest += sizeof(uint32);
 
 	*dest = block->count_delta_residuals;
@@ -453,15 +454,15 @@ aic_block_dfor_serialize(const AICBlockDFOR *block, uint8 *dest, size_t *max_siz
 
 	if (base_len_bytes > 0)
 	{
-		aic_store_le64(dest, (uint64) block->base_value, base_len_bytes);
+		cm_store_le64(dest, (uint64) block->base_value, base_len_bytes);
 		dest += base_len_bytes;
 	}
 
 	if (delta_residual_base_len_bytes > 0)
 	{
-		aic_store_le64(dest,
-					   (uint64) block->delta_residual_base_value,
-					   delta_residual_base_len_bytes);
+		cm_store_le64(dest,
+					  (uint64) block->delta_residual_base_value,
+					  delta_residual_base_len_bytes);
 		dest += delta_residual_base_len_bytes;
 	}
 
@@ -496,7 +497,7 @@ aic_block_dict_serialize(const AICBlockDICT *block, uint8 *dest, size_t *max_siz
 	uint32 header = block->header;
 	uint8 key_base_len_bytes = (header >> 3) & 0xF;
 
-	aic_store_le32(dest, block->header);
+	cm_store_le32(dest, block->header);
 	dest += sizeof(uint32);
 
 	*dest = block->count_idx;
@@ -504,7 +505,7 @@ aic_block_dict_serialize(const AICBlockDICT *block, uint8 *dest, size_t *max_siz
 
 	if (key_base_len_bytes > 0)
 	{
-		aic_store_le64(dest, (uint64) block->key_base_value, key_base_len_bytes);
+		cm_store_le64(dest, (uint64) block->key_base_value, key_base_len_bytes);
 		dest += key_base_len_bytes;
 	}
 
@@ -535,12 +536,12 @@ aic_block_pfor_serialize(const AICBlockPFOR *block, uint8 *dest, size_t *max_siz
 	uint32 n_exc = (uint32) block->count_exc + 1;
 	uint8 base_len_bytes = (header >> 3) & 0xF;
 
-	aic_store_le32(dest, block->header);
+	cm_store_le32(dest, block->header);
 	dest += sizeof(uint32);
 
 	*dest = block->count_exc;
 	dest++;
-	aic_store_le64(dest, (uint64) block->base_value, base_len_bytes);
+	cm_store_le64(dest, (uint64) block->base_value, base_len_bytes);
 	dest += base_len_bytes;
 
 	if (block->packed_body_size > 0)
@@ -625,13 +626,13 @@ aic_block_rle_prepare(AICBlockRLE *block, uint32 header, StringInfo si)
 	if (base_len_bytes > 0)
 	{
 		uint8 *base_ptr = (uint8 *) consumeCompressedData(si, base_len_bytes);
-		block->base_value = aic_read_signed(base_ptr, base_len_bytes);
+		block->base_value = cm_read_signed(base_ptr, base_len_bytes);
 	}
 
 	if (step_len_bytes > 0)
 	{
 		uint8 *step_ptr = (uint8 *) consumeCompressedData(si, step_len_bytes);
-		block->step_value = aic_read_signed(step_ptr, step_len_bytes);
+		block->step_value = cm_read_signed(step_ptr, step_len_bytes);
 	}
 
 	return num_elements;
@@ -658,7 +659,7 @@ aic_block_for_prepare(AICBlockFOR *block, uint32 header, StringInfo si, fl_elem_
 	if (base_len_bytes > 0)
 	{
 		uint8 *base_ptr = (uint8 *) consumeCompressedData(si, base_len_bytes);
-		block->base_value = aic_read_signed(base_ptr, base_len_bytes);
+		block->base_value = cm_read_signed(base_ptr, base_len_bytes);
 	}
 
 	if (W > 0)
@@ -712,13 +713,13 @@ aic_block_dfor_prepare(AICBlockDFOR *block, uint32 header, StringInfo si, fl_ele
 	if (base_len_bytes > 0)
 	{
 		uint8 *base_ptr = (uint8 *) consumeCompressedData(si, base_len_bytes);
-		block->base_value = aic_read_signed(base_ptr, base_len_bytes);
+		block->base_value = cm_read_signed(base_ptr, base_len_bytes);
 	}
 
 	if (delta_residual_base_len_bytes > 0)
 	{
 		uint8 *res_ptr = (uint8 *) consumeCompressedData(si, delta_residual_base_len_bytes);
-		block->delta_residual_base_value = aic_read_signed(res_ptr, delta_residual_base_len_bytes);
+		block->delta_residual_base_value = cm_read_signed(res_ptr, delta_residual_base_len_bytes);
 	}
 
 	block->packed_bases_size = fl_result_bytes(S, W_bases, T);
@@ -778,7 +779,7 @@ aic_block_dict_prepare(AICBlockDICT *block, uint32 header, StringInfo si, fl_ele
 	if (key_base_len_bytes > 0)
 	{
 		uint8 *base_ptr = (uint8 *) consumeCompressedData(si, key_base_len_bytes);
-		block->key_base_value = aic_read_signed(base_ptr, key_base_len_bytes);
+		block->key_base_value = cm_read_signed(base_ptr, key_base_len_bytes);
 	}
 
 	block->packed_keys_size = fl_result_bytes(K, W, T);
@@ -828,7 +829,7 @@ aic_block_pfor_prepare(AICBlockPFOR *block, uint32 header, StringInfo si, fl_ele
 	if (base_len_bytes > 0)
 	{
 		uint8 *base_ptr = (uint8 *) consumeCompressedData(si, base_len_bytes);
-		block->base_value = aic_read_signed(base_ptr, base_len_bytes);
+		block->base_value = cm_read_signed(base_ptr, base_len_bytes);
 	}
 
 	CheckCompressedData(W <= (uint8) T);
@@ -866,7 +867,8 @@ aic_block_pfor_prepare(AICBlockPFOR *block, uint32 header, StringInfo si, fl_ele
 }
 
 /* decompression: the per-type reconstruct/broadcast helpers are emitted
- * from the aic_blocks_impl.h template */
+ * from the aic_blocks_impl.h template, the dictionary reconstruct from
+ * the common/dict_impl.h template */
 
 /* clang format would reorder the headers which is not desired here */
 /* clang-format off */
@@ -882,6 +884,18 @@ aic_block_pfor_prepare(AICBlockPFOR *block, uint32 header, StringInfo si, fl_ele
 #define AIC_TY uint64
 #define AIC_STY int64
 #include "aic_blocks_impl.h"
+
+#define CM_DICT_TY uint16
+#include "compression/algorithms/common/dict_impl.h"
+#undef CM_DICT_TY
+
+#define CM_DICT_TY uint32
+#include "compression/algorithms/common/dict_impl.h"
+#undef CM_DICT_TY
+
+#define CM_DICT_TY uint64
+#include "compression/algorithms/common/dict_impl.h"
+#undef CM_DICT_TY
 
 /* clang-format on */
 
@@ -1064,9 +1078,7 @@ aic_block_dict_decompress(const AICBlockDICT *block, uint8 *dest, uint8 *scratch
 	uint16 K = (uint16) (((header >> 14) & 0xFF) + 1);
 	uint8 W_idx = (header >> 22) & 0x7F;
 	bool zigzag_idxs = (bool) ((header >> 29) & 0x1);
-	fl_elem_width_t idx_T = zigzag_idxs ? FL_ELEM_W16 : FL_ELEM_W8;
 	uint32 num_elements = (size_t) block->count_idx + 1;
-	uint32 idx_mask = ((uint32) 1 << aic_bit_width_u64((uint64) (K - 1))) - 1;
 	const uint8 *body = block->keys_body;
 
 	/* copy the 'body' holding the keys into the aligned scratch buffer */
@@ -1082,59 +1094,44 @@ aic_block_dict_decompress(const AICBlockDICT *block, uint8 *dest, uint8 *scratch
 		fl_unpack_ffor(scratch_buffer, keys.uint64_elem, K, W, T, block->key_base_value);
 	}
 
-	/* the idx_mask bounds the maximum key index to the next power
-	 * of two minus one, which keeps the keys[] access in
-	 * aic_dict_reconstruct_* branch-less instead of a per-element
-	 * bounds check. out-of-range key indexes only occur on corrupt
-	 * input: the non-zigzag case cannot read past the block's maximum
-	 * capacity anyway, but the zigzag case's delta/prefix sum stream
-	 * can easily go over it. so the idx_mask is more important there.
-	 *
-	 * the below memset clears the keys between the first invalid slot
-	 * (K) and the idx_mask clamp, so corrupt blocks decode these slots
-	 * to zero instead of leaking stale buffer contents.
-	 */
-	if (K <= idx_mask)
-	{
-		size_t elem_bytes = (size_t) ((uint8) T / 8);
-		uint32 undefined_slots = idx_mask - K + 1;
-
-		memset((uint8 *) keys.uint64_elem + (size_t) K * elem_bytes,
-			   0,
-			   (size_t) undefined_slots * elem_bytes);
-	}
-
-	/* the indices into the index array, scratch reused */
-	const uint8 *idx_comp = body + block->packed_keys_size;
-	memcpy(scratch_buffer, idx_comp, block->packed_idx_size);
-	fl_unpack(scratch_buffer, idx, num_elements, W_idx, idx_T);
+	/* the indices into the index array, and the idx_mask */
+	uint32 idx_mask = cm_dict_unpack_indices(body + block->packed_keys_size,
+											 block->packed_idx_size,
+											 num_elements,
+											 K,
+											 W_idx,
+											 zigzag_idxs,
+											 keys.uint64_elem,
+											 (size_t) ((uint8) T / 8),
+											 scratch_buffer,
+											 idx);
 
 	/* gather with separately generated functions */
 	switch (T)
 	{
 		case FL_ELEM_W16:
-			aic_dict_reconstruct_uint16(dest,
-										keys.uint16_elem,
-										idx,
-										num_elements,
-										idx_mask,
-										zigzag_idxs);
+			cm_dict_reconstruct_uint16(dest,
+									   keys.uint16_elem,
+									   idx,
+									   num_elements,
+									   idx_mask,
+									   zigzag_idxs);
 			break;
 		case FL_ELEM_W32:
-			aic_dict_reconstruct_uint32(dest,
-										keys.uint32_elem,
-										idx,
-										num_elements,
-										idx_mask,
-										zigzag_idxs);
+			cm_dict_reconstruct_uint32(dest,
+									   keys.uint32_elem,
+									   idx,
+									   num_elements,
+									   idx_mask,
+									   zigzag_idxs);
 			break;
 		case FL_ELEM_W64:
-			aic_dict_reconstruct_uint64(dest,
-										keys.uint64_elem,
-										idx,
-										num_elements,
-										idx_mask,
-										zigzag_idxs);
+			cm_dict_reconstruct_uint64(dest,
+									   keys.uint64_elem,
+									   idx,
+									   num_elements,
+									   idx_mask,
+									   zigzag_idxs);
 			break;
 		default:
 			CheckCompressedData(false);
@@ -1223,7 +1220,7 @@ aic_decompress_blocks(uint32 num_blocks, StringInfo si, uint8 *dest, uint8 *scra
 		uint32 count = 0;
 		uint8 *comp_ptr = (uint8 *) consumeCompressedData(si, sizeof(uint32));
 
-		header = aic_load_le32(comp_ptr);
+		header = cm_load_le32(comp_ptr);
 		block.type = (AICBlockType) (header & 0x7);
 		switch (block.type)
 		{
@@ -1267,7 +1264,7 @@ aic_parse_one_block(AICBlock *block, StringInfo si, fl_elem_width_t T)
 	uint32 header;
 	uint8 *comp_ptr = (uint8 *) consumeCompressedData(si, sizeof(uint32));
 
-	header = aic_load_le32(comp_ptr);
+	header = cm_load_le32(comp_ptr);
 	block->type = (AICBlockType) (header & 0x7);
 	switch (block->type)
 	{

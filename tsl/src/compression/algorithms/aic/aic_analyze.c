@@ -4,7 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include "aic_analyze.h"
-#include "aic_utils.h"
+#include "compression/algorithms/common/dict.h"
+#include "compression/algorithms/common/utils.h"
 #include "compression/algorithms/fastlanes/fastlanes.h"
 #include "compression/algorithms/fastlanes/fastlanes_types.h"
 
@@ -40,16 +41,18 @@
 /* DICT analysis constants */
 #define AIC_DICT_MIN_BITWIDTH 2		   /* DICT can only win at W >=2 */
 #define AIC_DICT_ZIGZAG_MIN_BITWIDTH 4 /* delta-coded indices pay off from W > 4 */
-#define AIC_DICT_ZIGZAG_MIN_K 4		   /* and from K > 4 */
-#define AIC_DICT_HASH_SHIFT 56		   /* bucket = top bits of the Fibonacci product */
 #define AIC_DICT_K_FLOOR 2			   /* the probe needs room for at least two distinct keys */
 #define AIC_DICT_K_CEIL 128			   /* the probe is limited to 'ceil' distinct keys */
-#define AIC_DICT_HASH_SIZE 256		   /* the size of the dictionary hash table */
 
 /* the ht_idx slots are int8 and the sign bit tells if the slot is
  * occupied. this leaves room for the key indexes 0..127, so the K
  * ceiling must not exceed 128. */
 StaticAssertDecl(AIC_DICT_K_CEIL <= 128, "int8 ht_idx cannot represent dict key indexes above 127");
+
+/* the dictionary probe of the residuals, from the common/dict_impl.h template */
+#define CM_DICT_TY uint64
+#include "compression/algorithms/common/dict_impl.h"
+#undef CM_DICT_TY
 
 /* PFOR analysis constants */
 #define AIC_PFOR_POPCOUNT_THRESHOLD_U64 33 /* empirical threshold when PFOR can't win on uint64 */
@@ -104,7 +107,7 @@ typedef struct AICAnalysis
 static inline int
 aic_dfor_bit_savings(uint8 W, int64 dmin, int64 dmax)
 {
-	return (int) W - (int) aic_bit_width_u64((uint64) dmax - (uint64) dmin);
+	return (int) W - (int) cm_bit_width_u64((uint64) dmax - (uint64) dmin);
 }
 
 /*
@@ -132,7 +135,7 @@ aic_dfor_stride(uint32 n, fl_elem_width_t T)
 static inline int32
 aic_cost_for(uint32 n, uint8 W, int64 vmin, fl_elem_width_t T)
 {
-	return 4 + aic_block_header_scalar_len(vmin) + (int32) fl_result_bytes(n, W, T);
+	return 4 + cm_block_header_scalar_len(vmin) + (int32) fl_result_bytes(n, W, T);
 }
 
 /*
@@ -158,22 +161,21 @@ aic_cost_dfor(uint32 n, const AICAnalysis *a, fl_elem_width_t T, AICDforResult *
 		uint64 zz_hi = zz_dmax > zz_dmin ? zz_dmax : zz_dmin;
 		uint64 zz_lo = a->zz_lo;
 
-		W_delta_residuals = (uint32) aic_bit_width_u64(zz_hi - zz_lo);
-		delta_residual_base_len =
-			aic_block_header_scalar_len(aic_sign_extend_u64(zz_lo, (uint8) T));
+		W_delta_residuals = (uint32) cm_bit_width_u64(zz_hi - zz_lo);
+		delta_residual_base_len = cm_block_header_scalar_len(cm_sign_extend_u64(zz_lo, (uint8) T));
 		dfor->delta_residual_base = (int64) zz_lo;
 	}
 	else
 	{
 		/* we have the exact size because we did the stride-S analysis previously */
-		W_delta_residuals = (uint32) aic_bit_width_u64((uint64) a->dmax - (uint64) a->dmin);
-		delta_residual_base_len = aic_block_header_scalar_len(a->dmin);
+		W_delta_residuals = (uint32) cm_bit_width_u64((uint64) a->dmax - (uint64) a->dmin);
+		delta_residual_base_len = cm_block_header_scalar_len(a->dmin);
 		dfor->delta_residual_base = a->dmin;
 	}
 	dfor->S = a->S;
 	dfor->zigzag = a->use_zigzag;
 	dfor->W_delta_residuals = (uint8) W_delta_residuals;
-	return 5 + aic_block_header_scalar_len(dfor->bases_min) +
+	return 5 + cm_block_header_scalar_len(dfor->bases_min) +
 		   (int32) fl_result_bytes(a->S, dfor->W_bases, T) + delta_residual_base_len +
 		   (int32) fl_result_bytes(n - a->S, (uint8) W_delta_residuals, T);
 }
@@ -222,78 +224,33 @@ aic_dict_cap(uint32 n, uint8 W, int32 best_cost)
 static inline int32
 aic_dict_probe(uint32 n, const AICAnalysis *a, fl_elem_width_t T, AICAnalyzeResult *r)
 {
-	const uint64 *residuals = r->residuals;
 	const int32 k_cap = aic_dict_cap(n, a->W, r->cost);
 
-	uint64 ht_keys[AIC_DICT_HASH_SIZE];
-	int8 ht_idx[AIC_DICT_HASH_SIZE];
-	int32 K = 0;
+	int32 K;
 	uint8 w_idx;
 	int32 idx_cost;
-	bool zz_idx = false;
+	bool zz_idx;
 	int32 dict_cost;
-	uint32 i;
 
-	/* build up the 'keys' and 'idx' arrays */
+	/* build up the 'keys' and 'idx' arrays, and check which idx
+	 * storage is tighter, raw or zigzag+delta */
 	Assert(a->W >= AIC_DICT_MIN_BITWIDTH);
-	memset(ht_idx, 0xFF, sizeof(ht_idx));
-	for (i = 0; i < n; ++i)
-	{
-		uint64 key = residuals[i];
-		uint32 h = (uint32) ((key * UINT64CONST(0x9E3779B97F4A7C15)) >> AIC_DICT_HASH_SHIFT) &
-				   (AIC_DICT_HASH_SIZE - 1);
-
-		int32 slot = (int32) ht_idx[h];
-		int32 miss = (slot < 0) | (ht_keys[h] != key);
-		int32 kidx = miss ? K : slot;
-
-		/* note: keys are rewritten unconditionally, because
-		 * the branch makes a measurable regression in performance */
-		r->dict.keys[K] = key;
-		ht_keys[h] = key;
-		ht_idx[h] = (int8) kidx;
-		r->dict.idx[i] = (uint8) kidx;
-		K += miss;
-
-		if (((i & 7) == 7) && (K > k_cap))
-		{
-			return -1;
-		}
-	}
-	if (K > k_cap)
+	idx_cost = cm_dict_probe_uint64(r->residuals,
+									n,
+									k_cap,
+									a->W > AIC_DICT_ZIGZAG_MIN_BITWIDTH,
+									r->dict.keys,
+									r->dict.idx,
+									r->dict.idx_zz,
+									&K,
+									&w_idx,
+									&zz_idx);
+	if (idx_cost < 0)
 	{
 		return -1;
 	}
-	Assert(K >= 2);
 
-	/* check which idx storage is tighter, raw or zigzag+delta */
-	w_idx = aic_bit_width_u64((uint64) (K - 1));
-	idx_cost = (int32) fl_result_bytes(n, w_idx, FL_ELEM_W8);
-	if (a->W > AIC_DICT_ZIGZAG_MIN_BITWIDTH && K > AIC_DICT_ZIGZAG_MIN_K)
-	{
-		uint64 zz_or = 0;
-		uint8 w_zz;
-		int32 zz_encoded_cost;
-
-		r->dict.idx_zz[0] = 0;
-		for (i = 1; i < n; ++i)
-		{
-			int32 dlt = (int32) r->dict.idx[i] - (int32) r->dict.idx[i - 1];
-			uint32 zz = aic_zigzag_encode_uint32((uint32) dlt);
-			r->dict.idx_zz[i] = (uint16) zz;
-			zz_or |= (uint64) zz;
-		}
-		w_zz = aic_bit_width_u64(zz_or);
-		zz_encoded_cost = (int32) fl_result_bytes(n, w_zz, FL_ELEM_W16);
-		if (zz_encoded_cost < idx_cost)
-		{
-			idx_cost = zz_encoded_cost;
-			w_idx = w_zz;
-			zz_idx = true;
-		}
-	}
-
-	dict_cost = 5 + aic_block_header_scalar_len(a->vmin) +
+	dict_cost = 5 + cm_block_header_scalar_len(a->vmin) +
 				(int32) fl_result_bytes((uint32) K, a->W, T) + idx_cost;
 	if (dict_cost >= r->cost)
 	{
@@ -332,7 +289,7 @@ static inline int32
 aic_pfor_search(uint32 n, uint8 W, int64 vmin, fl_elem_width_t T, AICAnalyzeResult *r)
 {
 	const uint64 *residuals = r->residuals;
-	int32 hdr = 5 + aic_block_header_scalar_len(vmin);
+	int32 hdr = 5 + cm_block_header_scalar_len(vmin);
 	int shift = (W > 8) ? W - 8 : 0;
 	uint64 low_or = 0;
 	uint64 acc = 0;
@@ -421,7 +378,7 @@ aic_pfor_search(uint32 n, uint8 W, int64 vmin, fl_elem_width_t T, AICAnalyzeResu
 	 * we can store, and there is a bit gap (no values stored at these
 	 * bits) then we can narrow the 'b' bitwidth until we reach the next
 	 * bit set below the window. */
-	p = aic_bit_width_u64(low_or);
+	p = cm_bit_width_u64(low_or);
 	if (shift > 0 && (int) p < shift && exact_exc[0] <= AIC_PFOR_MAX_EXCEPTIONS)
 	{
 		int32 c = hdr + (int32) fl_result_bytes(n, p, T) + exact_exc[0] +

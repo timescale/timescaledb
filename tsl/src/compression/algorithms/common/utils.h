@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <port/pg_bitutils.h>
 #include <stdint.h>
 
 /*
@@ -19,11 +20,20 @@
  * separate field that tells how many bytes the integer has)
  */
 
-/* please read the README.md file for more details. */
+/* PG16 on Windows doesn't link pg_popcount64 properly */
+static inline int
+cm_popcount64(uint64 word)
+{
+#if defined(WIN32) && PG17_LT
+	return (int) pg_popcount((const char *) &word, sizeof(word));
+#else
+	return pg_popcount64(word);
+#endif
+}
 
 /* returns number of bits needed to represent `val` */
 static inline uint8
-aic_bit_width_u64(uint64 val)
+cm_bit_width_u64(uint64 val)
 {
 	if (val == 0)
 	{
@@ -37,10 +47,10 @@ aic_bit_width_u64(uint64 val)
  * the two's complement form.
  */
 static inline uint8
-aic_signed_bytes_needed(int64 v)
+cm_signed_bytes_needed(int64 v)
 {
 	uint64 mag = (v < 0) ? (uint64) (~v) : (uint64) v;
-	uint8 bits = (uint8) (aic_bit_width_u64(mag) + 1);
+	uint8 bits = (uint8) (cm_bit_width_u64(mag) + 1);
 	return (uint8) ((bits + 7) / 8);
 }
 
@@ -48,14 +58,14 @@ aic_signed_bytes_needed(int64 v)
  * headers, where we don't store any value for v=0.
  */
 static inline uint8
-aic_block_header_scalar_len(int64 v)
+cm_block_header_scalar_len(int64 v)
 {
-	return (v == 0) ? 0 : aic_signed_bytes_needed(v);
+	return (v == 0) ? 0 : cm_signed_bytes_needed(v);
 }
 
 /*  store the little endian low `n` bytes of `v` */
 static inline void
-aic_store_le64(uint8 *dst, uint64 v, uint8 n)
+cm_store_le64(uint8 *dst, uint64 v, uint8 n)
 {
 	for (uint8 i = 0; i < n; i++)
 	{
@@ -64,7 +74,7 @@ aic_store_le64(uint8 *dst, uint64 v, uint8 n)
 }
 
 static inline uint64
-aic_load_le64(const uint8 *src)
+cm_load_le64(const uint8 *src)
 {
 	uint64 v = 0;
 	for (uint8 i = 0; i < 8; i++)
@@ -76,7 +86,7 @@ aic_load_le64(const uint8 *src)
 
 /* store the whole uint32 data `v` as little endian */
 static inline void
-aic_store_le32(uint8 *dst, uint32 v)
+cm_store_le32(uint8 *dst, uint32 v)
 {
 	for (uint8 i = 0; i < 4; i++)
 	{
@@ -86,7 +96,7 @@ aic_store_le32(uint8 *dst, uint32 v)
 
 /* load the whole 32 bit value as little endian */
 static inline uint32
-aic_load_le32(const uint8 *src)
+cm_load_le32(const uint8 *src)
 {
 	uint32 v = 0;
 	for (uint8 i = 0; i < 4; i++)
@@ -99,7 +109,7 @@ aic_load_le32(const uint8 *src)
 /* interpret the low `width_bits` of v as two's-complement
  * and sign-extend to int64. width_bits in 1..64. */
 static inline int64
-aic_sign_extend_u64(uint64 v, uint8 width_bits)
+cm_sign_extend_u64(uint64 v, uint8 width_bits)
 {
 	Assert(width_bits > 0 && width_bits <= 64);
 	uint8 shift = (uint8) (64 - width_bits);
@@ -108,7 +118,7 @@ aic_sign_extend_u64(uint64 v, uint8 width_bits)
 
 /* read a little endian, `n` bytes, signed scalar from `src` */
 static inline int64
-aic_read_signed(const uint8 *src, uint8 n) /* n in 0..8 */
+cm_read_signed(const uint8 *src, uint8 n) /* n in 0..8 */
 {
 	if (n == 0)
 	{
@@ -121,35 +131,35 @@ aic_read_signed(const uint8 *src, uint8 n) /* n in 0..8 */
 		v |= (uint64) src[i] << (8 * i);
 	}
 
-	return aic_sign_extend_u64(v, (uint8) (8 * n));
+	return cm_sign_extend_u64(v, (uint8) (8 * n));
 }
 
 /* copy uint64 words into little-endian stream order */
 static inline void
-aic_store_le64_words(uint8 *dst, const uint64 *src, size_t nbytes)
+cm_store_le64_words(uint8 *dst, const uint64 *src, size_t nbytes)
 {
 #ifndef WORDS_BIGENDIAN
 	memcpy(dst, src, nbytes);
 #else
 	for (size_t off = 0; off < nbytes; off += 8)
 	{
-		aic_store_le64(dst + off, src[off / 8], 8);
+		cm_store_le64(dst + off, src[off / 8], 8);
 	}
 #endif
 }
 
-#define AIC_DEFINE_ZIGZAG(TY)                                                                      \
-	static inline TY aic_zigzag_encode_##TY(TY v)                                                  \
+#define CM_DEFINE_ZIGZAG(TY)                                                                       \
+	static inline TY cm_zigzag_encode_##TY(TY v)                                                   \
 	{                                                                                              \
 		TY sign = (TY) (v >> (sizeof(TY) * 8 - 1));                                                \
 		return (TY) ((TY) (v << 1) ^ (TY) ((TY) 0 - sign));                                        \
 	}                                                                                              \
-	static inline TY aic_zigzag_decode_##TY(TY zz)                                                 \
+	static inline TY cm_zigzag_decode_##TY(TY zz)                                                  \
 	{                                                                                              \
 		return (TY) ((TY) (zz >> 1) ^ (TY) ((TY) 0 - (TY) (zz & 1)));                              \
 	}
 
-AIC_DEFINE_ZIGZAG(uint16)
-AIC_DEFINE_ZIGZAG(uint32)
-AIC_DEFINE_ZIGZAG(uint64)
-#undef AIC_DEFINE_ZIGZAG
+CM_DEFINE_ZIGZAG(uint16)
+CM_DEFINE_ZIGZAG(uint32)
+CM_DEFINE_ZIGZAG(uint64)
+#undef CM_DEFINE_ZIGZAG
