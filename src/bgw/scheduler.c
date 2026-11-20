@@ -468,6 +468,11 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 			}
 			break;
 		case BGWH_STOPPED:
+			/* The worker already finished, so there is no handle to wait on */
+			if (bgw_register != NULL)
+			{
+				bgw_register(NULL, scheduler_mctx);
+			}
 			StartTransactionCommand();
 			scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
 			CommitTransactionCommand();
