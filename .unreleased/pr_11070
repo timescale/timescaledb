@@ -1,0 +1,1 @@
+Fixes: #11070 Fix missing snapshot when a job worker exits before the scheduler sees it start
