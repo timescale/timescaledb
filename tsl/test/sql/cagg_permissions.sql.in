@@ -150,6 +150,23 @@ ALTER MATERIALIZED VIEW mat_refresh_test ADD COLUMN dummy_col int;
 DROP MATERIALIZED VIEW mat_refresh_test;
 CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
 
+-- The refresh policy procedure must also reject non-owners that can read the
+-- raw hypertable, and the invalidation threshold must not move
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT SELECT ON conditions TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT watermark FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                       WHERE mat_hypertable_id = :mat_hypertable_id);
+CALL _timescaledb_functions.policy_refresh_continuous_aggregate(:cagg_job_id,
+  format('{"mat_hypertable_id": %s, "start_offset": null, "end_offset": -1000}', :mat_hypertable_id)::jsonb);
+SELECT watermark FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                       WHERE mat_hypertable_id = :mat_hypertable_id);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+REVOKE SELECT ON conditions FROM :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+
 SELECT * FROM mat_refresh_test;
 
 -- Test permissions also when the watermark is not constified and the ACL checks
@@ -310,4 +327,88 @@ ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 SELECT add_continuous_aggregate_policy('dbowner_summary', NULL, -200, '12 h'::interval) IS NOT NULL AS added;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
+
+-- Creating a continuous aggregate in a schema the user has no CREATE
+-- privilege on must fail, including the internal schema
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW _timescaledb_internal.cagg_in_internal
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket(100, timec) AS bucket, max(val)
+FROM dbowner_metrics
+GROUP BY bucket WITH NO DATA;
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM pg_class WHERE relname = 'cagg_in_internal';
+
+-- The materialization runs as the cagg owner in a security-restricted
+-- context, like REFRESH MATERIALIZED VIEW. When a superuser (or the
+-- database owner) refreshes on the owner's behalf, the partial view body
+-- must execute with the owner's identity, not the caller's, and in a
+-- restricted context.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE metrics (t TIMESTAMPTZ NOT NULL, v INT);
+SELECT FROM create_hypertable('metrics', 't', chunk_time_interval => interval '1 day');
+INSERT INTO metrics VALUES ('2026-01-01', 1);
+
+-- Reports the role the partial view body runs as, and whether it runs in a
+-- security-restricted context (creating a temp table is forbidden there).
+CREATE FUNCTION record_refresh_user(v INT) RETURNS INT LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  restricted bool;
+BEGIN
+  BEGIN
+    EXECUTE 'CREATE TEMP TABLE refresh_tmp(x int) ON COMMIT DROP';
+    restricted := false;
+  EXCEPTION WHEN others THEN
+    restricted := true;
+  END;
+  RAISE NOTICE 'refresh ran as %, restricted context = %', current_user, restricted;
+  RETURN v;
+END $$;
+
+CREATE MATERIALIZED VIEW metrics_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 hour', t) AS bucket, sum(record_refresh_user(v))
+FROM metrics
+GROUP BY bucket WITH NO DATA;
+
+-- A superuser refreshes on the owner's behalf: the body must run as the cagg
+-- owner (not the superuser) and in a restricted context.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CALL refresh_continuous_aggregate('metrics_cagg', NULL, NULL);
+
+DROP MATERIALIZED VIEW metrics_cagg;
+DROP TABLE metrics;
+DROP FUNCTION record_refresh_user(INT);
+
+-- CREATE INDEX on a continuous aggregate must require ownership of the CAgg.
+-- The database owner can configure CAggs it does not own, but must not be
+-- able to create an index on one.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE idx_perm_metrics (t TIMESTAMPTZ NOT NULL, v INT);
+SELECT FROM create_hypertable('idx_perm_metrics', 't', chunk_time_interval => interval '1 day');
+ALTER TABLE idx_perm_metrics OWNER TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE MATERIALIZED VIEW idx_perm_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 hour', t) AS bucket, count(*) AS cnt
+FROM idx_perm_metrics GROUP BY bucket WITH NO DATA;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+CREATE INDEX idx_perm_dbowner ON idx_perm_cagg (bucket);
+\set ON_ERROR_STOP 1
+
+-- The CAgg owner and a superuser can still create indexes on it.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE INDEX idx_perm_owner ON idx_perm_cagg (bucket);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE INDEX idx_perm_super ON idx_perm_cagg (cnt);
+
+DROP MATERIALIZED VIEW idx_perm_cagg;
+DROP TABLE idx_perm_metrics;
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;

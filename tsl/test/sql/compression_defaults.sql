@@ -46,32 +46,6 @@ select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 
---make sure all the GUC combinations work
-SET timescaledb.compression_segmentby_default_function = '';
-SET timescaledb.compression_orderby_default_function = '';
-ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_orderby = '"time" desc', timescaledb.compress_segmentby = '');
-SELECT * FROM _timescaledb_catalog.compression_settings;
-ALTER TABLE metrics SET (timescaledb.compress = false);
-
-SET timescaledb.compression_segmentby_default_function   = '';
-RESET timescaledb.compression_orderby_default_function;
-ALTER TABLE metrics SET (timescaledb.compress = true);
-select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from chunk_settings;
-select count(decompress_chunk(x)) from show_chunks('metrics') x;
-ALTER TABLE metrics SET (timescaledb.compress = false);
-
-RESET timescaledb.compression_segmentby_default_function;
-SET timescaledb.compression_orderby_default_function = '';
-ALTER TABLE metrics SET (timescaledb.compress = true);
-select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from chunk_settings;
-select count(decompress_chunk(x)) from show_chunks('metrics') x;
-ALTER TABLE metrics SET (timescaledb.compress = false);
-
-RESET timescaledb.compression_segmentby_default_function;
-RESET timescaledb.compression_orderby_default_function;
-
 --opposite order of columns
 drop index test_idx;
 CREATE UNIQUE INDEX test_idx ON metrics(time, device_id);
@@ -304,18 +278,6 @@ SELECT _timescaledb_functions.get_orderby_defaults('table1', ARRAY['col1']::text
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ALTER TABLE table1 SET (timescaledb.compress = false);
-
-\set ON_ERROR_STOP 0
-SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
-SET timescaledb.compression_orderby_default_function = 'function_does_not_exist';
---wrong function signatures
-SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_orderby_defaults';
-SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.get_segmentby_defaults';
-\set ON_ERROR_STOP 1
-SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.get_orderby_defaults';
-SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_segmentby_defaults';
-RESET timescaledb.compression_segmentby_default_function;
-RESET timescaledb.compression_orderby_default_function;
 
 -- test search_path quoting
 SET search_path TO '';

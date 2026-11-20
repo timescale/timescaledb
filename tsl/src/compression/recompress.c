@@ -188,7 +188,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!ts_chunk_is_partial(chunk))
 	{
@@ -266,7 +266,7 @@ tsl_compact_chunk(PG_FUNCTION_ARGS)
 
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
 
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!ts_chunk_is_compressed(chunk))
 	{
@@ -458,6 +458,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 								  bool fullrecompress /* do full decompress/compress segmentwise */)
 {
 	Oid uncompressed_relid = uncompressed_chunk->fd.relid;
+
+	ts_hypertable_permissions_check(uncompressed_chunk->hypertable_relid, GetUserId());
 
 	/*
 	 * only proceed if status in (3, 9, 11)
@@ -1782,6 +1784,8 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk, bool keep_settings)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("chunk cannot be NULL")));
 	}
 
+	ts_hypertable_permissions_check(uncompressed_chunk->hypertable_relid, GetUserId());
+
 	Ensure(ts_guc_enable_in_memory_recompression, "in-memory recompression functionality disabled");
 
 	if (!ts_chunk_is_compressed(uncompressed_chunk) || ts_chunk_is_frozen(uncompressed_chunk))
@@ -1790,13 +1794,14 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk, bool keep_settings)
 	}
 
 	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->fd.relid);
-	Oid compressed_relid = settings->fd.compress_relid;
 
-	Ensure(settings && OidIsValid(compressed_relid),
+	Ensure(settings && OidIsValid(settings->fd.compress_relid),
 		   "compressed chunk not found for chunk \"%s\"",
 		   get_rel_name(uncompressed_chunk->fd.relid));
 
 	Ensure(settings->fd.orderby, "empty order by, cannot recompress in-memory");
+
+	Oid compressed_relid = settings->fd.compress_relid;
 
 	LOCKMODE lockmode = ExclusiveLock;
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->fd.relid, lockmode);
@@ -2488,44 +2493,55 @@ create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, Li
 	return builders;
 }
 
+/* Called by rebuild_sparse_index to modify sparse index objects on a chunk to sync with hypertable
+ */
 static List *
-modify_compressed_table(Chunk *chunk, bool force)
+sync_compressed_index_to_hypertable(Chunk *chunk, bool force)
 {
 	CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->fd.relid);
 	CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
 
+	/* We do not call rebuild_sparse_index method if no hypertable index is present */
+	Ensure(ht_settings->fd.index, "rebuild_sparse_index was called with empty hypertable index");
 	SparseIndexSettings *ht_index = ts_convert_to_sparse_index_settings(ht_settings->fd.index);
 	SparseIndexSettings *chunk_index =
-		ts_convert_to_sparse_index_settings(chunk_settings->fd.index);
+		(chunk_settings->fd.index ? ts_convert_to_sparse_index_settings(chunk_settings->fd.index) :
+									NULL);
 
 	/* Step 1: collect sparse index objects to drop, then drop all at once */
 	List *to_drop = NIL;
-	foreach_ptr(SparseIndexSettingsObject, chunk_obj, chunk_index->objects)
+	if (chunk_index)
 	{
-		/* ignore orderby sparse indexes */
-		if (ts_sparse_index_is_orderby_source(chunk_obj))
+		foreach_ptr(SparseIndexSettingsObject, chunk_obj, chunk_index->objects)
 		{
-			continue;
-		}
-
-		if (force)
-		{
-			to_drop = lappend(to_drop, chunk_obj);
-			continue;
-		}
-
-		bool found = false;
-		foreach_ptr(SparseIndexSettingsObject, ht_obj, ht_index->objects)
-		{
-			if (ts_sparse_index_object_equal(chunk_obj, ht_obj))
+			/* ignore orderby sparse indexes */
+			if (ts_sparse_index_is_orderby_source(chunk_obj))
 			{
-				found = true;
-				break;
+				continue;
 			}
-		}
-		if (!found)
-		{
-			to_drop = lappend(to_drop, chunk_obj);
+
+			if (force)
+			{
+				to_drop = lappend(to_drop, chunk_obj);
+				continue;
+			}
+
+			bool found = false;
+			if (ht_index)
+			{
+				foreach_ptr(SparseIndexSettingsObject, ht_obj, ht_index->objects)
+				{
+					if (ts_sparse_index_object_equal(chunk_obj, ht_obj))
+					{
+						found = true;
+						break;
+					}
+				}
+			}
+			if (!found)
+			{
+				to_drop = lappend(to_drop, chunk_obj);
+			}
 		}
 	}
 
@@ -2536,35 +2552,45 @@ modify_compressed_table(Chunk *chunk, bool force)
 
 	/* Step 2: collect sparse index objects to add, then add all at once */
 	List *to_add = NIL;
-	foreach_ptr(SparseIndexSettingsObject, ht_obj, ht_index->objects)
+	if (ht_index)
 	{
-		/* ignore orderby sparse indexes */
-		if (ts_sparse_index_is_orderby_source(ht_obj))
+		foreach_ptr(SparseIndexSettingsObject, ht_obj, ht_index->objects)
 		{
-			continue;
-		}
-
-		if (force)
-		{
-			to_add = lappend(to_add, ht_obj);
-			continue;
-		}
-
-		bool found = false;
-		foreach_ptr(SparseIndexSettingsObject, chunk_obj, chunk_index->objects)
-		{
-			if (ts_sparse_index_object_equal(ht_obj, chunk_obj))
+			/* ignore orderby sparse indexes */
+			if (ts_sparse_index_is_orderby_source(ht_obj))
 			{
-				found = true;
-				break;
+				/* unless we are rebuilding indexes from scratch */
+				if (!chunk_index)
+				{
+					to_add = lappend(to_add, ht_obj);
+				}
+				continue;
+			}
+
+			if (force)
+			{
+				to_add = lappend(to_add, ht_obj);
+				continue;
+			}
+
+			bool found = false;
+			if (chunk_index)
+			{
+				foreach_ptr(SparseIndexSettingsObject, chunk_obj, chunk_index->objects)
+				{
+					if (ts_sparse_index_object_equal(ht_obj, chunk_obj))
+					{
+						found = true;
+						break;
+					}
+				}
+			}
+			if (!found)
+			{
+				to_add = lappend(to_add, ht_obj);
 			}
 		}
-		if (!found)
-		{
-			to_add = lappend(to_add, ht_obj);
-		}
 	}
-
 	if (to_add != NIL)
 	{
 		add_sparse_index_columns(chunk, chunk_settings->fd.compress_relid, to_add);
@@ -2572,6 +2598,17 @@ modify_compressed_table(Chunk *chunk, bool force)
 
 	/* Update the chunk's compression settings to match the hypertable */
 	chunk_settings->fd.index = ht_settings->fd.index;
+
+	/* rebuild orderby index if building from scratch */
+	if (!chunk_index)
+	{
+		if (chunk_settings->fd.index)
+		{
+			/* Sync up orderby index objects and metadata columns from the hypertable */
+			chunk_settings->fd.index = ts_remove_orderby_sparse_index(chunk_settings);
+		}
+		chunk_settings->fd.index = ts_add_orderby_sparse_index(chunk_settings);
+	}
 	ts_compression_settings_update(chunk_settings);
 
 	return to_add;
@@ -2717,7 +2754,7 @@ rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 	}
 
 	/* Step 1: drop old columns, add new ones, update compression settings */
-	List *added_indexes = modify_compressed_table(uncompressed_chunk, force);
+	List *added_indexes = sync_compressed_index_to_hypertable(uncompressed_chunk, force);
 
 	if (added_indexes == NIL)
 	{

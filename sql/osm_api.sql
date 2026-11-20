@@ -46,8 +46,8 @@ BEGIN
     FROM _timescaledb_catalog.dimension d
     WHERE d.hypertable_id = $1 ORDER BY id LIMIT 1;
   IF func_schema IS NOT NULL AND func_name IS NOT NULL THEN
-    SELECT to_regclass(format('%I.%I', schema_name, table_name)) INTO hypertable FROM _timescaledb_catalog.hypertable WHERE id = $1;
-    integer_func := to_regproc(format('%I.%I', func_schema, func_name));
+    SELECT to_regclass(pg_catalog.format('%I.%I', schema_name, table_name)) INTO hypertable FROM _timescaledb_catalog.hypertable WHERE id = $1;
+    integer_func := to_regproc(pg_catalog.format('%I.%I', func_schema, func_name));
     RETURN;
   END IF;
 

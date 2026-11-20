@@ -5,10 +5,9 @@
  */
 #include <postgres.h>
 #include <miscadmin.h>
-#include <parser/parse_func.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
-#include <utils/regproc.h>
+#include <utils/lsyscache.h>
 #include <utils/timestamp.h>
 #include <utils/varlena.h>
 
@@ -107,6 +106,7 @@ bool ts_guc_enable_hypertable_expansion_for_dml = true;
 TSDLLEXPORT bool ts_guc_enable_deferred_chunk_append = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
+TSDLLEXPORT bool ts_guc_scan_uncompressed_chunks = false;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
@@ -165,8 +165,6 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan = true;
 TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
-static char *ts_guc_default_segmentby_fn = NULL;
-static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
@@ -343,82 +341,6 @@ static void
 assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 {
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable, newval);
-}
-
-static Oid
-get_segmentby_func(char *input_name)
-{
-	List *namelist = NIL;
-
-	if (strlen(input_name) == 0)
-	{
-		return InvalidOid;
-	}
-
-	namelist = stringToQualifiedNameList(input_name, NULL);
-	Oid argtyp[] = { REGCLASSOID };
-	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
-}
-
-static bool
-check_segmentby_func(char **newval, void **extra, GucSource source)
-{
-	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded_and_not_upgrading())
-	{
-		Oid segment_func_oid = get_segmentby_func(*newval);
-
-		if (strlen(*newval) > 0 && !OidIsValid(segment_func_oid))
-		{
-			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
-			return false;
-		}
-	}
-	return true;
-}
-
-Oid
-ts_guc_default_segmentby_fn_oid()
-{
-	return get_segmentby_func(ts_guc_default_segmentby_fn);
-}
-
-static Oid
-get_orderby_func(char *input_name)
-{
-	List *namelist = NIL;
-
-	if (strlen(input_name) == 0)
-	{
-		return InvalidOid;
-	}
-
-	namelist = stringToQualifiedNameList(input_name, NULL);
-	Oid argtyp[] = { REGCLASSOID, TEXTARRAYOID };
-	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
-}
-
-static bool
-check_orderby_func(char **newval, void **extra, GucSource source)
-{
-	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded_and_not_upgrading())
-	{
-		Oid func_oid = get_orderby_func(*newval);
-
-		if (strlen(*newval) > 0 && !OidIsValid(func_oid))
-		{
-			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
-			return false;
-		}
-	}
-	return true;
-}
-
-Oid
-ts_guc_default_orderby_fn_oid()
-{
-	return get_orderby_func(ts_guc_default_orderby_fn);
 }
 
 /*
@@ -726,6 +648,18 @@ _guc_init(void)
 							 NULL,
 							 &ts_guc_enable_optimizations,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("scan_uncompressed_chunks"),
+							 "Scan the uncompressed part of fully compressed chunks",
+							 "Enable to avoid missing rows when another transaction changes the "
+							 "chunk status between planning and execution.",
+							 &ts_guc_scan_uncompressed_chunks,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1592,32 +1526,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_segmentby_default_function"),
-							   /* short_desc= */ "Function that sets default segment_by",
-							   /* long_desc= */
-							   "Function to use for calculating default segment_by setting for "
-							   "compression",
-							   /* valueAddr= */ &ts_guc_default_segmentby_fn,
-							   /* Value= */ "_timescaledb_functions.get_segmentby_defaults",
-							   /* context= */ PGC_USERSET,
-							   /* flags= */ 0,
-							   /* check_hook= */ check_segmentby_func,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_orderby_default_function"),
-							   /* short_desc= */ "Function that sets default order_by",
-							   /* long_desc= */
-							   "Function to use for calculating default order_by setting for "
-							   "compression",
-							   /* valueAddr= */ &ts_guc_default_orderby_fn,
-							   /* Value= */ "_timescaledb_functions.get_orderby_defaults",
-							   /* context= */ PGC_USERSET,
-							   /* flags= */ 0,
-							   /* check_hook= */ check_orderby_func,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("license"),
 							   /* short_desc= */ "TimescaleDB license type",

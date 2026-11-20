@@ -7,7 +7,8 @@
 #include "aic_bulk_decompress.h"
 #include "aic_blocks.h"
 #include "aic_internal.h"
-#include "aic_validity.h"
+#include "compression/algorithms/common/utils.h"
+#include "compression/algorithms/common/validity.h"
 #include "compression/algorithms/fastlanes/fastlanes_types.h"
 #include "compression/compression.h"
 #include <guc.h>
@@ -45,7 +46,7 @@
 		{                                                                                          \
 			uint64 word = validity[w];                                                             \
 			uint32 chunk = (w == last_word) ? (total_count - (uint32) w * 64) : 64;                \
-			uint32 nbits = (uint32) aic_popcount64(word);                                          \
+			uint32 nbits = (uint32) cm_popcount64(word);                                           \
 			uint32 src_start = src_end - nbits;                                                    \
 			uint32 dst_start = (uint32) w * 64;                                                    \
 			if (nbits == chunk)                                                                    \
@@ -145,12 +146,12 @@ aic_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	if (header->null_count > 0)
 	{
 		size_t n_valid_runs = 0;
-		size_t decoded = aic_validity_bitmap_decode(&si,
-													total_count,
-													header->null_count,
-													validity_bitmap,
-													header->flags,
-													&n_valid_runs);
+		size_t decoded = cm_validity_bitmap_decode(&si,
+												   total_count,
+												   header->null_count,
+												   validity_bitmap,
+												   header->flags,
+												   &n_valid_runs);
 
 		memmove_scatter = (n_valid_runs * AIC_SCATTER_RUN_THRESHOLD <= header->valid_count);
 
@@ -159,8 +160,8 @@ aic_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 		 * summary bitmap that allows us to skip blocks of all 'valid'/'invalid' values.
 		 */
 		CheckCompressedData(
-			(decoded == validity_size && (header->flags & AIC_FLAG_NULL_SUMMARY) == 0) ||
-			(decoded < validity_size && (header->flags & AIC_FLAG_NULL_SUMMARY) != 0));
+			(decoded == validity_size && (header->flags & AIC_FLAG_VALIDITY_SUMMARY) == 0) ||
+			(decoded < validity_size && (header->flags & AIC_FLAG_VALIDITY_SUMMARY) != 0));
 	}
 
 	/* the worst case for the number of blocks is to have alternating DELTA_RLE blocks
@@ -173,8 +174,8 @@ aic_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	/* Allocate the output buffer for the values and the arrow array in one allocation. */
 	size_t arrow_data_size = sizeof(ArrowArray) + sizeof(void *) * 2;
-	ArrowArray *array = (ArrowArray *) MemoryContextAlloc(dest_mctx, arrow_data_size + values_size);
-	memset(array, 0, arrow_data_size);
+	ArrowArray *array =
+		(ArrowArray *) MemoryContextAllocZero(dest_mctx, arrow_data_size + values_size);
 	const void **buffers = (const void **) &array[1];
 	uint8 *decompressed_values = ((uint8 *) array) + arrow_data_size;
 	array->length = total_count;

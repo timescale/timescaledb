@@ -154,15 +154,12 @@ ts_hypertable_cagg_settings_get(int32 hypertable_id, FormData_hypertable_cagg_se
 TSDLLEXPORT void
 ts_hypertable_cagg_settings_insert(const FormData_hypertable_cagg_settings *form)
 {
-	CatalogSecurityContext sec_ctx;
 	Catalog *catalog = ts_catalog_get();
 	Relation rel =
 		table_open(catalog_get_table_id(catalog, HYPERTABLE_CAGG_SETTINGS), RowExclusiveLock);
 	HeapTuple tuple = hypertable_cagg_settings_formdata_make_tuple(form, RelationGetDescr(rel));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(tuple);
 	table_close(rel, NoLock);
 }
@@ -178,13 +175,10 @@ ts_hypertable_cagg_settings_update(const FormData_hypertable_cagg_settings *form
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		CatalogSecurityContext sec_ctx;
 		HeapTuple tuple =
 			hypertable_cagg_settings_formdata_make_tuple(form, ts_scanner_get_tupledesc(ti));
 
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), tuple);
-		ts_catalog_restore_user(&sec_ctx);
 		heap_freetuple(tuple);
 	}
 	ts_scan_iterator_close(&iterator);

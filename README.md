@@ -130,7 +130,7 @@ Let's add some sample sensor readings:
 \timing on
 
 -- Insert sample data for multiple sensors
--- SET timescaledb.enable_direct_compress_insert = on to insert data directly to the columnstore (columnnar format for performance)
+-- SET timescaledb.enable_direct_compress_insert = on to insert data directly to the columnstore (columnar format for performance)
 SET timescaledb.enable_direct_compress_insert = on;
 INSERT INTO sensor_data (time, sensor_id, temperature, humidity, pressure)
 SELECT
