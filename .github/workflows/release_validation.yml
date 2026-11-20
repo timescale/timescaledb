@@ -16,28 +16,28 @@ on:
 jobs:
   update_and_downgrade:
     name: Update and Downgrade
-    uses: timescale/timescaledb/.github/workflows/update-test.yaml@main
+    uses: timescale/timescaledb/.github/workflows/update-test.yaml@5e9513706b390e7d317dd8b1d55f1b6ccb2f4e57 # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
 
   pg_upgrade:
     name: pg_upgrade test
-    uses: timescale/timescaledb/.github/workflows/pg_upgrade-test.yaml@main
+    uses: timescale/timescaledb/.github/workflows/pg_upgrade-test.yaml@5e9513706b390e7d317dd8b1d55f1b6ccb2f4e57 # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
 
   abi:
     name: ABI Test
-    uses: timescale/timescaledb/.github/workflows/abi.yaml@main
+    uses: timescale/timescaledb/.github/workflows/abi.yaml@5e9513706b390e7d317dd8b1d55f1b6ccb2f4e57 # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
 
   abi-snapshot:
     name: ABI Snapshot
-    uses: timescale/timescaledb/.github/workflows/snapshot-abi.yaml@main
+    uses: timescale/timescaledb/.github/workflows/snapshot-abi.yaml@5e9513706b390e7d317dd8b1d55f1b6ccb2f4e57 # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
