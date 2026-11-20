@@ -269,6 +269,8 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 			case AT_SetRelOptions:
 			case AT_ResetRelOptions:
 			case AT_ReplicaIdentity:
+			case AT_SetNotNull:
+			case AT_DropNotNull:
 				/* allowed on materialization tables */
 				continue;
 			default:
