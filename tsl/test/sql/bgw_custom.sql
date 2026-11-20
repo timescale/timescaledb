@@ -509,8 +509,9 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- check that alter_job rejects a check function with invalid signature
+-- Don't schedule the job, so it does not run while alter_job reads its stats
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func',
-initial_start => :'time_zero'::timestamptz) as job_id_alter \gset
+initial_start => :'time_zero'::timestamptz, scheduled => false) as job_id_alter \gset
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter);
 -- test that we can unregister the check function
