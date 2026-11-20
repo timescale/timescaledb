@@ -174,7 +174,6 @@ VACUUM FREEZE ANALYZE ht_dummy;
 
 :PREFIX UPDATE ht_dummy SET v = 99 WHERE 1 = 0;
 :PREFIX DELETE FROM ht_dummy WHERE false;
-:PREFIX UPDATE ht_dummy SET v = 99 WHERE time IS NULL;
 
 :PREFIX
 UPDATE ht_dummy SET v = 99 WHERE 1 = 0

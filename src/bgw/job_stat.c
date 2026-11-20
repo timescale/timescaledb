@@ -542,6 +542,9 @@ bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
 
 	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
+	/* Replaces any next_start written by the run that crashed */
+	fd->next_start = *(TimestampTz *) data;
+
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
 
@@ -576,7 +579,6 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_bgw_job_stat];
 	bool nulls[Natts_bgw_job_stat] = { false };
-	CatalogSecurityContext sec_ctx;
 	Interval zero_ival = {
 		.time = 0,
 	};
@@ -622,9 +624,7 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(0);
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return true;
 }
@@ -690,12 +690,12 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
 }
 
 void
-ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result)
+ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result, TimestampTz next_start)
 {
 	if (!bgw_job_stat_scan_job_id(job->fd.id,
 								  bgw_job_stat_tuple_mark_crash_reported,
 								  NULL,
-								  NULL,
+								  &next_start,
 								  RowExclusiveLock))
 	{
 		ereport(ERROR,
@@ -808,13 +808,40 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
 
 	if (jobstat->fd.consecutive_crashes > 0)
 	{
-		/* Update the errors table regarding the crash */
+		TimestampTz next_start;
+
+		/*
+		 * The wait is stored when the crash is reported, so reloading the
+		 * job list reads it back instead of starting it over.
+		 */
 		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
-			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE_IN_EXECUTION);
+			next_start = calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE_IN_EXECUTION, next_start);
+			return next_start;
 		}
 
-		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+		if (jobstat->fd.next_start != DT_NOBEGIN)
+		{
+			return jobstat->fd.next_start;
+		}
+
+		/*
+		 * No stored wait: a schedule change cleared it, or an older version
+		 * reported the crash. Store a new one.
+		 */
+		next_start = calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+		if (!bgw_job_stat_scan_job_id(job->fd.id,
+									  bgw_job_stat_tuple_set_next_start,
+									  NULL,
+									  &next_start,
+									  RowExclusiveLock))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unable to find job statistics for job %d", job->fd.id)));
+		}
+		return next_start;
 	}
 
 	/*

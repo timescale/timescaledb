@@ -1084,11 +1084,18 @@ SELECT pg_advisory_lock(8584);
 ------------------
  
 
+-- Stop the scheduler while the jobs are added. A running scheduler could
+-- start one of them before the workers are started below.
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_1 \gset
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_2 \gset
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+SELECT _timescaledb_functions.start_background_workers();
+ start_background_workers 
+--------------------------
  t
 
 -- wait for both jobs to be picked up and blocked on the lock
@@ -1185,11 +1192,13 @@ SELECT ts_test_bgw_job_function_call_string(:job_proc);
 ----------------------------------------------------------
  CALL public.custom_proc('1022', '{"type": "procedure"}')
 
--- Remove the procedure and let's check it errors out when we try to call the function that gets the proc name
-DROP PROCEDURE custom_proc(jobid int, args jsonb);
+-- Point the job at a procedure that does not exist (dropping the procedure
+-- is blocked while a job depends on it) and check that building the call
+-- string errors out.
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'custom_proc_missing' WHERE id = :job_proc;
 \set ON_ERROR_STOP 0
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
-ERROR:  function or procedure "public.custom_proc(integer, jsonb)" does not exist
+ERROR:  function or procedure "public.custom_proc_missing(integer, jsonb)" does not exist
 \set ON_ERROR_STOP 1
 SELECT delete_job(:job_func);
  delete_job 
@@ -1306,3 +1315,39 @@ SELECT delete_job(:job_check_caller);
 
 DROP TABLE check_caller_log;
 DROP FUNCTION check_caller;
+-- Job doing transaction control cannot be run from a function or a transaction block
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE custom_log(job_id int, args jsonb, extra text, runner NAME DEFAULT CURRENT_ROLE);
+SELECT add_job('custom_proc2', '1h', config => '{"type":"procedure"}') AS job_commit \gset
+CREATE FUNCTION run_job_func(job_id int) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    CALL run_job(job_id);
+END
+$$;
+\set ON_ERROR_STOP 0
+SELECT run_job_func(:job_commit);
+ERROR:  invalid transaction termination
+BEGIN;
+CALL run_job(:job_commit);
+ERROR:  invalid transaction termination
+ROLLBACK;
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM custom_log;
+ count 
+-------
+     0
+
+CALL run_job(:job_commit);
+SELECT extra FROM custom_log ORDER BY extra;
+              extra              
+---------------------------------
+ custom_proc2 1 COMMIT procedure
+ custom_proc2 3 COMMIT procedure
+
+SELECT delete_job(:job_commit);
+ delete_job 
+------------
+ 
+
+DROP FUNCTION run_job_func;
+DROP TABLE custom_log;

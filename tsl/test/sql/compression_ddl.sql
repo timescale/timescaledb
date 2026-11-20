@@ -1391,3 +1391,106 @@ SELECT count(*) AS leftover_compressed_relations FROM pg_class
   WHERE oid IN (SELECT relid FROM drop_many_compressed);
 DROP TABLE drop_many_compressed;
 DROP TABLE drop_many;
+
+-- When adding a column to a hypertable, check every chunk if it has the column
+-- instead of quitting after finding the first chunk with the column
+CREATE TABLE t_addcol(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('t_addcol', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE t_addcol SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+INSERT INTO t_addcol VALUES ('2024-01-01 00:00:00+00', 1, 1), ('2024-01-02 00:00:00+00', 1, 1);
+
+-- table has 2 chunks
+SELECT show_chunks('t_addcol', older_than => '2024-01-02 00:00:00+00') AS "CHUNK1" \gset
+SELECT show_chunks('t_addcol', newer_than => '2024-01-02 00:00:00+00') AS "CHUNK2" \gset
+-- compress second chunk
+SELECT count(compress_chunk(:'CHUNK2'));
+SELECT compress_relid::regclass AS "COMP2" FROM _timescaledb_catalog.compression_settings WHERE relid::regclass = :'CHUNK2'::regclass \gset
+
+-- Create 1st chunk with a source table, add "newcol" column to it and compress it
+CREATE TABLE prebuilt (LIKE :COMP2);
+
+ALTER TABLE prebuilt ADD COLUMN newcol _timescaledb_internal.compressed_data;
+SELECT _timescaledb_functions.create_compressed_chunk(:'CHUNK1', 'prebuilt', 0, 0, 0, 0, 0, 0, 0, 0);
+
+-- Now add "newcol" column to the entire hypertable.
+-- Should skip 1st chunk as it already has "newcol" column, should add "newcol" to second chunk.
+ALTER TABLE t_addcol ADD COLUMN newcol int DEFAULT 42;
+SELECT count(*) AS newcol_in_chunk2_compressed FROM pg_attribute WHERE attrelid = :'COMP2'::regclass AND attname = 'newcol';
+
+-- Should not crash as all chunks have correct columns
+CALL merge_chunks(:'CHUNK1', :'CHUNK2');
+
+drop table t_addcol cascade;
+
+CREATE OR REPLACE FUNCTION test_has_proper_errcode(stmt text)
+    RETURNS boolean
+    LANGUAGE plpgsql
+AS $$
+DECLARE
+    sqlstate_code text;
+    msg          text;
+BEGIN
+    EXECUTE stmt;
+    -- statement did NOT raise: there is no error code to classify
+    RAISE NOTICE 'no error raised by: %', stmt;
+    RETURN false;
+EXCEPTION
+    WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS
+            sqlstate_code = RETURNED_SQLSTATE,
+            msg           = MESSAGE_TEXT;
+        RAISE NOTICE 'sqlstate=% message=%', sqlstate_code, msg;
+        RETURN sqlstate_code <> 'XX000';   -- TRUE = proper (non-internal) error
+END;
+$$;
+
+-- Check that adding a new column of wrong type to compressed chunk gives correct error message
+CREATE TABLE t_addcol(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('t_addcol', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE t_addcol SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+INSERT INTO t_addcol VALUES ('2024-01-01 00:00:00+00', 1, 1), ('2024-01-02 00:00:00+00', 1, 1);
+
+-- table has 2 chunks
+SELECT show_chunks('t_addcol', older_than => '2024-01-02 00:00:00+00') AS "CHUNK1" \gset
+SELECT show_chunks('t_addcol', newer_than => '2024-01-02 00:00:00+00') AS "CHUNK2" \gset
+-- compress second chunk
+SELECT count(compress_chunk(:'CHUNK2'));
+SELECT compress_relid::regclass AS "COMP2" FROM _timescaledb_catalog.compression_settings WHERE relid::regclass = :'CHUNK2'::regclass \gset
+
+-- Create 1st chunk with a source table, add "newcol" column of wrong type to it and compress it
+CREATE TABLE prebuilt (LIKE :COMP2);
+
+ALTER TABLE prebuilt ADD COLUMN wrongcol text;
+SELECT _timescaledb_functions.create_compressed_chunk(:'CHUNK1', 'prebuilt', 0, 0, 0, 0, 0, 0, 0, 0);
+
+-- New column of compressed integers is added to 2nd chunk, 1st compressed chunk has new column of wrong type
+ALTER TABLE t_addcol ADD COLUMN wrongcol int DEFAULT 42;
+SELECT count(*) AS newcol_in_chunk2_compressed FROM pg_attribute WHERE attrelid = :'COMP2'::regclass AND attname = 'newcol';
+
+-- decompress_chunk should detect that "wrongcol" has wrong type and print error message with non-internal error code
+\set ON_ERROR_STOP 0
+SELECT test_has_proper_errcode(format('SELECT count(decompress_chunk(%L))', :'CHUNK1'));
+SELECT count(decompress_chunk(:'CHUNK1'));
+\set ON_ERROR_STOP 1
+
+drop table t_addcol cascade;
+
+-- Check that adding new column with metadata column name produces correct error message
+CREATE TABLE t_addcol(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('t_addcol', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE t_addcol SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+
+INSERT INTO t_addcol VALUES ('2024-01-01', 1, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('t_addcol') c;
+
+ALTER TABLE t_addcol ADD COLUMN "_ts_meta_count" int DEFAULT 42;
+
+INSERT INTO t_addcol VALUES ('2024-01-01 12:00', 2, 2.0, 99);
+
+\set ON_ERROR_STOP 0
+SELECT test_has_proper_errcode(format('SELECT compress_chunk(c, recompress => true) FROM show_chunks(%L) c', 't_addcol'));
+SELECT compress_chunk(c, recompress => true) FROM show_chunks('t_addcol') c;
+\set ON_ERROR_STOP 1
+
+drop table t_addcol cascade;
+drop FUNCTION test_has_proper_errcode cascade;

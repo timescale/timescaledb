@@ -93,7 +93,6 @@ static void
 ts_bgw_policy_chunk_stats_insert_with_relation(Relation rel, BgwPolicyChunkStats *chunk_stats)
 {
 	TupleDesc tupdesc;
-	CatalogSecurityContext sec_ctx;
 	Datum values[Natts_bgw_policy_chunk_stats];
 	bool nulls[Natts_bgw_policy_chunk_stats] = { false };
 
@@ -108,9 +107,7 @@ ts_bgw_policy_chunk_stats_insert_with_relation(Relation rel, BgwPolicyChunkStats
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_chunk_stats_last_time_job_run)] =
 		TimestampTzGetDatum(chunk_stats->fd.last_time_job_run);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 }
 
 void

@@ -184,6 +184,8 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE lockm
 													   const ScanTupLock *slice_lock,
 													   bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found);
+extern TSDLLEXPORT bool ts_chunk_has_privs_of(Oid chunk_relid, Oid userid);
+extern TSDLLEXPORT void ts_chunk_permissions_check(const Chunk *chunk, Oid userid);
 extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
 extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_reloid(Oid reloid);
 extern TSDLLEXPORT FormData_chunk ts_chunk_get_formdata(int32 chunk_id);

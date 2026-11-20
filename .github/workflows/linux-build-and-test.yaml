@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix_advisory: ${{ steps.set-matrix.outputs.matrix_advisory }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -69,8 +70,6 @@ jobs:
     name: ${{ !matrix.installcheck && 'Build-only ' || '' }}PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
     runs-on: ${{ matrix.runner || matrix.os }}
-    # The flaky check is advisory, so its failure must not fail the summary.
-    continue-on-error: ${{ contains(matrix.name, 'Flaky') }}
 
     env:
       CLANG: ${{ matrix.clang }}
@@ -84,7 +83,7 @@ jobs:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
 
-    steps:
+    steps: &regress_steps
     - name: Replace unreliable Azure APT mirror
       if: runner.os == 'Linux'
       run: |
@@ -442,6 +441,32 @@ jobs:
         fi
         export GITHUB_PR_NUMBER
         scripts/upload_ci_stats.sh
+
+  # Some checks like Flaky Check are advisory and don't influence the summary.
+  # We run them in a separate kind of job here so that the summary doesn't have
+  # to wait for them.
+  regress_advisory:
+    if: >-
+      needs.check_paths.outputs.run_ci == 'true'
+      && fromJson(needs.matrixbuilder.outputs.matrix_advisory).include[0] != null
+    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+    needs: [matrixbuilder, check_paths]
+    runs-on: ${{ matrix.runner || matrix.os }}
+    continue-on-error: true
+
+    env:
+      CLANG: ${{ matrix.clang }}
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
+      FAKETIME: |
+        ${{ contains(matrix.os, 'ubuntu') && 'faketime -f +379d' || '' }}
+
+    strategy:
+      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix_advisory) }}
+      fail-fast: false
+
+    steps: *regress_steps
 
   report_status:
     name: Regression summary

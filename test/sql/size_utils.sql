@@ -105,6 +105,25 @@ SELECT * FROM approximate_row_count('approx_count_c');
 
 DROP TABLE approx_count CASCADE;
 
+-- approximate_row_count() recurses over inheritance children with
+-- approximate_row_count(i.inhrelid). pg_inherits.inhrelid is an oid, so without
+-- an explicit ::regclass cast an attacker-planted approximate_row_count(oid)
+-- overload in the extension schema is an exact match and hijacks the recursion,
+-- running attacker code with the caller permissions.
+CREATE TABLE approx_count(id int);
+CREATE TABLE approx_count_child(id2 int) INHERITS (approx_count);
+INSERT INTO approx_count VALUES (1);
+INSERT INTO approx_count_child VALUES (2), (3);
+ANALYZE approx_count;
+ANALYZE approx_count_child;
+-- Plant a hostile exact-oid overload that returns a sentinel row count.
+CREATE FUNCTION approximate_row_count(oid) RETURNS bigint
+    LANGUAGE sql AS $$ SELECT 424242::bigint $$;
+-- Honest count is 1 (parent) + 2 (child) = 3; a hijack would surface the sentinel.
+SELECT approximate_row_count('approx_count'::regclass);
+DROP FUNCTION approximate_row_count(oid);
+DROP TABLE approx_count CASCADE;
+
 -- table with declarative partitioning
 --
 

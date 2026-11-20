@@ -63,7 +63,7 @@ policy_recompression_get_recompress_after_int(const Jsonb *config)
 	if (!found)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find %s in config for job",
 						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 	}
@@ -80,7 +80,7 @@ policy_recompression_get_recompress_after_interval(const Jsonb *config)
 	if (interval == NULL)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find %s in config for job",
 						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 	}

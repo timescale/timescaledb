@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include "compression/algorithms/common/validity.h"
 #include "compression/algorithms/fastlanes/fastlanes_types.h"
 #include "compression/compression.h"
 
@@ -62,9 +63,10 @@ StaticAssertDecl(AIC_PFOR_MAX_EXCEPTIONS <= 64, "exception stream staging area n
 
 typedef enum AICGlobalFlags
 {
-	/* Null storage format flags, if there are NULLs */
-	AIC_FLAG_NULL_RAW = 0x00,	  /* Whether nulls are stored as a raw bitmap */
-	AIC_FLAG_NULL_SUMMARY = 0x01, /* Whether nulls are stored as a two-level summary */
+	/* Validity storage format flags, if there are NULLs: */
+	/* First bit is reserved for CommonValidityFlags */
+	AIC_FLAG_VALIDITY_RAW = CM_VALIDITY_RAW, /* Whether validty bits are stored as a raw bitmap */
+	AIC_FLAG_VALIDITY_SUMMARY = CM_VALIDITY_SUMMARY, /* .. or stored as a two-level summary */
 	/* Encoded fl_elem_width_t as: */
 	AIC_FLAG_ELEM_WIDTH_8 = 0x00,  /* 8 bits */
 	AIC_FLAG_ELEM_WIDTH_16 = 0x02, /* 16 bits */
@@ -72,6 +74,10 @@ typedef enum AICGlobalFlags
 	AIC_FLAG_ELEM_WIDTH_64 = 0x06, /* 64 bits */
 
 } AICGlobalFlags;
+
+StaticAssertDecl(AIC_FLAG_VALIDITY_RAW == 0x0, "CM_VALIDITY_RAW value has changed, must be 0x0");
+StaticAssertDecl(AIC_FLAG_VALIDITY_SUMMARY == 0x1,
+				 "CM_VALIDITY_SUMMARY value has changes, must be 0x1");
 
 typedef struct AICCompressed
 {
@@ -158,14 +164,3 @@ typedef union
 	uint32 uint32_elem[AIC_FIXED_BLOCK_MAX_COUNT];
 	uint16 uint16_elem[AIC_FIXED_BLOCK_MAX_COUNT];
 } AICIntBuffer;
-
-/* PG16 on Windows doesn't link pg_popcount64 properly */
-static inline int
-aic_popcount64(uint64 word)
-{
-#if defined(WIN32) && PG17_LT
-	return (int) pg_popcount((const char *) &word, sizeof(word));
-#else
-	return pg_popcount64(word);
-#endif
-}

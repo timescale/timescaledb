@@ -4,16 +4,16 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include "aic_validity.h"
-#include "aic_utils.h"
+#include "validity.h"
 #include "compression/compression.h"
+#include "utils.h"
 #include <port/pg_bitutils.h>
 
 /* please read the README.md file for more details. */
 
-/* NULL bitmap encoder
+/* Validity bitmap encoder
  *
- * The nulls are either stored as raw, padded to 64 bits, or as
+ * The validity bits are either stored as raw, padded to 64 bits, or as
  * a two level summary bitmap (TLSB). The summary bitmap is helpful if the
  * majority of the bits are the same and there are large consecutive areas
  * of the same bits. In these cases we encode 64 flags as a single bit.
@@ -32,12 +32,12 @@
  *    null_count < total_count/2 -> fill with 1s.
  *
  * The encoder returns the flag telling the caller if we store
- * the NULL bitmap as raw or TLSB, and also the size of the output
+ * the validty bitmap as raw or TLSB, and also the size of the output
  * in 'out_size'.
  */
-AICGlobalFlags
-aic_validity_bitmap_encode(const uint64 *bitmap, size_t total_count, size_t null_count, uint8 *out,
-						   size_t *out_size)
+CmValidityFlags
+cm_validity_bitmap_encode(const uint64 *bitmap, size_t total_count, size_t null_count, uint8 *out,
+						  size_t *out_size)
 {
 	Assert(bitmap != NULL);
 	Assert(null_count > 0);
@@ -74,7 +74,7 @@ aic_validity_bitmap_encode(const uint64 *bitmap, size_t total_count, size_t null
 		}
 		else
 		{
-			aic_store_le64(detail_ptr, bitmap[i], 8);
+			cm_store_le64(detail_ptr, bitmap[i], 8);
 			detail_ptr += 8;
 			detail_count++;
 		}
@@ -84,18 +84,18 @@ aic_validity_bitmap_encode(const uint64 *bitmap, size_t total_count, size_t null
 
 	if (compressed_size >= raw_bitmap_bytes)
 	{
-		aic_store_le64_words(out, bitmap, (size_t) raw_bitmap_bytes);
+		cm_store_le64_words(out, bitmap, (size_t) raw_bitmap_bytes);
 		*out_size = raw_bitmap_bytes;
-		return AIC_FLAG_NULL_RAW;
+		return CM_VALIDITY_RAW;
 	}
 	else
 	{
 		*out_size = compressed_size;
-		return AIC_FLAG_NULL_SUMMARY;
+		return CM_VALIDITY_SUMMARY;
 	}
 }
 
-/* NULL bitmap decoder
+/* Validity bitmap decoder
  *
  * decodes the stored bitmap from 'si' to a raw bitmap. it clears the
  * padding bits over 'total_count'. it validates the bits set against
@@ -108,8 +108,8 @@ aic_validity_bitmap_encode(const uint64 *bitmap, size_t total_count, size_t null
  * returns the number of bytes read from the input.
  */
 size_t
-aic_validity_bitmap_decode(StringInfo si, size_t total_count, size_t null_count, uint64 *bitmap,
-						   AICGlobalFlags flags, size_t *out_n_valid_runs)
+cm_validity_bitmap_decode(StringInfo si, size_t total_count, size_t null_count, uint64 *bitmap,
+						  CmValidityFlags flags, size_t *out_n_valid_runs)
 {
 	size_t W = (total_count + 63) / 64;
 	size_t S = (W + 7) / 8;
@@ -120,7 +120,7 @@ aic_validity_bitmap_decode(StringInfo si, size_t total_count, size_t null_count,
 	size_t n_valid_runs = 0;
 	size_t consumed;
 
-	if ((flags & AIC_FLAG_NULL_SUMMARY) == 0)
+	if ((flags & CM_VALIDITY_SUMMARY) == 0)
 	{
 		/* RAW format: a straight copy of the bitmap words */
 		size_t raw_bitmap_bytes = W * sizeof(uint64);
@@ -128,14 +128,14 @@ aic_validity_bitmap_decode(StringInfo si, size_t total_count, size_t null_count,
 
 		for (size_t i = 0; i < W; i++)
 		{
-			uint64 word = aic_load_le64(raw + i * sizeof(uint64));
+			uint64 word = cm_load_le64(raw + i * sizeof(uint64));
 			if (i == W - 1)
 			{
 				word &= last_mask;
 			}
 			bitmap[i] = word;
-			counted_valid += (size_t) aic_popcount64(word);
-			n_valid_runs += (size_t) aic_popcount64(word & ~(word << 1));
+			counted_valid += (size_t) cm_popcount64(word);
+			n_valid_runs += (size_t) cm_popcount64(word & ~(word << 1));
 		}
 		consumed = raw_bitmap_bytes;
 	}
@@ -163,12 +163,12 @@ aic_validity_bitmap_decode(StringInfo si, size_t total_count, size_t null_count,
 			{
 				int b = pg_rightmost_one_pos64((uint64) details);
 				uint8 *detail = (uint8 *) consumeCompressedData(si, sizeof(uint64));
-				uint64 word = aic_load_le64(detail);
+				uint64 word = cm_load_le64(detail);
 
 				details &= (uint8) (details - 1);
 				bitmap[sbyte * 8 + (size_t) b] = word;
-				counted_valid += (size_t) aic_popcount64(word);
-				n_valid_runs += (size_t) aic_popcount64(word & ~(word << 1));
+				counted_valid += (size_t) cm_popcount64(word);
+				n_valid_runs += (size_t) cm_popcount64(word & ~(word << 1));
 				detail_count++;
 			}
 		}
@@ -188,10 +188,10 @@ aic_validity_bitmap_decode(StringInfo si, size_t total_count, size_t null_count,
 			uint64 new_word = old_word & last_mask;
 
 			bitmap[W - 1] = new_word;
-			counted_valid -= (size_t) aic_popcount64(old_word);
-			counted_valid += (size_t) aic_popcount64(new_word);
-			n_valid_runs -= (size_t) aic_popcount64(old_word & ~(old_word << 1));
-			n_valid_runs += (size_t) aic_popcount64(new_word & ~(new_word << 1));
+			counted_valid -= (size_t) cm_popcount64(old_word);
+			counted_valid += (size_t) cm_popcount64(new_word);
+			n_valid_runs -= (size_t) cm_popcount64(old_word & ~(old_word << 1));
+			n_valid_runs += (size_t) cm_popcount64(new_word & ~(new_word << 1));
 		}
 		consumed = (size_t) (S + detail_count * 8);
 	}
@@ -203,14 +203,14 @@ aic_validity_bitmap_decode(StringInfo si, size_t total_count, size_t null_count,
 	return consumed;
 }
 
-/* maximum bytes needed to assemble the NULL bitmap, that is
+/* maximum bytes needed to assemble the validity bitmap, that is
  * the first level summary bytes (S) plus the second level
  * bitmap words padded to 64 bits. in practice we never exceed
  * W words, because that is the size of the RAW bitmap, but we
  * need this many bytes during the assembly.
  */
 extern size_t
-aic_validity_size_cap(int total_count)
+cm_validity_size_cap(int total_count)
 {
 	if (total_count == 0)
 	{

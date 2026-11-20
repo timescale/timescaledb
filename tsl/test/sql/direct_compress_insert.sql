@@ -415,7 +415,7 @@ CREATE TABLE test_segmentby_stats (
 
 INSERT INTO test_segmentby_stats
 SELECT t, (i % 5), random()
-FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 second') t,
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 
 ANALYZE test_segmentby_stats;
@@ -427,7 +427,7 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COL
 SET timescaledb.enable_direct_compress_insert = true;
 INSERT INTO test_segmentby_stats
 SELECT t, (i % 5), random()
-FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
 -- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
@@ -445,7 +445,7 @@ CREATE TABLE test_segmentby_stats (
 SET timescaledb.enable_direct_compress_insert = true;
 INSERT INTO test_segmentby_stats
 SELECT t, (i % 5), random()
-FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
 -- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
@@ -616,3 +616,18 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT count(*) FROM dc_small;
 
 DROP TABLE dc_small;
+
+-- compressed chunk created by a user with only INSERT is owned by the hypertable owner
+CREATE TABLE dc_insert_only (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.direct_compress);
+GRANT INSERT ON dc_insert_only TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO dc_insert_only SELECT '2025-01-01 00:00:00+00'::timestamptz, 'd1', i::float FROM generate_series(0,5) i;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_insert_only') chunk;
+SELECT pg_get_userbyid(c.relowner) = current_user AS owned_by_hypertable_owner, c.reloptions
+FROM show_chunks('dc_insert_only') chunk
+JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = chunk)
+JOIN pg_class c ON (c.oid = cs.compress_relid);
+
+DROP TABLE dc_insert_only;

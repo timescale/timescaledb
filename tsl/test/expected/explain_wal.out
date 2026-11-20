@@ -18,7 +18,8 @@ SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 CREATE TABLE metrics (time timestamptz, device text, value float) WITH (tsdb.hypertable);
 NOTICE:  using column "time" as partitioning column
--- initial insert to create all the metadata and chunks
+-- initial inserts to create all the metadata and chunks and prune catalog pages
+INSERT INTO metrics SELECT '2025-01-01', 'd1', i::float FROM generate_series(0,10) i;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', i::float FROM generate_series(0,10) i;
 -- repeat run with WAL output
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF, WAL ON)
@@ -26,9 +27,9 @@ INSERT INTO metrics SELECT '2025-01-01', 'd1', i::float FROM generate_series(0,1
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Direct Compress: true
-   WAL: records=3 bytes=446
+   WAL: records=2 bytes=360
    ->  Insert on metrics (actual rows=0.00 loops=1)
-         WAL: records=3 bytes=446
+         WAL: records=2 bytes=360
          ->  Function Scan on generate_series i (actual rows=11.00 loops=1)
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF, WAL ON)

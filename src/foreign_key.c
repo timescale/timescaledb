@@ -763,17 +763,26 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 		return;
 	}
 
-	CatalogSecurityContext sec_ctx;
-
-	/* Become DB owner so the ALTER TABLE in constraint_clone succeeds when
+	/* Become chunk owner so the ALTER TABLE in constraint_clone succeeds when
 	 * the calling user doesn't own the chunk. */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	Oid owner = ts_rel_get_owner(chunk->fd.relid);
+	Oid saved_uid;
+	int sec_ctx;
+
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
 	ts_process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
 						 ObjectIdGetDatum(parent_fk_oid),
 						 ObjectIdGetDatum(chunk->fd.relid));
 	ts_process_utility_set_expect_chunk_modification(false);
-	ts_catalog_restore_user(&sec_ctx);
+	if (saved_uid != owner)
+	{
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
+	}
 	CommandCounterIncrement();
 }
 
