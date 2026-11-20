@@ -89,9 +89,21 @@ singlestep_update() {
       echo "No update path forward from ${current} to ${TO_VERSION} (dead end at ${current})" >&2
       exit 1
     fi
+    if [ "${next}" = "${TO_VERSION}" ]; then
+      setup_orphan_mat_inval_log
+    fi
     run_sql "ALTER EXTENSION timescaledb UPDATE TO \"${next}\";"
     current="${next}"
   done
+}
+
+# Insert an orphaned materialization invalidation log row that the update must
+# remove. (this is relevant only for upgrades to latest version)
+DEV_VERSION=$(grep '^version ' version.config | awk '{ print $3 }')
+setup_orphan_mat_inval_log() {
+  if [ "${TO_VERSION}" = "${DEV_VERSION}" ]; then
+    run_sql_file test/sql/updates/setup.orphan_mat_inval_log.sql
+  fi
 }
 
 trap cleanup EXIT
@@ -151,6 +163,11 @@ echo "Creating updated database"
   CHECK_LOCKS=""
   if [ "$(echo "${FROM_VERSION}" | awk -F. '{print $2}')" -ge 29 ]; then
     CHECK_LOCKS=1
+  fi
+  # In singlestep mode the orphan row is added before the last step, since older
+  # release update scripts would fail on it.
+  if [ "${UPDATE_MODE}" != singlestep ]; then
+    setup_orphan_mat_inval_log
   fi
   if [ "${UPDATE_MODE}" = singlestep ]; then
     singlestep_update

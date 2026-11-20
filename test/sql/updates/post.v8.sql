@@ -7,6 +7,7 @@
 \unset PG_UPGRADE_TEST
 \ir post.insert.sql
 \ir post.integrity_test.sql
+\ir post.orphan_mat_inval_log.sql
 \ir catalog_missing_columns.sql
 \ir post.compression.sql
 \ir post.continuous_aggs.v3.sql
