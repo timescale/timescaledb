@@ -179,7 +179,15 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 		return false;
 	}
 
-	Assert(list_length(dimvalues->values) == 1 || !dimvalues->use_or);
+	/*
+	 * We can end up with zero values in cases like "time = any(array[])",
+	 * Postgres doesn't optimize out the empty array. time = any(array[]) is a
+	 * constant false, and "= all(array[])" is constant true. It's awkward to
+	 * do anything smart for these clauses from this place, so don't add them to
+	 * hypertable restriction info and let the standard Postgres machinery
+	 * handle them.
+	 */
+	Assert(list_length(dimvalues->values) <= 1 || !dimvalues->use_or);
 
 	foreach (item, dimvalues->values)
 	{
