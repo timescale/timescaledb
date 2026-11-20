@@ -62,6 +62,7 @@ set(TEST_FILES
     compression_nulls_and_defaults.sql
     compression_policy.sql
     compression_qualpushdown.sql
+    compression_scan_uncompressed.sql
     compression_sequence_num_removal.sql
     compression_settings.sql
     compression_sorted_merge.sql

@@ -269,6 +269,8 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 			case AT_SetRelOptions:
 			case AT_ResetRelOptions:
 			case AT_ReplicaIdentity:
+			case AT_SetNotNull:
+			case AT_DropNotNull:
 				/* allowed on materialization tables */
 				continue;
 			default:
@@ -561,12 +563,9 @@ process_drop_schema_start(DropStmt *stmt)
 			String *object = lfirst_node(String, cell);
 			if (namestrcmp(proc_schema, strVal(object)) == 0)
 			{
-				CatalogSecurityContext sec_ctx;
 				Assert(stmt->behavior == DROP_CASCADE);
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
 				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-				ts_catalog_restore_user(&sec_ctx);
 			}
 		}
 	}
@@ -660,11 +659,8 @@ process_drop_procedure_start(DropStmt *stmt)
 			}
 			else
 			{
-				CatalogSecurityContext sec_ctx;
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
 				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-				ts_catalog_restore_user(&sec_ctx);
 			}
 			break;
 		}
@@ -3627,7 +3623,6 @@ static void
 process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
-	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
@@ -3672,13 +3667,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 #endif
 
 	/*
-	 * Change user since chunks are typically located in an internal schema
-	 * and chunk indexes require metadata changes. In the single-transaction
-	 * case, we do this once for the entire table.
-	 */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	/*
 	 * Hold a lock on the hypertable index, and the chunk to prevent
 	 * from being altered. Since we use the same relids across transactions,
 	 * there is a potential issue if the id gets reassigned between one
@@ -3721,8 +3709,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	validate_index_constraints(chunk, info->stmt);
 
 	table_close(chunk_rel, NoLock);
-
-	ts_catalog_restore_user(&sec_ctx);
 
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
 	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
@@ -3785,8 +3771,6 @@ process_index_start(ProcessUtilityArgs *args)
 	TupleDesc main_table_desc;
 	Relation main_table_index_relation;
 	LockRelId main_table_index_lock_relid;
-	int sec_ctx;
-	Oid uid = InvalidOid, saved_uid = InvalidOid;
 	ContinuousAgg *cagg = NULL;
 
 	Assert(IsA(stmt, IndexStmt));
@@ -3829,8 +3813,16 @@ process_index_start(ProcessUtilityArgs *args)
 			 * present on the chunk that would not be considered by postgres validity
 			 * check. We need to check for constraint violations ourselves in those
 			 * cases.
+			 *
+			 * That validation runs the index expression as the chunk owner, so
+			 * the caller has to pass the same ownership check that DefineIndex
+			 * would apply later.
 			 */
-			Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+			Oid relid = RangeVarGetRelidExtended(stmt->relation,
+												 AccessShareLock,
+												 RVR_MISSING_OK,
+												 RangeVarCallbackOwnsRelation,
+												 NULL);
 
 			if (OidIsValid(relid))
 			{
@@ -3843,9 +3835,7 @@ process_index_start(ProcessUtilityArgs *args)
 					 * and cannot be passed to deparse_expression directly, so run the
 					 * standard PostgreSQL transformation first.
 					 */
-					Relation rel = table_open(chunk->fd.relid, AccessShareLock);
 					IndexStmt *transformed = transformIndexStmt(chunk->fd.relid, stmt, NULL);
-					table_close(rel, NoLock);
 					validate_index_constraints(chunk, transformed);
 				}
 			}
@@ -3924,25 +3914,15 @@ process_index_start(ProcessUtilityArgs *args)
 								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
 	}
 
-	if (cagg)
-	{
-		/*
-		 * If this is an index creation for cagg, then we need to switch user as the current
-		 * user might not have permissions on the internal schema where cagg index will be
-		 * created.
-		 */
-		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
-	}
-
-	/* CREATE INDEX on the root table of the hypertable */
+	/*
+	 * CREATE INDEX on the root table of the hypertable. The owner of a
+	 * continuous aggregate usually has no CREATE permission on the schema
+	 * of the materialization hypertable.
+	 */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
-														   info.extended_options.multitransaction);
-
-	if (cagg)
-	{
-		RESTORE_USER(uid, saved_uid, sec_ctx);
-	}
+														   info.extended_options.multitransaction,
+														   cagg == NULL);
 
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
@@ -3987,14 +3967,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* create chunk indexes using the same transaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
-		CatalogSecurityContext sec_ctx;
 		List *chunks;
-		/*
-		 * Change user since chunk's are typically located in an internal
-		 * schema and chunk indexes require metadata changes. In the
-		 * multi-transaction case, we do this once per chunk.
-		 */
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 		pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
@@ -4003,7 +3976,6 @@ process_index_start(ProcessUtilityArgs *args)
 		/* Recurse to each chunk and create a corresponding index. */
 		foreach_chunk(ht, process_index_chunk, &info, false);
 
-		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
 
 		pgstat_progress_end_command();
@@ -6522,17 +6494,11 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 
 	if (ht != NULL)
 	{
-		CatalogSecurityContext sec_ctx;
-
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 		/* Recurse to each chunk and drop the corresponding constraint */
 		foreach_chunk(ht,
 					  process_drop_constraint_on_chunk,
 					  (void *) constraint->constraint_name,
 					  false);
-
-		ts_catalog_restore_user(&sec_ctx);
 	}
 }
 

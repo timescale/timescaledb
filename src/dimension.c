@@ -687,7 +687,6 @@ dimension_scan_update(int32 dimension_id, tuple_found_func tuple_found, void *da
 static ScanTupleResult
 dimension_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
 	bool isnull;
 	Datum dimension_id = slot_getattr(ti->slot, Anum_dimension_id, &isnull);
 	bool *delete_slices = data;
@@ -700,9 +699,7 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 		ts_dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id));
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }
@@ -735,7 +732,6 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 	Dimension *dim = data;
 	Datum values[Natts_dimension];
 	bool nulls[Natts_dimension];
-	CatalogSecurityContext sec_ctx;
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	HeapTuple new_tuple;
@@ -789,9 +785,7 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 	}
 
 	new_tuple = heap_form_tuple(ts_scanner_get_tupledesc(ti), values, nulls);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 
 	if (should_free)

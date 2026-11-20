@@ -249,7 +249,6 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 							   ArrayType *orderby_nullsfirst, Jsonb *sparse_index)
 {
 	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
 	Relation rel;
 	FormData_compression_settings fd;
 
@@ -274,9 +273,7 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_SETTINGS), RowExclusiveLock);
 
 	HeapTuple new_tuple = compression_settings_formdata_make_tuple(&fd, RelationGetDescr(rel));
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 
 	table_close(rel, RowExclusiveLock);
@@ -904,14 +901,11 @@ compression_settings_tuple_update(TupleInfo *ti, void *data)
 {
 	CompressionSettings *settings = data;
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 
 	new_tuple =
 		compression_settings_formdata_make_tuple(&settings->fd, ts_scanner_get_tupledesc(ti));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	return SCAN_DONE;
 }

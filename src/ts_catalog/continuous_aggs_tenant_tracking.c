@@ -44,7 +44,6 @@ ts_cagg_tenant_tracking_insert_only(Relation rel, int32 hypertable_id, text *ten
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_continuous_aggs_tenant_tracking];
 	bool nulls[Natts_continuous_aggs_tenant_tracking] = { false };
-	CatalogSecurityContext sec_ctx;
 	HeapTuple tuple;
 
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_hypertable_id)] =
@@ -59,9 +58,7 @@ ts_cagg_tenant_tracking_insert_only(Relation rel, int32 hypertable_id, text *ten
 		Int32GetDatum(seqnum);
 
 	tuple = heap_form_tuple(desc, values, nulls);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(rel, tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(tuple);
 }
 
@@ -104,7 +101,6 @@ typedef struct CaggTenantTrackingInserter
 {
 	Relation rel;
 	TupleDesc desc;
-	CatalogSecurityContext sec_ctx;
 	int32 hypertable_id;
 	int32 seqnum;
 	text *tenant_text; /* reusable key buffer, NULL until first row */
@@ -122,8 +118,6 @@ ts_cagg_tenant_tracking_insert_begin(int32 hypertable_id, int32 seqnum)
 	inserter->desc = RelationGetDescr(inserter->rel);
 	inserter->hypertable_id = hypertable_id;
 	inserter->seqnum = seqnum;
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &inserter->sec_ctx);
 
 	return inserter;
 }
@@ -185,7 +179,6 @@ ts_cagg_tenant_tracking_insert_end(CaggTenantTrackingInserter *inserter)
 	/* Publish all inserted rows to later commands in a single step. */
 	CommandCounterIncrement();
 
-	ts_catalog_restore_user(&inserter->sec_ctx);
 	table_close(inserter->rel, NoLock);
 
 	pfree(inserter);

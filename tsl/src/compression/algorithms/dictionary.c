@@ -60,7 +60,7 @@ dictionary_compressed_has_nulls(const CompressedDataHeader *header)
 
 pg_attribute_unused() static void assertions(void)
 {
-	DictionaryCompressed test_val;
+	DictionaryCompressed test_val = { .vl_len_ = { 0 } };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(DictionaryCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +

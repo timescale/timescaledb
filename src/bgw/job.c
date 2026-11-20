@@ -609,7 +609,6 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 static ScanTupleResult
 bgw_job_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
 	bool isnull_job_id;
 	Datum datum = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull_job_id);
 	int32 job_id = DatumGetInt32(datum);
@@ -622,9 +621,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	/* Delete any stats in bgw_policy_chunk_stats related to this job */
 	ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(job_id);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }
@@ -738,7 +735,8 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	{
 		BgwJobStat *stat = ts_bgw_job_stat_find(updated_job->fd.id);
 
-		if (stat != NULL)
+		/* Keep the wait stored after a crash */
+		if (stat != NULL && stat->fd.consecutive_crashes == 0)
 		{
 			TimestampTz next_start = DatumGetTimestampTz(
 				DirectFunctionCall2(timestamptz_pl_interval,

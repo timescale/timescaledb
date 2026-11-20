@@ -33,6 +33,12 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
 SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
   FROM pg_extension WHERE extname = 'timescaledb' \gset
 
+-- Previously continuous aggregates created on PG18 lack the NOT NULL
+-- constraint on their materialization hypertable. A downgrade keeps the
+-- constraints created by the newer version, so ignore them on older versions.
+SELECT (extversion < '2.33.0') AS ignore_cagg_notnull_constraints
+  FROM pg_extension WHERE extname = 'timescaledb' \gset
+
 -- The chunk catalog stores its relation as schema_name/table_name before 2.29.0
 -- and as a single relid afterwards.
 SELECT (extversion >= '2.29.0') AS has_chunk_relid
@@ -280,15 +286,25 @@ ORDER BY attrelid::regclass::text COLLATE "C", a.attnum;
 -- form (2.28.0) compare equal. The dimensional CHECKs are named
 -- "constraint_<slice_id>" and slice ids are not deterministic between a
 -- fresh install and a post-upgrade catalog, so collapse the suffix too.
+--
+-- The NOT NULL constraint of a materialization hypertable is named after
+-- the column name at the time it was created, which differs for a renamed
+-- column when the constraint is added by the update script, so strip the
+-- column name. This is a workaround for the issue #11020
 SELECT pg_temp.normalize_chunk(conrelid::regclass::text) AS conrelid,
        regexp_replace(
-           regexp_replace(conname, '^([0-9]+_){1,2}', ''),
-           '^constraint_[0-9]+$', 'constraint_dim') AS conname,
+           regexp_replace(
+               regexp_replace(conname, '^([0-9]+_){1,2}', ''),
+               '^constraint_[0-9]+$', 'constraint_dim'),
+           '^(_materialized_hypertable_[0-9]+)_.+_not_null$', '\1_not_null') AS conname,
        pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
 \if :PG_UPGRADE_TEST
 AND pg_get_constraintdef(oid) NOT LIKE 'NOT NULL %'
+\endif
+\if :ignore_cagg_notnull_constraints
+AND NOT (contype = 'n' AND conname ~ '^_materialized_hypertable_[0-9]+_.+_not_null$')
 \endif
 ORDER BY 1, 2, 3;
 
