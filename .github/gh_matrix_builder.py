@@ -45,6 +45,12 @@ m = {
     "include": [],
 }
 
+# Some check are advisory and don't influence the summary, we run them in a
+# separate job so that the summary doesn't have to wait for them.
+m_advisory = {
+    "include": [],
+}
+
 # Ignored tests that are known to be flaky or have known issues.
 default_ignored_tests = {
     "bgw_db_scheduler",
@@ -387,7 +393,7 @@ elif len(sys.argv) > 2:
         if to_run:
             random.shuffle(to_run)
             installcheck_args = f'TESTS="{" ".join(to_run)}"'
-            m["include"].append(
+            m_advisory["include"].append(
                 build_debug_config(
                     {
                         "coverage": False,
@@ -402,7 +408,7 @@ elif len(sys.argv) > 2:
         valgrind_tests = [t for t in tests if t not in valgrind_exclude_tests]
         if valgrind_tests:
             random.shuffle(valgrind_tests)
-            m["include"].append(
+            m_advisory["include"].append(
                 build_debug_config(
                     {
                         "coverage": False,
@@ -422,6 +428,10 @@ elif len(sys.argv) > 2:
                 )
             )
 
-# generate command to set github action variable
+# generate commands to set github action variables
 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
     print(str.format("matrix={0}", json.dumps(m, default=list)), file=output)
+    print(
+        str.format("matrix_advisory={0}", json.dumps(m_advisory, default=list)),
+        file=output,
+    )
