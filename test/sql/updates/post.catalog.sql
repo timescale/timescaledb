@@ -36,7 +36,7 @@ SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
 -- Previously continuous aggregates created on PG18 lack the NOT NULL
 -- constraint on their materialization hypertable. A downgrade keeps the
 -- constraints created by the newer version, so ignore them on older versions.
-SELECT (extversion <= '2.32.0') AS ignore_cagg_notnull_constraints
+SELECT (extversion < '2.33.0') AS ignore_cagg_notnull_constraints
   FROM pg_extension WHERE extname = 'timescaledb' \gset
 
 -- The chunk catalog stores its relation as schema_name/table_name before 2.29.0
