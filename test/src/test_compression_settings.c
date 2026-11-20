@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include "foreach_ptr.h"
+#include <catalog/pg_class.h>
 #include <fmgr.h>
 #include <funcapi.h>
 #include <ts_catalog/compression_settings.h>
@@ -469,11 +470,36 @@ test_sparse_index_equal()
 	}
 }
 
+static void
+test_resolve_columns_with_columnless_object()
+{
+	Jsonb *jb = cstring_to_jsonb(
+		"[{\"source\": \"config\"}, "
+		"{\"type\": \"bloom\", \"column\": \"relname\", \"source\": \"config\"}, "
+		"{\"type\": \"bloom\", \"column\": [\"relname\", \"relkind\"], \"source\": \"config\"}]");
+	SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
+	TsBmsList per_column_attnos =
+		ts_resolve_columns_to_attnos_from_parsed_settings(parsed_settings, RelationRelationId);
+
+	TestAssertInt64Eq(list_length(per_column_attnos), 3);
+	TestAssertPtrEq(linitial(per_column_attnos), NULL);
+	TestAssertTrue(
+		bms_equal(lsecond(per_column_attnos), bms_make_singleton(Anum_pg_class_relname)));
+	TestAssertTrue(bms_equal(lthird(per_column_attnos),
+							 bms_add_member(bms_make_singleton(Anum_pg_class_relname),
+											Anum_pg_class_relkind)));
+
+	ts_bmslist_free(per_column_attnos);
+	ts_free_sparse_index_settings(parsed_settings);
+	pfree(jb);
+}
+
 TS_TEST_FN(ts_test_compression_settings)
 {
 	test_alter_table_rename_column_effect_jsonb();
 	test_alter_table_drop_column_effect_jsonb();
 	test_convert_to_sparse_index_settings();
 	test_sparse_index_equal();
+	test_resolve_columns_with_columnless_object();
 	PG_RETURN_VOID();
 }
