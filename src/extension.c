@@ -6,12 +6,19 @@
 #include <postgres.h>
 #include <access/transam.h>
 #include <access/xact.h>
+#include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
+#include <catalog/pg_authid.h>
+#include <catalog/pg_shdepend.h>
 #include <commands/event_trigger.h>
 #include <fmgr.h>
+#include <miscadmin.h>
+#include <storage/lmgr.h>
+#include <utils/acl.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 
 #include <access/relscan.h>
 #include <catalog/indexing.h>
@@ -349,4 +356,202 @@ Datum
 ts_extension_get_state(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_TEXT_P(cstring_to_text(extstate_str[extstate]));
+}
+
+/* Read the recorded dependencies, which old updates may have left out of sync with the ACL. */
+static int
+extension_acl_members(Oid relid, SharedDependencyType deptype, Oid **members)
+{
+	Relation rel = table_open(SharedDependRelationId, AccessShareLock);
+	ScanKeyData keys[4];
+	HeapTuple tuple;
+	List *roles = NIL;
+
+	ScanKeyInit(&keys[0],
+				Anum_pg_shdepend_dbid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(MyDatabaseId));
+	ScanKeyInit(&keys[1],
+				Anum_pg_shdepend_classid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(RelationRelationId));
+	ScanKeyInit(&keys[2],
+				Anum_pg_shdepend_objid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relid));
+	ScanKeyInit(&keys[3],
+				Anum_pg_shdepend_objsubid,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(0));
+
+	SysScanDesc scan = systable_beginscan(rel, SharedDependDependerIndexId, true, NULL, 4, keys);
+	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
+	{
+		Form_pg_shdepend dep = (Form_pg_shdepend) GETSTRUCT(tuple);
+		if (dep->refclassid == AuthIdRelationId && dep->deptype == deptype)
+		{
+			roles = list_append_unique_oid(roles, dep->refobjid);
+		}
+	}
+	systable_endscan(scan);
+	table_close(rel, AccessShareLock);
+
+	int count = list_length(roles);
+	*members = count > 0 ? palloc(count * sizeof(Oid)) : NULL;
+	list_sort(roles, list_oid_cmp);
+	for (int i = 0; i < count; i++)
+	{
+		(*members)[i] = list_nth_oid(roles, i);
+	}
+	list_free(roles);
+	return count;
+}
+
+/* The ACL is a private copy. Keep live roles locked until the update commits. */
+static Acl *
+extension_acl_remove_dropped_roles(Acl *acl, Oid ownerid)
+{
+	Oid *members;
+	int nmembers = aclmembers(acl, &members);
+	List *missing = NIL;
+
+	for (int i = 0; i < nmembers; i++)
+	{
+		LockSharedObject(AuthIdRelationId, members[i], 0, AccessShareLock);
+		if (!SearchSysCacheExists1(AUTHOID, ObjectIdGetDatum(members[i])))
+		{
+			missing = lappend_oid(missing, members[i]);
+			UnlockSharedObject(AuthIdRelationId, members[i], 0, AccessShareLock);
+		}
+	}
+	if (members != NULL)
+	{
+		pfree(members);
+	}
+
+	if (missing != NIL)
+	{
+		/* Cascading revocation also checks for surviving alternative grant-option paths. */
+		for (int i = 0; i < ACL_NUM(acl);)
+		{
+			AclItem item = ACL_DAT(acl)[i];
+			if (list_member_oid(missing, item.ai_grantee) ||
+				list_member_oid(missing, item.ai_grantor))
+			{
+				Acl *new_acl = aclupdate(acl, &item, ACL_MODECHG_DEL, ownerid, DROP_CASCADE);
+				pfree(acl);
+				acl = new_acl;
+				/* Cascading revocation can remove earlier entries as well. */
+				i = 0;
+			}
+			else
+			{
+				i++;
+			}
+		}
+		list_free(missing);
+	}
+	return acl;
+}
+
+/* These helpers are used only at the end of an extension update. */
+TS_FUNCTION_INFO_V1(ts_clean_relation_acl);
+
+Datum
+ts_clean_relation_acl(PG_FUNCTION_ARGS)
+{
+	if (!superuser())
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be superuser to restore relation privileges")));
+	}
+
+	/* The saved current ACL may be NULL (the default ACL). */
+	if (PG_ARGISNULL(0))
+	{
+		PG_RETURN_NULL();
+	}
+
+	Oid ownerid = PG_GETARG_OID(0);
+	Acl *new_acl = PG_ARGISNULL(1) ? NULL : PG_GETARG_ACL_P_COPY(1);
+	new_acl = extension_acl_remove_dropped_roles(new_acl, ownerid);
+
+	if (new_acl == NULL)
+	{
+		PG_RETURN_NULL();
+	}
+	PG_RETURN_ACL_P(new_acl);
+}
+
+TS_FUNCTION_INFO_V1(ts_sync_relation_acl_deps);
+
+Datum
+ts_sync_relation_acl_deps(PG_FUNCTION_ARGS)
+{
+	if (!superuser())
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be superuser to update relation privilege dependencies")));
+	}
+
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(3))
+	{
+		PG_RETURN_VOID();
+	}
+
+	Oid relid = PG_GETARG_OID(0);
+	Oid ownerid = PG_GETARG_OID(1);
+	Acl *acl = PG_ARGISNULL(2) ? NULL : PG_GETARG_ACL_P(2);
+	bool initial = PG_GETARG_BOOL(3);
+
+	/* PostgreSQL 17 introduced shared dependencies for initial privileges. */
+#if PG17_LT
+	if (initial)
+	{
+		PG_RETURN_VOID();
+	}
+#endif
+
+	Oid *oldmembers;
+	Oid *newmembers;
+	SharedDependencyType deptype = SHARED_DEPENDENCY_ACL;
+#if PG17_GE
+	if (initial)
+	{
+		deptype = SHARED_DEPENDENCY_INITACL;
+	}
+#endif
+
+	int noldmembers = extension_acl_members(relid, deptype, &oldmembers);
+	int nnewmembers = aclmembers(acl, &newmembers);
+
+#if PG17_GE
+	if (initial)
+	{
+		updateInitAclDependencies(RelationRelationId,
+								  relid,
+								  0,
+								  noldmembers,
+								  oldmembers,
+								  nnewmembers,
+								  newmembers);
+	}
+	else
+#endif
+		updateAclDependencies(RelationRelationId,
+							  relid,
+							  0,
+							  ownerid,
+							  noldmembers,
+							  oldmembers,
+							  nnewmembers,
+							  newmembers);
+
+	PG_RETURN_VOID();
 }
