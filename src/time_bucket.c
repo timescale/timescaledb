@@ -595,10 +595,10 @@ ts_uuid_timezone_bucket(PG_FUNCTION_ARGS)
 				 errmsg("not a version 7 UUID: %s", uuid_to_str(uuid))));
 	}
 
-	LOCAL_FCINFO(fcinfo_local, 4);
+	LOCAL_FCINFO(fcinfo_local, 5);
 	Datum result;
 
-	InitFunctionCallInfoData(*fcinfo_local, NULL, 4, InvalidOid, NULL, NULL);
+	InitFunctionCallInfoData(*fcinfo_local, NULL, 5, InvalidOid, NULL, NULL);
 
 	fcinfo_local->args[0].value = PG_GETARG_DATUM(0); /* Period */
 	fcinfo_local->args[0].isnull = PG_ARGISNULL(0);
@@ -606,8 +606,10 @@ ts_uuid_timezone_bucket(PG_FUNCTION_ARGS)
 	fcinfo_local->args[1].isnull = PG_ARGISNULL(1);
 	fcinfo_local->args[2].value = PG_GETARG_DATUM(2);
 	fcinfo_local->args[2].isnull = PG_ARGISNULL(2);
-	fcinfo_local->args[3].value = PG_GETARG_DATUM(3);
-	fcinfo_local->args[3].isnull = PG_ARGISNULL(3);
+	fcinfo_local->args[3].value = PG_NARGS() > 3 ? PG_GETARG_DATUM(3) : (Datum) 0;
+	fcinfo_local->args[3].isnull = PG_NARGS() <= 3 || PG_ARGISNULL(3);
+	fcinfo_local->args[4].value = PG_NARGS() > 4 ? PG_GETARG_DATUM(4) : (Datum) 0;
+	fcinfo_local->args[4].isnull = PG_NARGS() <= 4 || PG_ARGISNULL(4);
 
 	result = ts_timestamptz_timezone_bucket(fcinfo_local);
 
