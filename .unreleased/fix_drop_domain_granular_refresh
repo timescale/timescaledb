@@ -1,0 +1,1 @@
+Fixes: #10805 Block dropping the granular refresh column via DROP DOMAIN ... CASCADE
