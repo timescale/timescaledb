@@ -122,10 +122,7 @@ but no values are provided to specify these options.
 
 ## `_timescaledb_functions.get_segmentby_defaults`
 
-This function determines a segment-by column to use. It returns a JSONB with the following top-level keys:
-- columns: an array of column names that should be used for segment by. Right now it always returns a single column.
-- confidence: a number between 0 and 10 (most confident) indicating how sure we are.
-- message: a message that should be shown to the user to evaluate the result.
+This function determines a segment-by column to use. It returns an array of column names that should be used for segment by. Right now it returns at most one column.
 
 The intuition is as follows:
 
@@ -142,11 +139,7 @@ One final point: a number of tables don't have any indexed columns that aren't d
 
 ## `_timescaledb_functions.get_orderby_defaults`
 
-This function determines which order by columns to use. It returns a JSONB with the following top-level keys:
-
-- clauses: an array of column names and sort order key words that shold be used for order by.
-- confidence: a number between 0 and 10 (most confident) indicating how sure we are.
-- message: a message that should be shown to the user to evaluate the result.
+This function determines which order by columns to use. It returns an array of column names and sort order key words that should be used for order by.
 
 The order by is built in three steps:
 1) Use the column order in a unique index (removing the segment_by columns).
