@@ -1296,3 +1296,59 @@ DROP MATERIALIZED VIEW stats_agg;
 DROP TABLE stats;
 
 RESET timescaledb.cagg_refresh_stats_level;
+
+-- Test: an unencodable (NULL) tenant on one hypertable must not invalidate
+-- the tracker of another hypertable written in the same transaction.  ht_b's
+-- tracker must stay VALID (status 0) with its one tenant entry.
+CREATE TABLE ht_a(time timestamptz NOT NULL, sensor_id text, value float);
+CREATE TABLE ht_b(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('ht_a', 'time'), create_hypertable('ht_b', 'time');
+ALTER TABLE ht_a SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+ALTER TABLE ht_b SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+INSERT INTO ht_a VALUES ('2025-01-01 00:00+00', 'sensor_a', 1);
+INSERT INTO ht_b VALUES ('2025-01-01 00:00+00', 'sensor_b', 1);
+--materialized view will have some data when we create it.
+CREATE MATERIALIZED VIEW daily_a WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, sum(value)
+  FROM ht_a GROUP BY bucket, sensor_id ;
+CREATE MATERIALIZED VIEW daily_b WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, sum(value)
+  FROM ht_b GROUP BY bucket, sensor_id ;
+ALTER MATERIALIZED VIEW daily_a SET (timescaledb.enable_granular_refresh = true);
+ALTER MATERIALIZED VIEW daily_b SET (timescaledb.enable_granular_refresh = true);
+
+BEGIN;
+INSERT INTO ht_a VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+INSERT INTO ht_b VALUES ('2020-01-01 00:00+00', 'sensor_b', 1);
+COMMIT;
+
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('ht_a'::regclass);
+
+-- A NULL tenant alongside a keyable one makes ht_a's tracker INVALID; ht_b,
+-- written in the same transaction, must stay VALID.
+BEGIN;
+INSERT INTO ht_a VALUES ('2020-01-01 00:00+00', 'sensor_a', 1),
+                        ('2020-01-01 00:00+00', NULL, 1);
+INSERT INTO ht_b VALUES ('2020-01-01 00:00+00', 'sensor_b', 1);
+COMMIT;
+
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('ht_a'::regclass);
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('ht_b'::regclass);
+
+DROP MATERIALIZED VIEW daily_a;
+DROP MATERIALIZED VIEW daily_b;
+DROP TABLE ht_a;
+DROP TABLE ht_b;

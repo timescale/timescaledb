@@ -6,6 +6,9 @@ name: Update and Downgrade
       - ?.*.x
       - prerelease_test
   pull_request:
+  schedule:
+    # Nightly run that also covers the singlestep update mode.
+    - cron: '0 2 * * *'
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -21,6 +24,7 @@ jobs:
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
+          || github.event_name == 'schedule'
           || inputs['timescaledb-ref'] != ''
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
@@ -43,7 +47,9 @@ jobs:
     strategy:
       matrix:
         pg: [16, 17, 18]
-        mode: [direct, singlestep]
+        # The singlestep mode walks through every intermediate version and
+        # is slow, so it only runs in the nightly schedule and release sanity.
+        mode: ${{ fromJSON((github.event_name == 'schedule' || inputs['timescaledb-ref'] != '') && '["direct", "singlestep"]' || '["direct"]') }}
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}

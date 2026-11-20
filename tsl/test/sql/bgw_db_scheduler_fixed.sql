@@ -382,7 +382,10 @@ SHOW timescaledb.shutdown_bgw_scheduler;
 
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 
-SELECT * FROM sorted_bgw_log;
+-- The scheduler may loop a few times before it sees the GUC change,
+-- so the number of wait messages is not deterministic. Filter them
+-- out to keep the output stable.
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
@@ -416,8 +419,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
---But after the 5 min period the job is again run
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
+--But after the 5 min period the job is again run. Stop when the job's
+--max_runtime ends, so it does not run a second time.
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(399500);
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;

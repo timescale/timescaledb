@@ -18,6 +18,7 @@
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <tcop/utility.h>
+#include <utils/acl.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
 
@@ -439,33 +440,26 @@ load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 	}
 }
 
-static void
-stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
+/*
+ * The hook runs before PostgreSQL checks database ownership, so skip the
+ * message for other users and let PostgreSQL raise the permission error.
+ */
+static bool
+is_db_owner(Oid db_oid)
 {
-	/*
-	 * Don't check if extension exists here because even though the current
-	 * database might not have TimescaleDB installed the database we are
-	 * dropping might.
-	 */
-	Oid dropped_db_oid = get_database_oid(drop_db_statement->dbname, drop_db_statement->missing_ok);
-
-	if (OidIsValid(dropped_db_oid))
-	{
-		ereport(LOG,
-				(errmsg("TimescaleDB background worker scheduler for database %u will be stopped",
-						dropped_db_oid)));
-		ts_bgw_message_send_and_wait(STOP, dropped_db_oid);
-	}
+	return OidIsValid(db_oid) && object_ownercheck(DatabaseRelationId, db_oid, GetUserId());
 }
 
+/* Whether the database may be used as template for CREATE DATABASE */
 static bool
-database_allowconn(const Oid db_oid)
+database_usable_as_template(const Oid db_oid)
 {
 	Relation pg_database;
 	ScanKeyData entry[1];
 	SysScanDesc scan;
 	HeapTuple dbtuple;
-	bool allowconn = false;
+	Form_pg_database dbform;
+	bool usable = false;
 
 	pg_database = table_open(DatabaseRelationId, AccessShareLock);
 	ScanKeyInit(&entry[0],
@@ -485,12 +479,13 @@ database_allowconn(const Oid db_oid)
 				 errmsg("database with OID \"%u\" does not exist", db_oid)));
 	}
 
-	allowconn = ((Form_pg_database) GETSTRUCT(dbtuple))->datallowconn;
+	dbform = (Form_pg_database) GETSTRUCT(dbtuple);
+	usable = dbform->datallowconn && (dbform->datistemplate || is_db_owner(db_oid));
 
 	systable_endscan(scan);
 	table_close(pg_database, AccessShareLock);
 
-	return allowconn;
+	return usable;
 }
 
 static void
@@ -504,68 +499,6 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 	{
 		switch (nodeTag(query->utilityStmt))
 		{
-			case T_AlterDatabaseStmt:
-			{
-				/*
-				 * On ALTER DATABASE SET TABLESPACE we need to stop background
-				 * workers for the command to succeed.
-				 */
-				AlterDatabaseStmt *stmt = (AlterDatabaseStmt *) query->utilityStmt;
-				if (list_length(stmt->options) == 1)
-				{
-					DefElem *option = linitial(stmt->options);
-					if (option->defname && strcmp(option->defname, "tablespace") == 0)
-					{
-						Oid db_oid = get_database_oid(stmt->dbname, false);
-
-						if (OidIsValid(db_oid))
-						{
-							ts_bgw_message_send_and_wait(RESTART, db_oid);
-							ereport(WARNING,
-									(errmsg("you may need to manually restart any running "
-											"background workers after this command")));
-						}
-					}
-				}
-				break;
-			}
-			case T_CreatedbStmt:
-			{
-				/*
-				 * If we create a database and the database used as template
-				 * has background workers we need to stop those background
-				 * workers connected to the template database.
-				 */
-				CreatedbStmt *stmt = (CreatedbStmt *) query->utilityStmt;
-				ListCell *lc;
-
-				foreach (lc, stmt->options)
-				{
-					DefElem *option = lfirst(lc);
-					if (option->defname != NULL && option->arg != NULL &&
-						strcmp(option->defname, "template") == 0)
-					{
-						Oid db_oid = get_database_oid(defGetString(option), false);
-
-						if (OidIsValid(db_oid) && database_allowconn(db_oid))
-						{
-							ts_bgw_message_send_and_wait(RESTART, db_oid);
-						}
-					}
-				}
-				break;
-			}
-			case T_DropdbStmt:
-			{
-				DropdbStmt *stmt = (DropdbStmt *) query->utilityStmt;
-
-				/*
-				 * If we drop a database, we need to intercept and stop any of our
-				 * schedulers that might be connected to said db.
-				 */
-				stop_workers_on_db_drop(stmt);
-				break;
-			}
 			case T_DropStmt:
 				for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
 				{
@@ -589,21 +522,6 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 					{
 						ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
 						break;
-					}
-				}
-				break;
-			case T_RenameStmt:
-				if (((RenameStmt *) query->utilityStmt)->renameType == OBJECT_DATABASE)
-				{
-					RenameStmt *stmt = (RenameStmt *) query->utilityStmt;
-					Oid db_oid = get_database_oid(stmt->subname, stmt->missing_ok);
-
-					if (OidIsValid(db_oid))
-					{
-						ts_bgw_message_send_and_wait(STOP, db_oid);
-						ereport(WARNING,
-								(errmsg("you need to manually restart any running "
-										"background workers after this command")));
 					}
 				}
 				break;
@@ -667,6 +585,103 @@ timescaledb_shmem_request_hook(void)
 }
 
 /*
+ * Stop or restart the scheduler of a database before a command that needs
+ * the database to be unused. Runs from ProcessUtility so that the message
+ * is only sent for commands PostgreSQL will accept.
+ */
+static void
+notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
+{
+	switch (nodeTag(stmt))
+	{
+		case T_AlterDatabaseStmt:
+		{
+			AlterDatabaseStmt *alter = (AlterDatabaseStmt *) stmt;
+
+			if (list_length(alter->options) == 1)
+			{
+				DefElem *option = linitial(alter->options);
+
+				if (option->defname && strcmp(option->defname, "tablespace") == 0)
+				{
+					Oid db_oid = get_database_oid(alter->dbname, false);
+
+					if (is_db_owner(db_oid))
+					{
+						ts_bgw_message_send_and_wait(RESTART, db_oid);
+						ereport(WARNING,
+								(errmsg("you may need to manually restart any running "
+										"background workers after this command")));
+					}
+				}
+			}
+			break;
+		}
+		case T_CreatedbStmt:
+		{
+			CreatedbStmt *createdb = (CreatedbStmt *) stmt;
+			ListCell *lc;
+
+			foreach (lc, createdb->options)
+			{
+				DefElem *option = lfirst(lc);
+
+				if (option->defname != NULL && option->arg != NULL &&
+					strcmp(option->defname, "template") == 0)
+				{
+					Oid db_oid = get_database_oid(defGetString(option), false);
+
+					if (have_createdb_privilege() && OidIsValid(db_oid) &&
+						database_usable_as_template(db_oid))
+					{
+						ts_bgw_message_send_and_wait(RESTART, db_oid);
+					}
+				}
+			}
+			break;
+		}
+		case T_DropdbStmt:
+		{
+			DropdbStmt *dropdb = (DropdbStmt *) stmt;
+			/*
+			 * The current database might not have TimescaleDB installed but
+			 * the database we are dropping might.
+			 */
+			Oid db_oid = get_database_oid(dropdb->dbname, dropdb->missing_ok);
+
+			/* PostgreSQL rejects DROP DATABASE inside a transaction block or function */
+			if (is_db_owner(db_oid) && context == PROCESS_UTILITY_TOPLEVEL && !IsTransactionBlock())
+			{
+				ereport(LOG,
+						(errmsg("TimescaleDB background worker scheduler for database %u will be "
+								"stopped",
+								db_oid)));
+				ts_bgw_message_send_and_wait(STOP, db_oid);
+			}
+			break;
+		}
+		case T_RenameStmt:
+		{
+			RenameStmt *rename = (RenameStmt *) stmt;
+
+			if (rename->renameType == OBJECT_DATABASE)
+			{
+				Oid db_oid = get_database_oid(rename->subname, rename->missing_ok);
+
+				/* The database keeps its OID, so the scheduler can reconnect */
+				if (is_db_owner(db_oid) && have_createdb_privilege())
+				{
+					ts_bgw_message_send_and_wait(RESTART, db_oid);
+				}
+			}
+			break;
+		}
+		default:
+			break;
+	}
+}
+
+/*
  * Loader ProcessUtility shim, installed at preload time so later-preloaded
  * hooks (e.g., pgaudit) run first. Needed because TimescaleDB handles some
  * commands itself (e.g., hypertable COPY) without chaining. The handler is
@@ -678,6 +693,8 @@ loader_process_utility(PlannedStmt *pstmt, const char *queryString, bool readOnl
 					   QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
 {
 	ProcessUtility_hook_type hook;
+
+	notify_bg_workers_of_database_command(pstmt->utilityStmt, context);
 
 	if (versioned_ProcessUtility_hook != NULL)
 	{

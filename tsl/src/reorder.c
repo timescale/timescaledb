@@ -167,6 +167,8 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
 	}
 
+	ts_chunk_permissions_check(chunk, GetUserId());
+
 	/* If chunk is compressed move it by altering tablespace on both chunks */
 	if (ts_chunk_is_compressed(chunk))
 	{
@@ -232,7 +234,7 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Our check gives better error messages, but keep the original one too. */
-	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!object_ownercheck(RelationRelationId, ht->main_table_relid, GetUserId()))
 	{

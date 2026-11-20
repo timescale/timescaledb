@@ -16,6 +16,7 @@
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_proc.h>
 #include <catalog/pg_publication.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
@@ -59,6 +60,7 @@
 
 #include "compat/compat.h"
 #include "annotations.h"
+#include "bgw/job.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"
@@ -267,6 +269,8 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 			case AT_SetRelOptions:
 			case AT_ResetRelOptions:
 			case AT_ReplicaIdentity:
+			case AT_SetNotNull:
+			case AT_DropNotNull:
 				/* allowed on materialization tables */
 				continue;
 			default:
@@ -559,12 +563,9 @@ process_drop_schema_start(DropStmt *stmt)
 			String *object = lfirst_node(String, cell);
 			if (namestrcmp(proc_schema, strVal(object)) == 0)
 			{
-				CatalogSecurityContext sec_ctx;
 				Assert(stmt->behavior == DROP_CASCADE);
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
 				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-				ts_catalog_restore_user(&sec_ctx);
 			}
 		}
 	}
@@ -579,11 +580,42 @@ process_drop_schema_start(DropStmt *stmt)
 static void
 process_drop_procedure_start(DropStmt *stmt)
 {
+	List *target_oids = NIL;
+	List *target_objs = NIL;
+	ListCell *lc;
+
+	Assert(stmt->removeType == OBJECT_PROCEDURE || stmt->removeType == OBJECT_FUNCTION ||
+		   stmt->removeType == OBJECT_ROUTINE);
+
+	foreach (lc, stmt->objects)
+	{
+		Node *object = lfirst(lc);
+		Relation relation = NULL;
+		ObjectAddress address = get_object_address(stmt->removeType,
+												   object,
+												   &relation,
+												   AccessExclusiveLock,
+												   stmt->missing_ok);
+
+		if (!OidIsValid(address.objectId))
+		{
+			continue;
+		}
+
+		target_oids = lappend_oid(target_oids, address.objectId);
+		target_objs = lappend(target_objs, object);
+	}
+
+	if (target_oids == NIL)
+	{
+		return;
+	}
+
 	ScanIterator iterator =
 		ts_scan_iterator_create(BGW_JOB, RowExclusiveLock, CurrentMemoryContext);
 	ts_scanner_foreach(&iterator)
 	{
-		ListCell *cell;
+		ListCell *lc_oid, *lc_obj;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		bool schema_isnull, name_isnull, job_id_isnull;
 		Name proc_schema =
@@ -597,32 +629,40 @@ process_drop_procedure_start(DropStmt *stmt)
 					 job_id,
 					 NameStr(*proc_schema),
 					 NameStr(*proc_name));
-		foreach (cell, stmt->objects)
+
+		/*
+		 * Match on the function OID so that only the routine the job actually
+		 * runs can block or cascade the drop.
+		 */
+		Oid job_funcid = ts_bgw_job_get_funcid_from_catalog(proc_schema, proc_name);
+		if (!OidIsValid(job_funcid))
 		{
-			ObjectWithArgs *object = castNode(ObjectWithArgs, lfirst(cell));
-			RangeVar *rel = makeRangeVarFromNameList(object->objname);
-			if (namestrcmp(proc_schema, rel->schemaname) == 0 &&
-				namestrcmp(proc_name, rel->relname) == 0)
+			continue;
+		}
+
+		forboth (lc_oid, target_oids, lc_obj, target_objs)
+		{
+			if (lfirst_oid(lc_oid) != job_funcid)
 			{
-				Assert(stmt->removeType == OBJECT_PROCEDURE || stmt->removeType == OBJECT_FUNCTION);
-				if (stmt->behavior == DROP_RESTRICT)
-				{
-					ereport(ERROR,
-							errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
-							errmsg("cannot drop %s because background job %d depends on it",
-								   NameListToString(object->objname),
-								   job_id),
-							errhint("Use delete_job() to drop the job first."));
-				}
-				else
-				{
-					CatalogSecurityContext sec_ctx;
-					ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-					ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
-					ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-					ts_catalog_restore_user(&sec_ctx);
-				}
+				continue;
 			}
+
+			ObjectWithArgs *object = castNode(ObjectWithArgs, lfirst(lc_obj));
+			if (stmt->behavior == DROP_RESTRICT)
+			{
+				ereport(ERROR,
+						errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+						errmsg("cannot drop %s because background job %d depends on it",
+							   NameListToString(object->objname),
+							   job_id),
+						errhint("Use delete_job() to drop the job first."));
+			}
+			else
+			{
+				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
+				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+			}
+			break;
 		}
 	}
 }
@@ -712,11 +752,14 @@ ts_bgw_job_rename_proc(ObjectAddress address, const char *newschema, const char 
 			DatumGetName(slot_getattr(ti->slot, Anum_bgw_job_proc_schema, &curr_schema_isnull));
 		Name curr_proc_name =
 			DatumGetName(slot_getattr(ti->slot, Anum_bgw_job_proc_name, &curr_name_isnull));
-		const char *old_proc_schema = get_namespace_name(get_func_namespace(address.objectId));
-		const char *old_proc_name = get_func_name(address.objectId);
+		/*
+		 * Match on the function OID rather than on the name: a different
+		 * overload with the same schema-qualified name must not retarget
+		 * this job.
+		 */
 		if (!curr_schema_isnull && !curr_name_isnull &&
-			namestrcmp(curr_proc_name, old_proc_name) == 0 &&
-			namestrcmp(curr_proc_schema, old_proc_schema) == 0)
+			ts_bgw_job_get_funcid_from_catalog(curr_proc_schema, curr_proc_name) ==
+				address.objectId)
 		{
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 			ts_bgw_job_update_proc(ti->scanrel,
@@ -740,7 +783,8 @@ process_alterprocedureschema(ProcessUtilityArgs *args)
 	AlterObjectSchemaStmt *stmt = (AlterObjectSchemaStmt *) args->parsetree;
 	Relation relation;
 
-	Assert(stmt->objectType == OBJECT_PROCEDURE || stmt->objectType == OBJECT_FUNCTION);
+	Assert(stmt->objectType == OBJECT_PROCEDURE || stmt->objectType == OBJECT_FUNCTION ||
+		   stmt->objectType == OBJECT_ROUTINE);
 	ObjectAddress address =
 		get_object_address(stmt->objectType, stmt->object, &relation, AccessExclusiveLock, false);
 	ts_bgw_job_rename_proc(address, stmt->newschema, NULL);
@@ -860,6 +904,7 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_alterprocedureschema(args);
 			break;
 		default:
@@ -2240,6 +2285,7 @@ process_drop_start(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_drop_procedure_start(stmt);
 			break;
 		case OBJECT_SCHEMA:
@@ -2845,6 +2891,7 @@ process_rename(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_rename_procedure(args);
 			break;
 		default:
@@ -2993,9 +3040,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			elog(ERROR, "could not connect to SPI");
 		}
 
-		/* Lock down search_path */
-		int save_nestlevel = NewGUCNestLevel();
-		RestrictSearchPath();
+		/* Run index constraint validation as chunk owner in security-restricted context */
+		TSSecurityContext sctx;
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -3019,8 +3066,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 					 (errmsg("duplicate key value violates unique constraint"))));
 		}
 
-		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
+		ts_security_context_exit(&sctx);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
@@ -3051,9 +3097,8 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 			elog(ERROR, "could not connect to SPI");
 		}
 
-		/* Lock down search_path */
-		int save_nestlevel = NewGUCNestLevel();
-		RestrictSearchPath();
+		TSSecurityContext sctx;
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -3082,7 +3127,7 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 
 		table_close(rel, NoLock);
 		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
+		ts_security_context_exit(&sctx);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
@@ -3578,7 +3623,6 @@ static void
 process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
-	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
@@ -3623,13 +3667,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 #endif
 
 	/*
-	 * Change user since chunks are typically located in an internal schema
-	 * and chunk indexes require metadata changes. In the single-transaction
-	 * case, we do this once for the entire table.
-	 */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	/*
 	 * Hold a lock on the hypertable index, and the chunk to prevent
 	 * from being altered. Since we use the same relids across transactions,
 	 * there is a potential issue if the id gets reassigned between one
@@ -3672,8 +3709,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	validate_index_constraints(chunk, info->stmt);
 
 	table_close(chunk_rel, NoLock);
-
-	ts_catalog_restore_user(&sec_ctx);
 
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
 	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
@@ -3736,8 +3771,6 @@ process_index_start(ProcessUtilityArgs *args)
 	TupleDesc main_table_desc;
 	Relation main_table_index_relation;
 	LockRelId main_table_index_lock_relid;
-	int sec_ctx;
-	Oid uid = InvalidOid, saved_uid = InvalidOid;
 	ContinuousAgg *cagg = NULL;
 
 	Assert(IsA(stmt, IndexStmt));
@@ -3780,8 +3813,16 @@ process_index_start(ProcessUtilityArgs *args)
 			 * present on the chunk that would not be considered by postgres validity
 			 * check. We need to check for constraint violations ourselves in those
 			 * cases.
+			 *
+			 * That validation runs the index expression as the chunk owner, so
+			 * the caller has to pass the same ownership check that DefineIndex
+			 * would apply later.
 			 */
-			Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+			Oid relid = RangeVarGetRelidExtended(stmt->relation,
+												 AccessShareLock,
+												 RVR_MISSING_OK,
+												 RangeVarCallbackOwnsRelation,
+												 NULL);
 
 			if (OidIsValid(relid))
 			{
@@ -3794,9 +3835,7 @@ process_index_start(ProcessUtilityArgs *args)
 					 * and cannot be passed to deparse_expression directly, so run the
 					 * standard PostgreSQL transformation first.
 					 */
-					Relation rel = table_open(chunk->fd.relid, AccessShareLock);
 					IndexStmt *transformed = transformIndexStmt(chunk->fd.relid, stmt, NULL);
-					table_close(rel, NoLock);
 					validate_index_constraints(chunk, transformed);
 				}
 			}
@@ -3814,7 +3853,18 @@ process_index_start(ProcessUtilityArgs *args)
 
 	if (cagg != NULL)
 	{
-		ts_cagg_permissions_check(cagg->relid, GetUserId());
+		/*
+		 * The database owner must not be allowed to create an index on a
+		 * continuous aggregate it does not own, so require actual ownership
+		 * instead of ts_cagg_permissions_check().
+		 */
+		if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("must be owner of continuous aggregate \"%s\"",
+							get_rel_name(cagg->relid))));
+		}
 	}
 	else
 	{
@@ -3864,25 +3914,15 @@ process_index_start(ProcessUtilityArgs *args)
 								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
 	}
 
-	if (cagg)
-	{
-		/*
-		 * If this is an index creation for cagg, then we need to switch user as the current
-		 * user might not have permissions on the internal schema where cagg index will be
-		 * created.
-		 */
-		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
-	}
-
-	/* CREATE INDEX on the root table of the hypertable */
+	/*
+	 * CREATE INDEX on the root table of the hypertable. The owner of a
+	 * continuous aggregate usually has no CREATE permission on the schema
+	 * of the materialization hypertable.
+	 */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
-														   info.extended_options.multitransaction);
-
-	if (cagg)
-	{
-		RESTORE_USER(uid, saved_uid, sec_ctx);
-	}
+														   info.extended_options.multitransaction,
+														   cagg == NULL);
 
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
@@ -3927,14 +3967,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* create chunk indexes using the same transaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
-		CatalogSecurityContext sec_ctx;
 		List *chunks;
-		/*
-		 * Change user since chunk's are typically located in an internal
-		 * schema and chunk indexes require metadata changes. In the
-		 * multi-transaction case, we do this once per chunk.
-		 */
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 		pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
@@ -3943,7 +3976,6 @@ process_index_start(ProcessUtilityArgs *args)
 		/* Recurse to each chunk and create a corresponding index. */
 		foreach_chunk(ht, process_index_chunk, &info, false);
 
-		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
 
 		pgstat_progress_end_command();
@@ -4471,10 +4503,7 @@ process_create_table_end(Node *parsetree)
 										  InvalidOid		 /* partitioning func */
 			);
 
-		CatalogSecurityContext sec_ctx;
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-		ts_catalog_restore_user(&sec_ctx);
 
 		if (ts_hypertable_create_from_info(table_relid,
 										   ht_id,
@@ -6465,17 +6494,11 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 
 	if (ht != NULL)
 	{
-		CatalogSecurityContext sec_ctx;
-
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 		/* Recurse to each chunk and drop the corresponding constraint */
 		foreach_chunk(ht,
 					  process_drop_constraint_on_chunk,
 					  (void *) constraint->constraint_name,
 					  false);
-
-		ts_catalog_restore_user(&sec_ctx);
 	}
 }
 

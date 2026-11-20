@@ -441,3 +441,32 @@ DROP MATERIALIZED VIEW metrics_cagg;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
 DROP TABLE metrics;
 DROP FUNCTION record_refresh_user(INT);
+-- CREATE INDEX on a continuous aggregate must require ownership of the CAgg.
+-- The database owner can configure CAggs it does not own, but must not be
+-- able to create an index on one.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE idx_perm_metrics (t TIMESTAMPTZ NOT NULL, v INT);
+SELECT FROM create_hypertable('idx_perm_metrics', 't', chunk_time_interval => interval '1 day');
+--
+
+ALTER TABLE idx_perm_metrics OWNER TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE MATERIALIZED VIEW idx_perm_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 hour', t) AS bucket, count(*) AS cnt
+FROM idx_perm_metrics GROUP BY bucket WITH NO DATA;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+CREATE INDEX idx_perm_dbowner ON idx_perm_cagg (bucket);
+ERROR:  must be owner of continuous aggregate "idx_perm_cagg"
+\set ON_ERROR_STOP 1
+-- The CAgg owner and a superuser can still create indexes on it.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE INDEX idx_perm_owner ON idx_perm_cagg (bucket);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE INDEX idx_perm_super ON idx_perm_cagg (cnt);
+DROP MATERIALIZED VIEW idx_perm_cagg;
+DROP TABLE idx_perm_metrics;
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;

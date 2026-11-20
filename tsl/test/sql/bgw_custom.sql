@@ -730,10 +730,13 @@ $$;
 -- Hold the lock so any worker running proc_that_blocks waits on it.
 SELECT pg_advisory_lock(8584);
 
+-- Stop the scheduler while the jobs are added. A running scheduler could
+-- start one of them before the workers are started below.
+SELECT _timescaledb_functions.stop_background_workers();
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_1 \gset
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_2 \gset
 
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 -- wait for both jobs to be picked up and blocked on the lock
 CALL wait_for_job_status(:job_id_1, 'Running');
 CALL wait_for_job_status(:job_id_2, 'Running');
@@ -787,8 +790,10 @@ SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS 
 SELECT ts_test_bgw_job_function_call_string(:job_func);
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 
--- Remove the procedure and let's check it errors out when we try to call the function that gets the proc name
-DROP PROCEDURE custom_proc(jobid int, args jsonb);
+-- Point the job at a procedure that does not exist (dropping the procedure
+-- is blocked while a job depends on it) and check that building the call
+-- string errors out.
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'custom_proc_missing' WHERE id = :job_proc;
 \set ON_ERROR_STOP 0
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 \set ON_ERROR_STOP 1
@@ -857,3 +862,25 @@ SELECT caller FROM check_caller_log;
 SELECT delete_job(:job_check_caller);
 DROP TABLE check_caller_log;
 DROP FUNCTION check_caller;
+
+-- Job doing transaction control cannot be run from a function or a transaction block
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE custom_log(job_id int, args jsonb, extra text, runner NAME DEFAULT CURRENT_ROLE);
+SELECT add_job('custom_proc2', '1h', config => '{"type":"procedure"}') AS job_commit \gset
+CREATE FUNCTION run_job_func(job_id int) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    CALL run_job(job_id);
+END
+$$;
+\set ON_ERROR_STOP 0
+SELECT run_job_func(:job_commit);
+BEGIN;
+CALL run_job(:job_commit);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM custom_log;
+CALL run_job(:job_commit);
+SELECT extra FROM custom_log ORDER BY extra;
+SELECT delete_job(:job_commit);
+DROP FUNCTION run_job_func;
+DROP TABLE custom_log;

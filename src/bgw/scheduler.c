@@ -449,10 +449,6 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 	}
 
 	Assert(sjob->handle != NULL);
-	if (bgw_register != NULL)
-	{
-		bgw_register(sjob->handle, scheduler_mctx);
-	}
 
 	status = WaitForBackgroundWorkerStartup(sjob->handle, &pid);
 	switch (status)
@@ -461,7 +457,14 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 			bgw_scheduler_on_postmaster_death();
 			break;
 		case BGWH_STARTED:
-			/* all good */
+			/*
+			 * Only pass the handle on once the worker has started. If it
+			 * already stopped, the handle is freed below.
+			 */
+			if (bgw_register != NULL)
+			{
+				bgw_register(sjob->handle, scheduler_mctx);
+			}
 			break;
 		case BGWH_STOPPED:
 			StartTransactionCommand();
@@ -861,15 +864,14 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 	pgstat_report_activity(STATE_RUNNING, NULL);
 
-	/* If we are restoring or upgrading, don't schedule anything. Just
-	 * exit. */
-	if (ts_guc_restoring || IsBinaryUpgrade)
+	/* If we are restoring, don't schedule anything. Just exit. */
+	if (ts_guc_restoring)
 	{
 		ereport(LOG,
 				errmsg("scheduler for database %u exiting with exit status %d",
 					   MyDatabaseId,
 					   ts_debug_bgw_scheduler_exit_status),
-				errdetail("the database is restoring or upgrading"));
+				errdetail("the database is restoring"));
 		terminate_all_jobs_and_release_workers();
 		goto scheduler_exit;
 	}

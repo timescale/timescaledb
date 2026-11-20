@@ -10,3 +10,5 @@ coverage:
       default:
         flags:
           - pr
+
+comment: false
