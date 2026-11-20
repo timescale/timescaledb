@@ -45,6 +45,12 @@ m = {
     "include": [],
 }
 
+# Some check are advisory and don't influence the summary, we run them in a
+# separate job so that the summary doesn't have to wait for them.
+m_advisory = {
+    "include": [],
+}
+
 # Ignored tests that are known to be flaky or have known issues.
 default_ignored_tests = {
     "bgw_db_scheduler",
@@ -197,16 +203,7 @@ m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG18_LATEST, "coverage": True}))
 
-# test building against PG19
-m["include"].append(
-    build_debug_config(
-        {
-            "pg": PG19_LATEST,
-            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
-            "pginstallcheck": True,
-        }
-    )
-)
+m["include"].append(build_debug_config({"pg": PG19_LATEST}))
 
 # Also test on ARM. The custom arm64 runner is only available in the
 # timescale/timescaledb repository.
@@ -218,6 +215,7 @@ if os.environ.get("GITHUB_REPOSITORY") == "timescale/timescaledb":
             {
                 "pg": PG18_LATEST,
                 "os": "timescaledb-runner-arm64",
+                "runner": "runs-on/fleet=linux-2cpu/env=ue1",
                 # We need to enable ARM crypto extensions to build the vectorized grouping
                 # code. The actual architecture for our ARM CI runner is reported as:
                 # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod
@@ -393,7 +391,7 @@ elif len(sys.argv) > 2:
         if to_run:
             random.shuffle(to_run)
             installcheck_args = f'TESTS="{" ".join(to_run)}"'
-            m["include"].append(
+            m_advisory["include"].append(
                 build_debug_config(
                     {
                         "coverage": False,
@@ -405,6 +403,10 @@ elif len(sys.argv) > 2:
                 )
             )
 
-# generate command to set github action variable
+# generate commands to set github action variables
 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
     print(str.format("matrix={0}", json.dumps(m, default=list)), file=output)
+    print(
+        str.format("matrix_advisory={0}", json.dumps(m_advisory, default=list)),
+        file=output,
+    )

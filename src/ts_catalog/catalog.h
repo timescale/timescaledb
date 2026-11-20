@@ -90,7 +90,6 @@ typedef struct TableIndexDef
 
 typedef enum InternalFunction
 {
-	DDL_ADD_CHUNK_CONSTRAINT,
 	DDL_CONSTRAINT_CLONE,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
@@ -1391,12 +1390,6 @@ typedef struct Catalog
 	bool initialized;
 } Catalog;
 
-typedef struct CatalogSecurityContext
-{
-	Oid saved_uid;
-	int saved_security_context;
-} CatalogSecurityContext;
-
 #define HYPERTABLE_STATUS_DEFAULT 0
 /* flag set when hypertable has an attached OSM chunk */
 #define HYPERTABLE_STATUS_OSM 1
@@ -1448,10 +1441,6 @@ extern TSDLLEXPORT int64 ts_catalog_table_next_seq_id(const Catalog *catalog, Ca
 extern Oid ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
 
 /* Functions that modify the actual catalog table on disk */
-extern TSDLLEXPORT bool ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info,
-															  CatalogSecurityContext *sec_ctx);
-extern TSDLLEXPORT void ts_catalog_restore_user(CatalogSecurityContext *sec_ctx);
-
 extern TSDLLEXPORT void ts_catalog_insert_only(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_insert(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values,

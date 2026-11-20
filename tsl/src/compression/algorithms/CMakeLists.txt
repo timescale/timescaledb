@@ -11,4 +11,5 @@ set(SOURCES
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
 
 add_subdirectory(fastlanes)
+add_subdirectory(common)
 add_subdirectory(aic)

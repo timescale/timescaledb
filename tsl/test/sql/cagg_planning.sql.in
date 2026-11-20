@@ -41,6 +41,11 @@ AS SELECT time_bucket('3 day', time), first(value, time), last(value, time), arr
 -- insert more data to be in real-time part of cagg
 INSERT INTO metrics SELECT '2020-01-01'::timestamptz + format('%s day', i::text)::interval, 'device 1', 'metric 1', i  FROM generate_series(10, 16, 1) g(i);
 
+-- cagg with ORDER BY in definition so sort group refs do not follow GROUP BY order
+CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=false)
+AS SELECT device, time_bucket('3 day', time), avg(value) FROM metrics GROUP BY device, 2 ORDER BY 2 WITH NO DATA;
+CALL refresh_continuous_aggregate('cagg4', NULL, '2020-01-10');
+
 \ir :TEST_QUERY_NAME
 
 \set ECHO none

@@ -22,7 +22,7 @@ SELECT create_hypertable('overlap_test_bigint', 'time', chunk_time_interval => 1
 
 CREATE OR REPLACE FUNCTION integer_now_overlap_test_bigint()
 RETURNS BIGINT LANGUAGE SQL STABLE AS
-$$ SELECT COALESCE(MAX(time), 0) FROM overlap_test_bigint $$;
+$$ SELECT COALESCE(MAX(time), 0) FROM public.overlap_test_bigint $$;
 SELECT set_integer_now_func('overlap_test_bigint', 'integer_now_overlap_test_bigint');
  set_integer_now_func 
 ----------------------

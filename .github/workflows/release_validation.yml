@@ -1,0 +1,43 @@
+# Validates that the release contains correct code for
+# upgrades and downgrades, pg upgrades, abi and abi snapshot.
+
+name: Release validation
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+      timescaledb-ref:
+        description: "TimescaleDB branch/ref; already validated."
+        required: true
+        type: string
+jobs:
+  update_and_downgrade:
+    name: Update and Downgrade
+    uses: timescale/timescaledb/.github/workflows/update-test.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
+
+  pg_upgrade:
+    name: pg_upgrade test
+    uses: timescale/timescaledb/.github/workflows/pg_upgrade-test.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
+
+  abi:
+    name: ABI Test
+    uses: timescale/timescaledb/.github/workflows/abi.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
+
+  abi-snapshot:
+    name: ABI Snapshot
+    uses: timescale/timescaledb/.github/workflows/snapshot-abi.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit

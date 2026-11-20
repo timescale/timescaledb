@@ -451,14 +451,20 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		RangeTblEntry *mat_rte = linitial_node(RangeTblEntry, rte->subquery->rtable);
 		RangeTblEntry *rt_rte = lsecond_node(RangeTblEntry, rte->subquery->rtable);
 
-		mat_rte->subquery->sortClause = list_copy(parse->sortClause);
-		rt_rte->subquery->sortClause = list_copy(parse->sortClause);
-
 		TargetEntry *mat_tle = list_nth(mat_rte->subquery->targetList, time_col - 1);
 		TargetEntry *rt_tle = list_nth(rt_rte->subquery->targetList, time_col - 1);
 
-		SortGroupClause *cagg_group = linitial(rt_rte->subquery->groupClause);
-		cagg_group = list_nth(rt_rte->subquery->groupClause, rt_tle->ressortgroupref - 1);
+		/* Skip pushdown if the time column is not part of the group clause */
+		if (rt_tle->ressortgroupref == 0)
+		{
+			continue;
+		}
+
+		mat_rte->subquery->sortClause = list_copy(parse->sortClause);
+		rt_rte->subquery->sortClause = list_copy(parse->sortClause);
+
+		SortGroupClause *cagg_group =
+			get_sortgroupref_clause(rt_tle->ressortgroupref, rt_rte->subquery->groupClause);
 		cagg_group->sortop = sort->sortop;
 		cagg_group->nulls_first = sort->nulls_first;
 #if PG18_GE

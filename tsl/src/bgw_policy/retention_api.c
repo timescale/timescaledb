@@ -72,7 +72,7 @@ policy_retention_get_drop_after_int(const Jsonb *config)
 	if (!found)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 	}
 
@@ -87,7 +87,7 @@ policy_retention_get_drop_after_interval(const Jsonb *config)
 	if (interval == NULL)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 	}
 
@@ -103,7 +103,7 @@ policy_retention_get_drop_created_before_interval(const Jsonb *config)
 	if (interval == NULL)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find %s in config for job",
 						POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE)));
 	}

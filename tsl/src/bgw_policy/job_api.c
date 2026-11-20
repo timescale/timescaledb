@@ -222,7 +222,7 @@ job_add(PG_FUNCTION_ARGS)
 		validate_check_signature(check);
 	}
 
-	ts_bgw_job_run_config_check(check, 0, config);
+	ts_bgw_job_run_config_check(check, 0, owner, config);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										schedule_interval,
@@ -308,7 +308,11 @@ job_run(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_permission_check(job, "run");
 
-	job_execute(job);
+	/* Transaction control is only allowed in a top-level CALL outside a transaction block */
+	bool atomic = !(fcinfo->context && IsA(fcinfo->context, CallContext) &&
+					!castNode(CallContext, fcinfo->context)->atomic);
+
+	job_execute_in_context(job, atomic);
 
 	PG_RETURN_VOID();
 }
@@ -399,6 +403,18 @@ job_alter(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_permission_check(job, "alter");
 
+	/* The background worker runs the check function as the job owner, so only the
+	 * job owner can change it */
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_CHECK_CONFIG) && !has_privs_of_role(GetUserId(), job->fd.owner))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("insufficient permissions to change the config check function of job %d",
+						job_id),
+				 errdetail("Only the owner of job %d can change its config check function.",
+						   job_id)));
+	}
+
 	if (!PG_ARGISNULL(ALTER_JOB_ARG_SCHEDULE_INTERVAL))
 	{
 		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(ALTER_JOB_ARG_SCHEDULE_INTERVAL);
@@ -460,7 +476,7 @@ job_alter(PG_FUNCTION_ARGS)
 						 errmsg("function with OID %d does not exist", check)));
 			}
 
-			if (object_aclcheck(ProcedureRelationId, check, GetUserId(), ACL_EXECUTE) !=
+			if (object_aclcheck(ProcedureRelationId, check, job->fd.owner, ACL_EXECUTE) !=
 				ACLCHECK_OK)
 			{
 				ereport(ERROR,
@@ -629,7 +645,8 @@ job_alter(PG_FUNCTION_ARGS)
 			/* last finish time plus schedule interval */
 			BgwJobStat *stat = ts_bgw_job_stat_find(job->fd.id);
 
-			if (stat != NULL)
+			/* Keep the wait stored after a crash */
+			if (stat != NULL && stat->fd.consecutive_crashes == 0)
 			{
 				next_start_calculated = DatumGetTimestampTz(
 					DirectFunctionCall2(timestamptz_pl_interval,

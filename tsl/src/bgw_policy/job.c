@@ -226,6 +226,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	PolicyReorderData policy;
 
 	policy_reorder_read_and_validate_config(config, &policy);
+	ts_hypertable_permissions_check(policy.hypertable->main_table_relid, GetUserId());
 
 	/* Find a chunk to reorder in the selected hypertable */
 	chunk_id = get_chunk_id_to_reorder(job_id, policy.hypertable);
@@ -247,9 +248,30 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	chunk = ts_chunk_get_by_id(chunk_id, false);
 	const char *schema_name = ts_chunk_get_schema_name(chunk);
 	const char *table_name = ts_chunk_get_table_name(chunk);
-	elog(DEBUG1, "reordering chunk %s.%s", schema_name, table_name);
-	reorder_chunk(chunk->fd.relid, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
-	elog(DEBUG1, "completed reordering chunk %s.%s", schema_name, table_name);
+
+	/*
+	 * A chunk owned by another role, e.g., an attached table, cannot be
+	 * reordered by the job owner. Record the run for it anyway so the policy
+	 * moves on to the next chunk instead of failing on this one every time.
+	 */
+	if (!ts_chunk_has_privs_of(chunk->fd.relid, GetUserId()))
+	{
+		ereport(WARNING,
+				(errmsg("skipping reorder of chunk \"%s.%s\", which is owned by another role",
+						schema_name,
+						table_name)));
+	}
+	else
+	{
+		elog(DEBUG1, "reordering chunk %s.%s", schema_name, table_name);
+		reorder_chunk(chunk->fd.relid,
+					  policy.index_relid,
+					  false,
+					  InvalidOid,
+					  InvalidOid,
+					  InvalidOid);
+		elog(DEBUG1, "completed reordering chunk %s.%s", schema_name, table_name);
+	}
 
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
@@ -404,6 +426,15 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	StringInfoData str;
 	initStringInfo(&str);
 	JsonbToCStringIndent(&str, &config->root, VARSIZE(config));
+
+	/* This is called via a public function, so check CAgg ownership before performing any work such
+	 * as calculating the refresh window, or moving the invalidation threshold. */
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(
+		policy_continuous_aggregate_get_mat_hypertable_id(config), true);
+	if (cagg != NULL)
+	{
+		ts_cagg_permissions_check(cagg->relid, GetUserId());
+	}
 
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
 	bool extend_last_bucket = !policy_refresh_cagg_check_if_last_policy(&policy_data);
@@ -716,24 +747,24 @@ job_execute_function(FuncExpr *funcexpr)
 }
 
 static void
-job_execute_procedure(FuncExpr *funcexpr)
+job_execute_procedure(FuncExpr *funcexpr, bool atomic)
 {
 	CallStmt *call = makeNode(CallStmt);
 	call->funcexpr = funcexpr;
 	DestReceiver *dest = CreateDestReceiver(DestNone);
 	/* we don't need to create proper param list cause we pass in all arguments as Const */
 	ParamListInfo params = makeParamList(0);
-	ExecuteCallStmt(call, params, false, dest);
+	ExecuteCallStmt(call, params, atomic, dest);
 }
 
 /*
  * Execute the job.
  *
  * This function can be called both from a portal and from a background
- * worker.
+ * worker. When atomic is true the job must not do transaction control.
  */
 bool
-job_execute(BgwJob *job)
+job_execute_in_context(BgwJob *job, bool atomic)
 {
 	Const *arg1, *arg2;
 	bool portal_created = false;
@@ -772,6 +803,7 @@ job_execute(BgwJob *job)
 		portal = CreatePortal("", true, true);
 		portal->visible = false;
 		portal->resowner = CurrentResourceOwner;
+		portal->status = PORTAL_ACTIVE;
 		ActivePortal = portal;
 		PortalContext = portal->portalContext;
 
@@ -847,7 +879,7 @@ job_execute(BgwJob *job)
 			job_execute_function(funcexpr);
 			break;
 		case PROKIND_PROCEDURE:
-			job_execute_procedure(funcexpr);
+			job_execute_procedure(funcexpr, atomic);
 			break;
 		default:
 			ereport(ERROR,
@@ -863,10 +895,17 @@ job_execute(BgwJob *job)
 			PopActiveSnapshot();
 		}
 		CommitTransactionCommand();
+		MarkPortalDone(portal);
 		PortalDrop(portal, false);
 		ActivePortal = NULL;
 		PortalContext = NULL;
 	}
 
 	return true;
+}
+
+bool
+job_execute(BgwJob *job)
+{
+	return job_execute_in_context(job, false);
 }
