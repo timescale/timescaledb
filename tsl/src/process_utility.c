@@ -166,6 +166,7 @@ granular_refresh_disable(Hypertable *ht)
  * Continuous aggregates opt in separately and share these settings.
  *
  *  To enable: All four options are required to enable it.
+ *  cagg_granular_refresh_start_offset = NULL leaves the window unbounded below.
  *  Update config options: Only start_offset and end_offset can be updated.
  *  To disable: cagg_enable_granular_refresh = false
  *
@@ -355,12 +356,25 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	Ensure(dim, "hypertable without open dimension");
 	Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
 
-	int64 start_offset =
+	bool start_is_null =
 		set_start_offset ?
-			parse_granular_refresh_offset(with_clause_options
-											  [AlterTableFlagGranularRefreshStartOffset],
-										  time_type) :
-			parse_stored_granular_refresh_offset(settings.granular_refresh_start_offset, time_type);
+			pg_strcasecmp(TextDatumGetCString(
+							  with_clause_options[AlterTableFlagGranularRefreshStartOffset].parsed),
+						  "null") == 0 :
+			settings.granular_refresh_start_offset == NULL;
+	int64 start_offset = PG_INT64_MAX;
+
+	if (!start_is_null)
+	{
+		start_offset =
+			set_start_offset ?
+				parse_granular_refresh_offset(with_clause_options
+												  [AlterTableFlagGranularRefreshStartOffset],
+											  time_type) :
+				parse_stored_granular_refresh_offset(settings.granular_refresh_start_offset,
+													 time_type);
+	}
+
 	int64 end_offset =
 		set_end_offset ?
 			parse_granular_refresh_offset(with_clause_options
@@ -372,7 +386,7 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	 * The refresh window is [now() - start_offset, now() - end_offset), so the
 	 * start offset must be the larger one, as in refresh policies.
 	 */
-	if (start_offset <= end_offset)
+	if (!start_is_null && start_offset <= end_offset)
 	{
 		/* Report the offsets the window was built from, which for anything left
 		 * out of the statement is the value already stored. */
@@ -402,7 +416,10 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	if (set_start_offset)
 	{
 		settings.granular_refresh_start_offset =
-			DatumGetTextPCopy(with_clause_options[AlterTableFlagGranularRefreshStartOffset].parsed);
+			start_is_null ?
+				NULL :
+				DatumGetTextPCopy(
+					with_clause_options[AlterTableFlagGranularRefreshStartOffset].parsed);
 	}
 
 	if (set_end_offset)
