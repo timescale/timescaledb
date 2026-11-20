@@ -125,16 +125,16 @@ WARNING:  function _timescaledb_internal.relation_size(regclass) is deprecated a
 
 SELECT _timescaledb_internal.restart_background_workers();
 WARNING:  function _timescaledb_internal.restart_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  must be superuser to restart background workers
+ERROR:  must be database owner to restart background workers
 SELECT _timescaledb_internal.show_chunk(0);
 WARNING:  function _timescaledb_internal.show_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
 SELECT _timescaledb_internal.start_background_workers();
 WARNING:  function _timescaledb_internal.start_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  must be superuser to start background workers
+ERROR:  must be database owner to start background workers
 SELECT _timescaledb_internal.stop_background_workers();
 WARNING:  function _timescaledb_internal.stop_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  must be superuser to stop background workers
+ERROR:  must be database owner to stop background workers
 SELECT _timescaledb_internal.subtract_integer_from_now(0,0);
 WARNING:  function _timescaledb_internal.subtract_integer_from_now(regclass,bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
@@ -196,7 +196,15 @@ CALL _timescaledb_internal.policy_retention(0,NULL);
 WARNING:  procedure _timescaledb_internal.policy_retention(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 CALL public.recompress_chunk(0);
 WARNING:  procedure public.recompress_chunk(regclass,boolean) is deprecated and the functionality is now included in public.compress_chunk. this compatibility function will be removed in a future version.
-ERROR:  invalid Oid
+ERROR:  invalid chunk argument given
+CALL convert_to_columnstore(0);
+ERROR:  invalid chunk argument given
+CALL convert_to_columnstore(NULL);
+ERROR:  invalid chunk argument given
+CALL convert_to_rowstore(0);
+ERROR:  invalid chunk argument given
+CALL convert_to_rowstore(NULL);
+ERROR:  invalid chunk argument given
 \set ON_ERROR_STOP 1
 -- tests for the cagg invalidation trigger on the deprecated schema
 CREATE TABLE sensor_data (

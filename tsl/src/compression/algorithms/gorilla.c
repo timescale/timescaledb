@@ -884,7 +884,10 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 		bit_array_iter_next_rev(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
 	num_xor_bits = simple8brle_decompression_iterator_try_next_reverse(&iter->num_bits_used);
 	CheckCompressedData(!num_xor_bits.is_done);
+	CheckCompressedData(num_xor_bits.val <= BITS_PER_BUCKET);
 	iter->prev_xor_bits_used = num_xor_bits.val;
+	/* more than 64 bits of data doesn't make sense */
+	CheckCompressedData(iter->prev_leading_zeroes + iter->prev_xor_bits_used <= BITS_PER_BUCKET);
 	iter->prev_val = iter->gorilla_data.header->last_value;
 
 	/* on reverse iteration the `last_value` in the header is critical for

@@ -17,28 +17,6 @@
 
 #define TS_INVALIDATION_SLOT_NAME_MAX (32)
 
-/*switch to ts user for _timescaledb_internal access */
-#define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
-	do                                                                                             \
-	{                                                                                              \
-		if ((schemaname) && strcmp(schemaname, INTERNAL_SCHEMA_NAME) == 0)                         \
-			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
-		else                                                                                       \
-			(newuid) = InvalidOid;                                                                 \
-		if (OidIsValid((newuid)))                                                                  \
-		{                                                                                          \
-			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
-			SetUserIdAndSecContext(newuid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);         \
-		}                                                                                          \
-	} while (0)
-
-#define RESTORE_USER(newuid, saved_uid, saved_secctx)                                              \
-	do                                                                                             \
-	{                                                                                              \
-		if (OidIsValid((newuid)))                                                                  \
-			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
-	} while (0);
-
 typedef enum ContinuousAggViewType
 {
 	ContinuousAggUserView = 0,

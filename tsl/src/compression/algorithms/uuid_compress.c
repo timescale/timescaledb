@@ -631,7 +631,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	old_context = MemoryContextSwitchTo(dest_mctx);
 
 	/* Make sure we use a 128bit aligned buffer */
-	char *unaligned = (char *) palloc((total_elements * sizeof(UuidType)) + 15);
+	char *unaligned = (char *) palloc0((total_elements * sizeof(UuidType)) + 15);
 	UuidType *uuid_buffer = (UuidType *) TYPEALIGN(16, unaligned);
 
 	/*

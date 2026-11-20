@@ -9,8 +9,9 @@
 #include "aic/aic_analyze.h"
 #include "aic/aic_blocks.h"
 #include "aic/aic_internal.h"
-#include "aic/aic_utils.h"
-#include "aic/aic_validity.h"
+#include "common/dict.h"
+#include "common/utils.h"
+#include "common/validity.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "fastlanes/fastlanes.h"
@@ -149,7 +150,7 @@ aic_compressor_assemble(AICCompressorImpl *impl)
 	size_t total_elements = impl->n_valid_elements + impl->n_nulls;
 
 	/* the null size cap is the upper bound, the encoder reports the size it actually used. */
-	size_t nulls_size_cap = impl->n_nulls > 0 ? aic_validity_size_cap(total_elements) : 0;
+	size_t nulls_size_cap = impl->n_nulls > 0 ? cm_validity_size_cap(total_elements) : 0;
 	size_t block_size = aic_total_block_size(impl->first_block);
 	uint8 *compressed = (uint8 *) palloc(sizeof(AICCompressed) + block_size + nulls_size_cap);
 	AICCompressed *aic_compressed = (AICCompressed *) compressed;
@@ -157,7 +158,7 @@ aic_compressor_assemble(AICCompressorImpl *impl)
 	/* prepare the compressed header */
 	aic_compressed->compression_algorithm = COMPRESSION_ALGORITHM_AIC;
 	uint8 width_flag = aic_elem_width_to_global_flag(impl->elem_width);
-	aic_compressed->flags = AIC_FLAG_NULL_RAW | width_flag;
+	aic_compressed->flags = AIC_FLAG_VALIDITY_RAW | width_flag;
 	aic_compressed->valid_count = impl->n_valid_elements;
 	aic_compressed->null_count = impl->n_nulls;
 	aic_compressed->num_blocks = impl->n_blocks;
@@ -182,7 +183,7 @@ aic_compressor_assemble(AICCompressorImpl *impl)
 		}
 
 		/* the result flags tell the bitmap format */
-		AICGlobalFlags flags = aic_validity_bitmap_encode(impl->null_bitmap,
+		CmValidityFlags flags = cm_validity_bitmap_encode(impl->null_bitmap,
 														  total_elements,
 														  impl->n_nulls,
 														  cursor,
@@ -190,7 +191,7 @@ aic_compressor_assemble(AICCompressorImpl *impl)
 
 		Assert(nulls_size > 0);
 		Assert(nulls_size < nulls_size_cap);
-		aic_compressed->flags |= flags;
+		aic_compressed->flags |= (int) flags;
 		cursor += nulls_size;
 	}
 
