@@ -455,7 +455,8 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		snprintf(new_check_name, NAMEDATALEN, "constraint_%d", new_slice->fd.id);
 		const Dimension *dim =
 			ts_hyperspace_get_dimension_by_id(ht->space, old_slice->fd.dimension_id);
-		Constraint *constr = ts_chunk_constraint_dimensional_create(dim, new_slice, new_check_name);
+		Constraint *constr =
+			ts_chunk_constraint_dimensional_create(chunk->fd.relid, dim, new_slice, new_check_name);
 		if (constr != NULL)
 		{
 			new_constraints = lappend(new_constraints, constr);
