@@ -4,17 +4,21 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+-- A new launcher briefly starts schedulers in databases without the
+-- extension, so only show the launcher and this database.
 CREATE VIEW tsdb_bgw AS
        SELECT datname, pid, backend_type, application_name
          FROM pg_stat_activity
         WHERE backend_type LIKE '%TimescaleDB%'
+          AND (datname IS NULL OR datname = current_database())
      ORDER BY datname, backend_type, application_name;
 
 -- The procedures below poll pg_stat_activity in a single transaction,
 -- which keeps returning the first snapshot it took unless it is cleared.
 
 -- Wait for at least one background worker matching pattern to have
--- started. Checks every poll_time seconds.
+-- started. Checks every poll_time seconds. A worker shows its registered
+-- name until it sets its application name, so wait for that as well.
 CREATE PROCEDURE wait_for_some_started(
        poll_time double precision,
        timeout double precision,
@@ -26,7 +30,8 @@ BEGIN
     FOR i IN 0..(timeout / poll_time)::int
     LOOP
         PERFORM pg_stat_clear_snapshot();
-        SELECT count(*) INTO backend_count FROM tsdb_bgw WHERE backend_type LIKE pattern;
+        SELECT count(*) INTO backend_count FROM tsdb_bgw
+         WHERE backend_type LIKE pattern AND application_name = backend_type;
         IF backend_count > 0 THEN
             RETURN;
         END IF;
@@ -67,7 +72,8 @@ BEGIN
         PERFORM pg_stat_clear_snapshot();
         IF NOT EXISTS (SELECT FROM tsdb_bgw WHERE pid = old_pid) AND
            EXISTS (SELECT FROM tsdb_bgw WHERE datname = current_database()
-                   AND backend_type LIKE '%Scheduler%') THEN
+                   AND backend_type LIKE '%Scheduler%'
+                   AND application_name = backend_type) THEN
             RETURN;
         END IF;
         PERFORM pg_sleep(0.1);
