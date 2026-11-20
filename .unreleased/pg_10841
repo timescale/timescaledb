@@ -1,0 +1,1 @@
+Fixes: #10841 Respect enable_tiered_reads in DeferredChunkAppend
