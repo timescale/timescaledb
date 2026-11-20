@@ -83,6 +83,7 @@ SELECT * FROM test1 ORDER BY time DESC;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -98,6 +99,7 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -114,6 +116,7 @@ SELECT * FROM test1 ORDER BY time ASC;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -130,6 +133,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -145,6 +149,7 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -160,6 +165,7 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NU
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -176,6 +182,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -192,6 +199,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -208,6 +216,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC N
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -223,6 +232,7 @@ SELECT * FROM test2 ORDER BY time ASC;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=4.00 loops=1)
    Output: _hyper_2_2_chunk."time", _hyper_2_2_chunk.x1, _hyper_2_2_chunk.x2, _hyper_2_2_chunk.x3, _hyper_2_2_chunk.x4, _hyper_2_2_chunk.x5
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.x1, _hyper_2_2_chunk_compressed.x2, _hyper_2_2_chunk_compressed.x5, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_time, _hyper_2_2_chunk_compressed._ts_meta_v2_last_time, _hyper_2_2_chunk_compressed."time", _hyper_2_2_chunk_compressed._ts_meta_min_2, _hyper_2_2_chunk_compressed._ts_meta_max_2, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x3, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x3, _hyper_2_2_chunk_compressed.x3, _hyper_2_2_chunk_compressed._ts_meta_min_3, _hyper_2_2_chunk_compressed._ts_meta_max_3, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x4, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x4, _hyper_2_2_chunk_compressed.x4
@@ -238,6 +248,7 @@ SELECT * FROM test2 ORDER BY time ASC, x3 DESC;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=4.00 loops=1)
    Output: _hyper_2_2_chunk."time", _hyper_2_2_chunk.x1, _hyper_2_2_chunk.x2, _hyper_2_2_chunk.x3, _hyper_2_2_chunk.x4, _hyper_2_2_chunk.x5
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.x1, _hyper_2_2_chunk_compressed.x2, _hyper_2_2_chunk_compressed.x5, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_time, _hyper_2_2_chunk_compressed._ts_meta_v2_last_time, _hyper_2_2_chunk_compressed."time", _hyper_2_2_chunk_compressed._ts_meta_min_2, _hyper_2_2_chunk_compressed._ts_meta_max_2, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x3, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x3, _hyper_2_2_chunk_compressed.x3, _hyper_2_2_chunk_compressed._ts_meta_min_3, _hyper_2_2_chunk_compressed._ts_meta_max_3, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x4, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x4, _hyper_2_2_chunk_compressed.x4
@@ -253,6 +264,7 @@ SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=4.00 loops=1)
    Output: _hyper_2_2_chunk."time", _hyper_2_2_chunk.x1, _hyper_2_2_chunk.x2, _hyper_2_2_chunk.x3, _hyper_2_2_chunk.x4, _hyper_2_2_chunk.x5
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.x1, _hyper_2_2_chunk_compressed.x2, _hyper_2_2_chunk_compressed.x5, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_time, _hyper_2_2_chunk_compressed._ts_meta_v2_last_time, _hyper_2_2_chunk_compressed."time", _hyper_2_2_chunk_compressed._ts_meta_min_2, _hyper_2_2_chunk_compressed._ts_meta_max_2, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x3, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x3, _hyper_2_2_chunk_compressed.x3, _hyper_2_2_chunk_compressed._ts_meta_min_3, _hyper_2_2_chunk_compressed._ts_meta_max_3, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x4, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x4, _hyper_2_2_chunk_compressed.x4
@@ -269,6 +281,7 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
    Output: _hyper_2_2_chunk."time", _hyper_2_2_chunk.x1, _hyper_2_2_chunk.x2, _hyper_2_2_chunk.x3, _hyper_2_2_chunk.x4, _hyper_2_2_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.x1, _hyper_2_2_chunk_compressed.x2, _hyper_2_2_chunk_compressed.x5, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_time, _hyper_2_2_chunk_compressed._ts_meta_v2_last_time, _hyper_2_2_chunk_compressed."time", _hyper_2_2_chunk_compressed._ts_meta_min_2, _hyper_2_2_chunk_compressed._ts_meta_max_2, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x3, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x3, _hyper_2_2_chunk_compressed.x3, _hyper_2_2_chunk_compressed._ts_meta_min_3, _hyper_2_2_chunk_compressed._ts_meta_max_3, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x4, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x4, _hyper_2_2_chunk_compressed.x4
@@ -285,6 +298,7 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
    Output: _hyper_2_2_chunk."time", _hyper_2_2_chunk.x1, _hyper_2_2_chunk.x2, _hyper_2_2_chunk.x3, _hyper_2_2_chunk.x4, _hyper_2_2_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.x1, _hyper_2_2_chunk_compressed.x2, _hyper_2_2_chunk_compressed.x5, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_time, _hyper_2_2_chunk_compressed._ts_meta_v2_last_time, _hyper_2_2_chunk_compressed."time", _hyper_2_2_chunk_compressed._ts_meta_min_2, _hyper_2_2_chunk_compressed._ts_meta_max_2, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x3, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x3, _hyper_2_2_chunk_compressed.x3, _hyper_2_2_chunk_compressed._ts_meta_min_3, _hyper_2_2_chunk_compressed._ts_meta_max_3, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x4, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x4, _hyper_2_2_chunk_compressed.x4
@@ -301,6 +315,7 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS 
    Output: _hyper_2_2_chunk."time", _hyper_2_2_chunk.x1, _hyper_2_2_chunk.x2, _hyper_2_2_chunk.x3, _hyper_2_2_chunk.x4, _hyper_2_2_chunk.x5
    Batch Sorted Merge: true
    Reverse: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.x1, _hyper_2_2_chunk_compressed.x2, _hyper_2_2_chunk_compressed.x5, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_time, _hyper_2_2_chunk_compressed._ts_meta_v2_last_time, _hyper_2_2_chunk_compressed."time", _hyper_2_2_chunk_compressed._ts_meta_min_2, _hyper_2_2_chunk_compressed._ts_meta_max_2, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x3, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x3, _hyper_2_2_chunk_compressed.x3, _hyper_2_2_chunk_compressed._ts_meta_min_3, _hyper_2_2_chunk_compressed._ts_meta_max_3, _hyper_2_2_chunk_compressed._ts_meta_v2_first_x4, _hyper_2_2_chunk_compressed._ts_meta_v2_last_x4, _hyper_2_2_chunk_compressed.x4
@@ -497,6 +512,7 @@ SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 0)
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=3.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -514,6 +530,7 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=0.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -532,6 +549,7 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=0.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -550,6 +568,7 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=0.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -568,6 +587,7 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4;
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=0.00 loops=1)
          Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
@@ -746,6 +766,7 @@ EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three,
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2
          Batch Sorted Merge: true
+         First Row From Metadata: true
          ->  Sort
                Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
                Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
@@ -768,6 +789,7 @@ EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three,
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk.x2, _hyper_1_1_chunk."time"
          Batch Sorted Merge: true
+         First Row From Metadata: true
          ->  Sort
                Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.x1, _hyper_1_1_chunk_compressed.x2, _hyper_1_1_chunk_compressed.x5, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x3, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x3, _hyper_1_1_chunk_compressed.x3, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x4, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x4, _hyper_1_1_chunk_compressed.x4
                Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
@@ -1196,6 +1218,7 @@ SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_10_chunk (actual rows=11800.00 loops=1)
    Output: _hyper_5_10_chunk."time", _hyper_5_10_chunk.segment_by, _hyper_5_10_chunk.x1
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=100.00 loops=1)
          Output: _hyper_5_10_chunk_compressed._ts_meta_count, _hyper_5_10_chunk_compressed.segment_by, _hyper_5_10_chunk_compressed._ts_meta_min_1, _hyper_5_10_chunk_compressed._ts_meta_max_1, _hyper_5_10_chunk_compressed._ts_meta_v2_first_time, _hyper_5_10_chunk_compressed._ts_meta_v2_last_time, _hyper_5_10_chunk_compressed."time", _hyper_5_10_chunk_compressed._ts_meta_min_2, _hyper_5_10_chunk_compressed._ts_meta_max_2, _hyper_5_10_chunk_compressed._ts_meta_v2_first_x1, _hyper_5_10_chunk_compressed._ts_meta_v2_last_x1, _hyper_5_10_chunk_compressed.x1
@@ -1256,6 +1279,7 @@ SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_b
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_10_chunk (actual rows=11564.00 loops=1)
    Output: _hyper_5_10_chunk."time", _hyper_5_10_chunk.segment_by, _hyper_5_10_chunk.x1
    Batch Sorted Merge: true
+   First Row From Metadata: true
    Bulk Decompression: false
    ->  Sort (actual rows=98.00 loops=1)
          Output: _hyper_5_10_chunk_compressed._ts_meta_count, _hyper_5_10_chunk_compressed.segment_by, _hyper_5_10_chunk_compressed._ts_meta_min_1, _hyper_5_10_chunk_compressed._ts_meta_max_1, _hyper_5_10_chunk_compressed._ts_meta_v2_first_time, _hyper_5_10_chunk_compressed._ts_meta_v2_last_time, _hyper_5_10_chunk_compressed."time", _hyper_5_10_chunk_compressed._ts_meta_min_2, _hyper_5_10_chunk_compressed._ts_meta_max_2, _hyper_5_10_chunk_compressed._ts_meta_v2_first_x1, _hyper_5_10_chunk_compressed._ts_meta_v2_last_x1, _hyper_5_10_chunk_compressed.x1
@@ -1486,6 +1510,7 @@ SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
                      Output: _hyper_7_12_chunk.dttm
                      Batch Sorted Merge: true
                      Reverse: true
+                     First Row From Metadata: true
                      Bulk Decompression: false
                      ->  Sort (actual rows=5.00 loops=1)
                            Output: _hyper_7_12_chunk_compressed._ts_meta_count, _hyper_7_12_chunk_compressed.otherid, _hyper_7_12_chunk_compressed.valuefk, _hyper_7_12_chunk_compressed.otherfk, _hyper_7_12_chunk_compressed.id, _hyper_7_12_chunk_compressed._ts_meta_min_1, _hyper_7_12_chunk_compressed._ts_meta_max_1, _hyper_7_12_chunk_compressed._ts_meta_v2_first_dttm, _hyper_7_12_chunk_compressed._ts_meta_v2_last_dttm, _hyper_7_12_chunk_compressed.dttm, _hyper_7_12_chunk_compressed.measure
