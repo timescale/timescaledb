@@ -1,0 +1,1 @@
+Fixes: #10909 ERROR: extParam set of initplan is empty" for nested uncorrelated subqueries over a hypertable.
