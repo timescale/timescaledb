@@ -1,0 +1,1 @@
+Fixes: #0000 Return text[] from get_segmentby_defaults and get_orderby_defaults and stop logging the chosen defaults
