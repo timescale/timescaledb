@@ -114,6 +114,7 @@ is_vector_type(Oid typeoid)
 		case INT4OID:
 		case INT8OID:
 		case TEXTOID:
+		case BYTEAOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 		case DATEOID:
@@ -467,7 +468,7 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		 * vectorized grouping support. It can use the serialized grouping
 		 * strategy.
 		 */
-		else if (single_grouping_var_type == TEXTOID)
+		else if (single_grouping_var_type == TEXTOID || single_grouping_var_type == BYTEAOID)
 		{
 			return VAGT_HashSingleText;
 		}
