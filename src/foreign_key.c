@@ -766,23 +766,15 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 	/* Become chunk owner so the ALTER TABLE in constraint_clone succeeds when
 	 * the calling user doesn't own the chunk. */
 	Oid owner = ts_rel_get_owner(chunk->fd.relid);
-	Oid saved_uid;
-	int sec_ctx;
+	TSSecurityContext secctx;
 
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
+	ts_security_context_enter(owner, 0, &secctx);
 	ts_process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
 						 ObjectIdGetDatum(parent_fk_oid),
 						 ObjectIdGetDatum(chunk->fd.relid));
 	ts_process_utility_set_expect_chunk_modification(false);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-	}
+	ts_security_context_exit(&secctx);
 	CommandCounterIncrement();
 }
 
@@ -989,8 +981,7 @@ ts_fk_referenced_check(PG_FUNCTION_ARGS)
 	 * Run the lookup as the referenced table's owner with RLS disabled, so it
 	 * ignores the caller's permissions and row security. Mirrors ri_PerformCheck.
 	 */
-	Oid save_userid;
-	int save_sec_context;
+	TSSecurityContext secctx;
 	Oid pkowner;
 	HeapTuple reltup = SearchSysCache1(RELOID, ObjectIdGetDatum(pk_relid));
 	if (!HeapTupleIsValid(reltup))
@@ -1005,9 +996,7 @@ ts_fk_referenced_check(PG_FUNCTION_ARGS)
 		elog(ERROR, "SPI_connect failed");
 	}
 
-	GetUserIdAndSecContext(&save_userid, &save_sec_context);
-	SetUserIdAndSecContext(pkowner,
-						   save_sec_context | SECURITY_LOCAL_USERID_CHANGE | SECURITY_NOFORCE_RLS);
+	ts_security_context_enter(pkowner, SECURITY_NOFORCE_RLS, &secctx);
 
 	int ret = SPI_execute_with_args(querybuf.data,
 									numfks,
@@ -1017,7 +1006,7 @@ ts_fk_referenced_check(PG_FUNCTION_ARGS)
 									false /* read_only */,
 									1 /* count */);
 
-	SetUserIdAndSecContext(save_userid, save_sec_context);
+	ts_security_context_exit(&secctx);
 
 	if (ret != SPI_OK_SELECT)
 	{

@@ -553,8 +553,7 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 	ObjectAddress root_trigger_addr;
 	List *chunks;
 	ListCell *lc;
-	int sec_ctx;
-	Oid saved_uid;
+	TSSecurityContext secctx;
 	Oid owner;
 
 	Assert(ht != NULL);
@@ -584,11 +583,7 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 	/* switch to the hypertable owner's role -- note that this logic must be the same as
 	 * `ts_trigger_create_all_on_chunk` */
 	owner = ts_rel_get_owner(ht->main_table_relid);
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
+	ts_security_context_enter(owner, 0, &secctx);
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
@@ -609,10 +604,7 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 		}
 	}
 
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-	}
+	ts_security_context_exit(&secctx);
 
 	return root_trigger_addr;
 }

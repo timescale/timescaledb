@@ -762,7 +762,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	 */
 
 	TSSecurityContext sctx;
-	ts_security_context_enter(ts_rel_get_owner(cagg->relid), &sctx);
+	ts_security_context_enter(ts_rel_get_owner(cagg->relid), 0, &sctx);
 
 	continuous_agg_refresh_init(&refresh,
 								cagg,

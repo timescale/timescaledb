@@ -153,7 +153,7 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner, Jsonb *config)
 	}
 
 	TSSecurityContext sctx;
-	ts_security_context_enter(owner, &sctx);
+	ts_security_context_enter(owner, 0, &sctx);
 
 	job_execute_function(funcexpr);
 
