@@ -1072,7 +1072,9 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				/* The aggregate should be a partial aggregate */
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
-				def->argument = castNode(TargetEntry, linitial(aggref->args))->expr;
+				Node *original_argument = (Node *) castNode(TargetEntry, linitial(aggref->args))->expr;
+				Node *constified_argument = estimate_expression_value(&root, original_argument);
+				def->argument = (Expr *) constified_argument;
 			}
 			else
 			{
@@ -1088,10 +1090,12 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* This is a grouping column. */
-
 			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
-			col->expr = tlentry->expr;
 			col->output_offset = i;
+
+			Node *original_expression = (Node *) tlentry->expr;
+			Node *constified_expression = estimate_expression_value(&root, original_expression);
+			col->expr = (Expr *) constified_expression;
 
 			TupleDesc tdesc = NULL;
 			Oid type = InvalidOid;
