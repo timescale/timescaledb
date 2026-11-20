@@ -33,6 +33,7 @@
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
+#include "debug_point.h"
 #include "expression_utils.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
@@ -1318,11 +1319,12 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 								const Chunk *chunk)
 {
 	/*
-	 * For UPDATE/DELETE commands, the executor decompresses and brings the rows into
-	 * the uncompressed chunk. Therefore, it's necessary to add the scan on the
-	 * uncompressed portion.
+	 * The chunk status is read with a different snapshot than the query execution, so
+	 * the uncompressed part can have visible rows even if the chunk looked
+	 * fully compressed. The GUC instructs to scan the uncompressed chunks anyway.
+	 * DML always needs this scan because it can decompress rows itself.
 	 */
-	bool add_uncompressed_part = ts_chunk_is_partial(chunk);
+	bool add_uncompressed_part = ts_guc_scan_uncompressed_chunks || ts_chunk_is_partial(chunk);
 	if (ts_chunk_is_compressed(chunk) && ts_cm_functions->decompress_target_segments &&
 		!add_uncompressed_part)
 	{
@@ -1341,6 +1343,8 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 			}
 		}
 	}
+
+	DEBUG_WAITPOINT("columnar_scan_uncompressed_part_decided");
 
 	CompressionInfo *compression_info = build_compressioninfo(root, ht, chunk, chunk_rel);
 

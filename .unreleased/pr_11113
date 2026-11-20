@@ -1,0 +1,1 @@
+Implements: #11113 Allow users to create NOT NULL constraints on CAGG materialization hypertables

@@ -35,7 +35,6 @@
 #include <utils/guc.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
-#include <utils/regproc.h>
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
@@ -1918,82 +1917,6 @@ default_fn_security_exit(const DefaultFnSecurityContext *ctx)
 }
 
 /*
- * The default functions are verified to return a single row.
- */
-static void
-ensure_single_row_result(Oid fnoid)
-{
-	if (SPI_processed != 1)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("function %s returned " UINT64_FORMAT " rows",
-						format_procedure_qualified(fnoid),
-						SPI_processed),
-				 errdetail("The default function must return exactly one row.")));
-	}
-}
-
-/*
- * Validate the segmentby columns returned by the default segmentby function.
- * The function is user-configurable, so nothing about its result can be trusted.
- */
-static ArrayType *
-validate_default_segmentby(const Hypertable *ht, Oid fnoid, ArrayType *columns)
-{
-	ArrayType *segmentby = NULL;
-	Datum datum;
-	bool isnull;
-
-	if (columns == NULL)
-	{
-		return NULL;
-	}
-
-	ArrayIterator it = array_create_iterator(columns, 0, NULL);
-	while (array_iterate(it, &datum, &isnull))
-	{
-		if (isnull)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid segmentby columns returned by function %s",
-							format_procedure_qualified(fnoid)),
-					 errdetail("Column names must not be NULL.")));
-		}
-
-		char *colname = TextDatumGetCString(datum);
-		AttrNumber attno = get_attnum(ht->main_table_relid, colname);
-
-		if (attno == InvalidAttrNumber)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("column \"%s\" does not exist", colname),
-					 errdetail("The column was returned by function %s.",
-							   format_procedure_qualified(fnoid))));
-		}
-
-		/* get normalized column name */
-		colname = get_attname(ht->main_table_relid, attno, false);
-
-		if (ts_array_is_member(segmentby, colname))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("duplicate column name \"%s\"", colname),
-					 errdetail("The column was returned by function %s.",
-							   format_procedure_qualified(fnoid))));
-		}
-
-		segmentby = ts_array_add_element_text(segmentby, colname);
-	}
-	array_free_iterator(it);
-
-	return segmentby;
-}
-
-/*
  * Get the default segment by value for a hypertable
  */
 ArrayType *
@@ -2009,15 +1932,6 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
 	int32 confidence = -1;
-	Oid default_segmentby_fn = ts_guc_default_segmentby_fn_oid();
-
-	if (!OidIsValid(default_segmentby_fn))
-	{
-		elog(LOG_SERVER_ONLY,
-			 "segment_by default: hypertable=\"%s\" columns=\"\" function: \"\" confidence=-1",
-			 get_rel_name(ht->main_table_relid));
-		return NULL;
-	}
 
 	TSSecurityContext secctx;
 	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), &secctx);
@@ -2029,9 +1943,7 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 					 " FROM jsonb_array_elements_text(seg_by->'columns') t(x))::text[], "
 					 " seg_by->>'message', "
 					 " (seg_by->>'confidence')::int "
-					 "FROM %s.%s(%d) seg_by",
-					 quote_identifier(get_namespace_name(get_func_namespace(default_segmentby_fn))),
-					 quote_identifier(get_func_name(default_segmentby_fn)),
+					 "FROM " FUNCTIONS_SCHEMA_NAME ".get_segmentby_defaults(%d) seg_by",
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -2048,8 +1960,6 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 				 (errmsg("could not get the default segment by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 	}
-
-	ensure_single_row_result(default_segmentby_fn);
 
 	old = MemoryContextSwitchTo(upper);
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
@@ -2085,17 +1995,14 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 	}
 
-	column_res = validate_default_segmentby(ht, default_segmentby_fn, column_res);
-
 	initStringInfo(&result);
 	ts_array_append_stringinfo(column_res, &result);
 
 	elog(LOG_SERVER_ONLY,
-		 "segment_by default: hypertable=\"%s\" columns=\"%s\" function: \"%s.%s\" confidence=%d",
+		 "segment_by default: hypertable=\"%s\" columns=\"%s\" function: \"" FUNCTIONS_SCHEMA_NAME
+		 ".get_segmentby_defaults\" confidence=%d",
 		 get_rel_name(ht->main_table_relid),
 		 result.data,
-		 get_namespace_name(get_func_namespace(default_segmentby_fn)),
-		 get_func_name(default_segmentby_fn),
 		 confidence);
 	pfree(result.data);
 	return column_res;
@@ -2121,18 +2028,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	Oid types[] = { TEXTARRAYOID };
 	Datum values[] = { PointerGetDatum(segmentby) };
 	char nulls[] = { segmentby == NULL ? 'n' : 'v' };
-	Oid orderby_fn = ts_guc_default_orderby_fn_oid();
-
-	if (!OidIsValid(orderby_fn))
-	{
-		/* fallback to original logic */
-		OrderBySettings obs = (OrderBySettings){ 0 };
-		obs = add_time_to_order_by_if_not_included(obs, segmentby, ht);
-		elog(LOG_SERVER_ONLY,
-			 "order_by default: hypertable=\"%s\" function=\"\" confidence=-1",
-			 get_rel_name(ht->main_table_relid));
-		return obs;
-	}
 
 	DefaultFnSecurityContext secctx;
 	default_fn_security_enter(ht, &secctx);
@@ -2145,9 +2040,8 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 					 "t(x))::text, "
 					 " seg_by->>'message', "
 					 " (seg_by->>'confidence')::int "
-					 "FROM %s.%s(%d, coalesce($1, array[]::text[])) seg_by",
-					 quote_identifier(get_namespace_name(get_func_namespace(orderby_fn))),
-					 quote_identifier(get_func_name(orderby_fn)),
+					 "FROM " FUNCTIONS_SCHEMA_NAME
+					 ".get_orderby_defaults(%d, coalesce($1, array[]::text[])) seg_by",
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -2169,8 +2063,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 				 (errmsg("could not get the default order by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 	}
-
-	ensure_single_row_result(orderby_fn);
 
 	old = MemoryContextSwitchTo(upper);
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
@@ -2216,11 +2108,10 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	}
 
 	elog(LOG_SERVER_ONLY,
-		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"%s.%s\" confidence=%d",
+		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"" FUNCTIONS_SCHEMA_NAME
+		 ".get_orderby_defaults\" confidence=%d",
 		 get_rel_name(ht->main_table_relid),
 		 orderby,
-		 get_namespace_name(get_func_namespace(orderby_fn)),
-		 get_func_name(orderby_fn),
 		 confidence);
 
 	if (*orderby == '\0')
@@ -2650,10 +2541,10 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 		{
 			continue;
 		}
-		/* don't add column if it already exists */
+		/* don't add column to this chunk if the chunk has the column already */
 		if (get_attnum(compressed_relid, orig_def->colname) != InvalidAttrNumber)
 		{
-			return;
+			continue;
 		}
 		ColumnDef *coldef = build_columndef_singlecolumn(orig_def->colname, coloid);
 		CompressionSettings *settings =

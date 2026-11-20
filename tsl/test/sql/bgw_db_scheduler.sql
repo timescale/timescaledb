@@ -402,8 +402,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
---But after the 5 min period the job is again run
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
+--But after the 5 min period the job is again run. Stop when the job's
+--max_runtime ends, so it does not run a second time.
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(399500);
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
@@ -578,6 +579,21 @@ BEGIN
 END
 $BODY$;
 
+-- The job logs before it records the end of the run, so wait for the stats too
+CREATE FUNCTION wait_for_job_successes(job INTEGER, successes INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	FOR i in 1..spins
+	LOOP
+	IF EXISTS (SELECT FROM _timescaledb_internal.bgw_job_stat WHERE job_id = job AND total_successes = successes) THEN
+		RETURN true;
+	END IF;
+	PERFORM pg_sleep(0.1);
+	END LOOP;
+	RETURN false;
+END
+$BODY$;
+
 select * from verify_refresh_correct();
 -- Should return the same table
 select * from verify_refresh_correct();
@@ -732,6 +748,176 @@ SELECT total_successes > 0 AS job_ran,
        last_finish <> '-infinity'::timestamptz AS last_finish_recovered,
        consecutive_crashes = 0 AS crash_counter_cleared
 FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :failover_job_id;
+
+--
+-- Test that the 5 minute wait after a crash does not start over when the
+-- scheduler reloads its job list during the wait.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+-- Altering this unscheduled job makes the scheduler reload its job list
+SELECT insert_job('test_reload_jobs', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS reload_job_id \gset
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '-infinity',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+
+SELECT ts_bgw_db_scheduler_test_run(400000);
+SELECT wait_for_timer_to_run(0);
+SELECT ts_bgw_params_reset_time(100000000, true);
+SELECT wait_for_timer_to_run(100000000);
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+SELECT ts_bgw_params_reset_time(200000000, true);
+SELECT wait_for_timer_to_run(200000000);
+-- Changing the crashed job itself should not restart the wait either
+SELECT schedule_interval FROM alter_job(:crash_job_id, schedule_interval => INTERVAL '200s');
+-- Not started yet
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+
+-- The wait ends at second 300, so the job runs then
+SELECT ts_bgw_params_reset_time(300000000, true);
+SELECT wait_for_job_1_to_run(1);
+SELECT wait_for_job_successes(:crash_job_id, 1);
+SELECT ts_bgw_params_reset_time(400000000, true);
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+
+--
+-- Test that a next_start written before the crash is ignored, but one set
+-- with alter_job during the wait is used.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+SELECT insert_job('test_reload_jobs', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS reload_job_id \gset
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+
+-- next_start at second 10 was written by the run that crashed
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '2000-01-01 00:00:10+00',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+
+SELECT ts_bgw_db_scheduler_test_run(400000);
+SELECT wait_for_timer_to_run(0);
+SELECT ts_bgw_params_reset_time(50000000, true);
+SELECT wait_for_timer_to_run(50000000);
+-- The reload must not pick up the next_start from the crashed run
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+SELECT ts_bgw_params_reset_time(100000000, true);
+SELECT wait_for_timer_to_run(100000000);
+-- Still waiting after the crash
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+
+SELECT next_start FROM alter_job(:crash_job_id, next_start => '2000-01-01 00:02:30+00');
+SELECT ts_bgw_params_reset_time(200000000, true);
+SELECT wait_for_job_1_to_run(1);
+SELECT wait_for_job_successes(:crash_job_id, 1);
+SELECT ts_bgw_params_reset_time(400000000, true);
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+
+--
+-- Test that a restarted scheduler keeps the wait stored after a crash.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '-infinity',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+
+-- The first scheduler reports the crash and stops at second 100
+SELECT ts_bgw_db_scheduler_test_run(100000);
+SELECT wait_for_timer_to_run(0);
+SELECT ts_bgw_params_reset_time(100000000, true);
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+-- The second scheduler waits until second 300, as the first one did
+SELECT ts_bgw_db_scheduler_test_run(400000);
+SELECT wait_for_timer_to_run(100000000);
+SELECT ts_bgw_params_reset_time(250000000, true);
+SELECT wait_for_timer_to_run(250000000);
+-- Not started yet
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+
+SELECT ts_bgw_params_reset_time(300000000, true);
+SELECT wait_for_job_1_to_run(1);
+SELECT wait_for_job_successes(:crash_job_id, 1);
+SELECT ts_bgw_params_reset_time(500000000, true);
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+
+--
+-- Test that a next_start set with alter_job during the wait is kept after a
+-- scheduler restart.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '-infinity',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+
+SELECT ts_bgw_db_scheduler_test_run(100000);
+SELECT wait_for_timer_to_run(0);
+SELECT next_start FROM alter_job(:crash_job_id, next_start => '2000-01-01 00:02:30+00');
+SELECT ts_bgw_params_reset_time(100000000, true);
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+
+-- The second scheduler runs the job at second 150 instead of starting a new wait
+SELECT ts_bgw_db_scheduler_test_run(400000);
+SELECT wait_for_timer_to_run(100000000);
+SELECT ts_bgw_params_reset_time(150000000, true);
+SELECT wait_for_job_1_to_run(1);
+SELECT wait_for_job_successes(:crash_job_id, 1);
+SELECT ts_bgw_params_reset_time(500000000, true);
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
 
 --
 -- Test that jobs with the same fixed schedule start time are not starved when

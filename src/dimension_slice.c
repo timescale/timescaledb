@@ -190,16 +190,13 @@ static void
 dimension_slice_update_catalog_tuple(ItemPointer tid, FormData_dimension_slice *update)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	Catalog *catalog = ts_catalog_get();
 	Oid table = catalog_get_table_id(catalog, DIMENSION_SLICE);
 	Relation dimension_slice_rel = relation_open(table, RowExclusiveLock);
 
 	new_tuple = dimension_slice_formdata_make_tuple(update, dimension_slice_rel->rd_att);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(dimension_slice_rel, tid, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	relation_close(dimension_slice_rel, NoLock);
 }
@@ -215,14 +212,11 @@ dimension_slice_update_catalog_tuple(ItemPointer tid, FormData_dimension_slice *
 static void
 dimension_slice_delete_catalog_tuple(ItemPointer tid)
 {
-	CatalogSecurityContext sec_ctx;
 	Catalog *catalog = ts_catalog_get();
 	Oid table = catalog_get_table_id(catalog, DIMENSION_SLICE);
 	Relation dimension_slice_rel = relation_open(table, RowExclusiveLock);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(dimension_slice_rel, tid);
-	ts_catalog_restore_user(&sec_ctx);
 	relation_close(dimension_slice_rel, NoLock);
 }
 
@@ -744,8 +738,6 @@ ts_dimension_slice_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 static ScanTupleResult
 dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
-
 	if (ti->lockresult != TM_Ok)
 	{
 		if (IsolationUsesXactSnapshot())
@@ -766,9 +758,7 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 		}
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }

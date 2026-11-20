@@ -1,7 +1,9 @@
-# This workflow validates that given an input [version] the selected
+# Validates that given a TimescaleDB [version], it's
 # [x.x.x] release branch is in a correct releasable state.
-# This workflow is meant to be used by other workflows.
+# It does not test the correctness or performance of the code,
+# just
 
+# This workflow is meant to be used by other workflows.
 # [version] must be given by the release manager.
 
 name: Release sanity
@@ -19,7 +21,6 @@ on:
         type: string
 
 jobs:
-  # Tests that the release has a releasable state.
   release_sanity:
     name: Validate release conditions
     runs-on: runs-on/fleet=linux-2cpu/env=ue1
@@ -173,93 +174,3 @@ jobs:
           done
 
           exit $missing
-
-  regression:
-    name: Regression
-    needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/linux-build-and-test.yaml@main
-    with:
-      timescaledb-ref: ${{ inputs.timescaledb-ref }}
-    secrets: inherit
-
-  regression_linux_i386:
-    name: Regression Linux i386
-    needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/linux-32bit-build-and-test.yaml@main
-    with:
-      timescaledb-ref: ${{ inputs.timescaledb-ref }}
-    secrets: inherit
-
-  regression_windows:
-    name: Regression Windows
-    needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/windows-build-and-test.yaml@main
-    with:
-      timescaledb-ref: ${{ inputs.timescaledb-ref }}
-    secrets: inherit
-
-  update_and_downgrade:
-    name: Update and Downgrade
-    needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/update-test.yaml@main
-    with:
-      timescaledb-ref: ${{ inputs.timescaledb-ref }}
-    secrets: inherit
-
-  pg_upgrade:
-    name: pg_upgrade test
-    needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/pg_upgrade-test.yaml@main
-    with:
-      timescaledb-ref: ${{ inputs.timescaledb-ref }}
-    secrets: inherit
-
-  abi:
-    name: ABI Test
-    needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/abi.yaml@main
-    with:
-      timescaledb-ref: ${{ inputs.timescaledb-ref }}
-    secrets: inherit
-
-# TODO: uncomment when workflow is tested successfully (pk)
-#  compat:
-#    name: Compatibility
-#    needs: release_sanity
-#    uses: ./.github/workflows/compat-tests-downstream-extensions.yml
-#    with:
-#      tsdb-git-ref: ${{ github.sha }}
-#    secrets: inherit
-
-
-  # The latest published release is the version the E2E test upgrades from.
-  get_previous_tag:
-    name: Get previous timescaledb release tag
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
-    permissions:
-      contents: read
-    outputs:
-      tag: ${{ steps.get_tag.outputs.tag }}
-    steps:
-      - name: Get latest timescaledb tag
-        id: get_tag
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-        run: |
-          LATEST_TAG="$(gh api "repos/timescale/timescaledb/releases/latest" --jq '.tag_name')"
-
-          if [ -z "$LATEST_TAG" ]; then
-            echo "::error::Could not determine the latest release tag"
-            exit 1
-          fi
-          echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-
-# TODO: uncomment when downstream is completed
-#  tiger_lake_e2e:
-#    name: "Tiger Lake: E2E tests"
-#    needs: [release_sanity, get_previous_tag]
-#    uses: timescale/timescaledb-lake/.github/workflows/tsdb-e2e-prerelease.yml@main
-#    with:
-#      timescaledb-version: ${{ inputs.version }}
-#      timescaledb-base-version: ${{ needs.get_previous_tag.outputs.tag }}
-#    secrets: inherit

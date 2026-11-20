@@ -24,6 +24,7 @@ extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;
 extern bool ts_guc_enable_qual_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
+extern TSDLLEXPORT bool ts_guc_scan_uncompressed_chunks;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
@@ -192,8 +193,6 @@ typedef enum
 } FeatureFlagType;
 
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
-extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
-extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
 
 #define TARGET_COMPRESSED_BATCH_SIZE 1000
 
