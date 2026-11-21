@@ -15,18 +15,13 @@
 #include <executor/tuptable.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
-#include <optimizer/optimizer.h>
-#include <parser/parse_coerce.h>
-#include <parser/parse_collate.h>
-#include <parser/parse_expr.h>
-#include <parser/parse_relation.h>
-#include <rewrite/rewriteManip.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/datum.h>
 #include <utils/syscache.h>
 
 #include "chunk.h"
+#include "chunk_constraint.h"
 #include "dimension_slice.h"
 #include "guc.h"
 #include "hypertable_cache.h"
@@ -566,79 +561,41 @@ ts_chunk_column_stats_fill_dummy_dimension(FormData_chunk_column_stats *r, Oid m
 }
 
 /*
- * Create a CHECK constraint for a min/max range chunk_column_stats entry
+ * Create the min/max range checks for a chunk_column_stats entry
  */
-static Constraint *
-create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_table_relid,
-								  const char *name)
+static List *
+create_col_stats_checks(const Form_chunk_column_stats info, Oid chunk_relid, Index varno)
 {
-	Constraint *constr = NULL;
-	Node *rangedef;
-	ColumnRef *colref;
-	List *compexprs = NIL;
-	Oid col_type;
+	List *checks = NIL;
+	Oid coltype;
+	int32 coltypmod;
+	Oid colcollation;
 
-	if (info->range_start == PG_INT64_MIN && info->range_end == PG_INT64_MAX)
-	{
-		return NULL;
-	}
-
-	colref = makeNode(ColumnRef);
-	colref->fields = list_make1(makeString(pstrdup(NameStr(info->column_name))));
-	colref->location = -1;
-
-	/*
-	 * Get the column type for later converting the internal format
-	 * to string.
-	 */
-	const int ht_attno = get_attnum(main_table_relid, NameStr(info->column_name));
-	col_type = get_atttype(main_table_relid, ht_attno);
-
-	rangedef = (Node *) colref;
+	AttrNumber attno = get_attnum(chunk_relid, NameStr(info->column_name));
+	get_atttypetypmodcoll(chunk_relid, attno, &coltype, &coltypmod, &colcollation);
+	Node *var = (Node *) makeVar(varno, attno, coltype, coltypmod, colcollation, 0);
 
 	/* Elide range constraint for +INF or -INF */
 	if (info->range_start != PG_INT64_MIN)
 	{
-		A_Const *start_const = makeNode(A_Const);
-		memcpy(&start_const->val,
-			   makeString(ts_internal_to_time_string(info->range_start, col_type)),
-			   sizeof(start_const->val));
-		start_const->location = -1;
-		A_Expr *ge_expr = makeSimpleA_Expr(AEXPR_OP, ">=", rangedef, (Node *) start_const, -1);
-		compexprs = lappend(compexprs, ge_expr);
+		checks = lappend(checks,
+						 ts_chunk_constraint_bound_expr(var,
+														coltype,
+														info->range_start,
+														BTGreaterEqualStrategyNumber));
 	}
 
 	/* Use the inclusive max, the exclusive end can overflow or round down for dates */
 	if (info->range_end != PG_INT64_MAX)
 	{
-		A_Const *end_const = makeNode(A_Const);
-		memcpy(&end_const->val,
-			   makeString(ts_internal_to_time_string(info->range_end - 1, col_type)),
-			   sizeof(end_const->val));
-		end_const->location = -1;
-		A_Expr *le_expr = makeSimpleA_Expr(AEXPR_OP, "<=", rangedef, (Node *) end_const, -1);
-		compexprs = lappend(compexprs, le_expr);
+		checks = lappend(checks,
+						 ts_chunk_constraint_bound_expr(var,
+														coltype,
+														info->range_end - 1,
+														BTLessEqualStrategyNumber));
 	}
 
-	constr = makeNode(Constraint);
-	constr->contype = CONSTR_CHECK;
-	constr->conname = name ? pstrdup(name) : NULL;
-	constr->deferrable = false;
-	constr->skip_validation = true;
-	constr->initially_valid = true;
-
-	Assert(list_length(compexprs) >= 1);
-
-	if (list_length(compexprs) == 2)
-	{
-		constr->raw_expr = (Node *) makeBoolExpr(AND_EXPR, compexprs, -1);
-	}
-	else if (list_length(compexprs) == 1)
-	{
-		constr->raw_expr = linitial(compexprs);
-	}
-
-	return constr;
+	return checks;
 }
 
 /*
@@ -1491,7 +1448,8 @@ ts_chunk_column_stats_set_invalid(int32 hypertable_id, int32 chunk_id)
 
 typedef struct CheckList
 {
-	Oid main_table_relid;
+	Oid chunk_relid;
+	Index varno;
 	List *cclist;
 } CheckList;
 
@@ -1501,18 +1459,16 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	FormData_chunk_column_stats fd;
-	Constraint *constr;
 	CheckList *checklist = data;
 
 	fill_form_from_slot(ti->slot, &fd);
 
 	/* Invalid ranges no longer cover all rows in the chunk */
-	constr =
-		fd.valid ? create_col_stats_check_constraint(&fd, checklist->main_table_relid, NULL) : NULL;
-
-	if (constr)
+	if (fd.valid)
 	{
-		checklist->cclist = lappend(checklist->cclist, constr);
+		checklist->cclist =
+			list_concat(checklist->cclist,
+						create_col_stats_checks(&fd, checklist->chunk_relid, checklist->varno));
 	}
 
 	if (should_free)
@@ -1528,22 +1484,17 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
  * entries for each such entry.
  */
 List *
-ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid, Index varno)
+ts_chunk_column_stats_construct_check_constraints(Oid reloid, Index varno)
 {
 	FormData_chunk fd;
-	CheckList clist = { 0 };
-	ListCell *lc;
+	CheckList clist = { .chunk_relid = reloid, .varno = varno };
 	ScanKeyData scankey[2];
-	ParseState *pstate = NULL;
-	List *result = NIL;
 
 	/* check if it's not a chunk and return early in that case */
 	if (!ts_chunk_simple_scan_by_reloid(reloid, &fd, true))
 	{
 		return NIL;
 	}
-
-	clist.main_table_relid = ts_hypertable_id_to_relid(fd.hypertable_id, false);
 
 	Assert(fd.id != INVALID_CHUNK_ID);
 
@@ -1570,44 +1521,5 @@ ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 									 RowExclusiveLock,
 									 CurrentMemoryContext);
 
-	if (clist.cclist)
-	{
-		pstate = make_parsestate(NULL);
-		/* The overall query should be holding an appropriate lock already on this relation */
-		ParseNamespaceItem *nsitem =
-			addRangeTableEntryForRelation(pstate, relation, AccessShareLock, NULL, false, false);
-		addNSItemToQuery(pstate, nsitem, true, true, true);
-	}
-
-	foreach (lc, clist.cclist)
-	{
-		Node *expr;
-		Constraint *constr = lfirst(lc);
-
-		/* Transform raw parsetree to executable expression. */
-		expr = transformExpr(pstate, constr->raw_expr, EXPR_KIND_CHECK_CONSTRAINT);
-
-		/* Make sure it yields a boolean result. */
-		expr = coerce_to_boolean(pstate, expr, "CHECK");
-
-		/* Take care of collations. */
-		assign_expr_collations(pstate, expr);
-
-		expr = eval_const_expressions(NULL, expr);
-		expr = (Node *) canonicalize_qual((Expr *) expr, true);
-
-		/* Fix Vars to have the desired varno */
-		if (varno != 1)
-		{
-			ChangeVarNodes(expr, 1, varno, 0);
-		}
-
-		/*
-		 * Finally, convert to implicit-AND format (that is, a List) and
-		 * append the resulting item(s) to our output list.
-		 */
-		result = list_concat(result, make_ands_implicit((Expr *) expr));
-	}
-
-	return result;
+	return clist.cclist;
 }
