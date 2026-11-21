@@ -455,4 +455,54 @@ AND chunk_id IS NOT NULL;
 
 SELECT count(*) FROM chunk_skip_invalid WHERE ts > now() - interval '100 years' AND ranged = 1000;
 
+-- Test that chunks made from an existing table are not excluded by chunk
+-- skipping. They must get a stats entry, covering everything until compression
+-- calculates the real range, because the table already holds rows and can
+-- receive more.
+CREATE TABLE chunk_skip_existing(
+    ts timestamptz NOT NULL,
+    ranged int NOT NULL
+);
+SELECT * FROM create_hypertable('chunk_skip_existing', 'ts',
+                         chunk_time_interval => interval '7 days');
+SELECT * FROM enable_chunk_skipping('chunk_skip_existing', 'ranged');
+ALTER TABLE chunk_skip_existing SET (timescaledb.compress);
+
+INSERT INTO chunk_skip_existing VALUES ('2025-01-01 00:00+00', 1);
+
+CREATE TABLE chunk_skip_created (LIKE chunk_skip_existing INCLUDING ALL);
+INSERT INTO chunk_skip_created VALUES
+    ('2025-02-01 00:00+00', 10),
+    ('2025-02-02 00:00+00', 20);
+SELECT created FROM _timescaledb_functions.create_chunk('chunk_skip_existing',
+    '{"ts": ["2025-02-01 00:00+00", "2025-02-08 00:00+00"]}', NULL, NULL, 'chunk_skip_created');
+
+CREATE TABLE chunk_skip_attached (LIKE chunk_skip_existing INCLUDING ALL);
+INSERT INTO chunk_skip_attached VALUES ('2025-03-01 00:00+00', 30);
+CALL attach_chunk('chunk_skip_existing', 'chunk_skip_attached',
+    '{"ts": ["2025-03-01 00:00+00", "2025-03-08 00:00+00"]}');
+
+SELECT range_start, range_end, valid
+FROM _timescaledb_catalog.chunk_column_stats
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'chunk_skip_existing')
+AND chunk_id IS NOT NULL
+ORDER BY chunk_id;
+
+SELECT ranged FROM chunk_skip_existing WHERE ranged >= 10 ORDER BY ranged;
+
+-- Rows added after the chunk was created are found too
+INSERT INTO chunk_skip_existing VALUES ('2025-02-03 00:00+00', 1000);
+SELECT ranged FROM chunk_skip_existing WHERE ranged >= 1000;
+
+-- Compression replaces the entries with the calculated ranges
+SELECT count(compress_chunk(c)) FROM show_chunks('chunk_skip_existing') c;
+
+SELECT range_start, range_end, valid
+FROM _timescaledb_catalog.chunk_column_stats
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'chunk_skip_existing')
+AND chunk_id IS NOT NULL
+ORDER BY chunk_id;
+
+SELECT ranged FROM chunk_skip_existing WHERE ranged >= 10 ORDER BY ranged;
+
 RESET timescaledb.enable_chunk_skipping;
