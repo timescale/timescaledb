@@ -1,0 +1,1 @@
+Fixes: #11149 Fix sporadic "function returned NULL" error when inserting creates a chunk on a hypertable with row triggers
