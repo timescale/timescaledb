@@ -85,10 +85,13 @@ sub compress_and_count_toast_wal
 			/\n/,
 			$node->safe_psql(
 				'postgres', qq[
-		SELECT record_type, count(*)
+		-- PG18.6 reports some heap records with an INIT subtype, such as
+		-- MULTI_INSERT+INIT. Count those under their base record type so the
+		-- assertion remains stable across PostgreSQL versions.
+		SELECT split_part(record_type, '+', 1) AS record_type, count(*)
 		FROM pg_get_wal_block_info('$start_lsn', '$end_lsn', false)
 		WHERE relfilenode IN ($toast_filenodes)
-		GROUP BY record_type
+		GROUP BY split_part(record_type, '+', 1)
 		])))
 	{
 		my ($record_type, $count) = split(/\|/, $line);
