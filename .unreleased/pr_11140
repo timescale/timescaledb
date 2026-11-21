@@ -1,0 +1,1 @@
+Fixes: #11140 Fix "more than one bgw job stat found" error in alter_job

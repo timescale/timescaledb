@@ -36,3 +36,45 @@ count
 -----
     1
 
+
+starting permutation: s3_enable_stat_waitpoint s2_update_stat s1_alter_job s2_commit s3_release_stat_waitpoint
+?column?
+--------
+       1
+
+step s3_enable_stat_waitpoint: 
+    SELECT debug_waitpoint_enable('bgw_job_stat_find_during_scan');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s2_update_stat: 
+    BEGIN;
+    UPDATE _timescaledb_internal.bgw_job_stat s
+    SET total_runs = total_runs + 1
+    FROM _timescaledb_catalog.bgw_job j
+    WHERE j.id = s.job_id AND j.proc_name = 'test_job_proc_race';
+
+step s1_alter_job: 
+    SELECT count(*) FROM (
+        SELECT alter_job(job_id, scheduled => false)
+        FROM timescaledb_information.jobs
+        WHERE proc_name = 'test_job_proc_race'
+    ) x;
+ <waiting ...>
+step s2_commit: 
+    COMMIT;
+
+step s3_release_stat_waitpoint: 
+    SELECT debug_waitpoint_release('bgw_job_stat_find_during_scan');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_alter_job: <... completed>
+count
+-----
+    1
+
