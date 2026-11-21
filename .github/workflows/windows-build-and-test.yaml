@@ -106,7 +106,6 @@ jobs:
         compress_sort_transform
         compression_algos
         compression_uuid
-        direct_compress_copy
         merge_append_partially_compressed
         metadata
         telemetry
