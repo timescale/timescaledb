@@ -127,4 +127,6 @@ step "S4_drop_index" {
     DROP INDEX metrics_device_time_idx;
 }
 
-permutation S1_lock S3_vacuum S2_lock S1_commit S4_drop_index S2_commit
+# Once S2 commits, both commands can finish in either order. Delay only the
+# report of DROP INDEX completion, keeping the lock acquisition schedule intact.
+permutation S1_lock S3_vacuum S2_lock S1_commit S4_drop_index(S3_vacuum) S2_commit
