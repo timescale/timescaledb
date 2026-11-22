@@ -54,9 +54,17 @@ typedef struct CompressedColumnValues
 	void *by_ref_storage;
 
 	/*
+	 * The value for the scalar decompression type. It is kept here and not in
+	 * the buffers below, because a Datum can be wider than a pointer on 32-bit
+	 * platforms.
+	 */
+	Datum scalar_value;
+	bool scalar_isnull;
+
+	/*
 	 * The flattened source buffers for getting the decompressed datum.
 	 * Depending on decompression type, they are as follows:
-	 * scalar:          isnull, value
+	 * scalar:          unused, see scalar_value and scalar_isnull
 	 * iterator:        iterator
 	 * arrow fixed:     validity, value
 	 * arrow text:      validity, uint32* offsets, void* bodies

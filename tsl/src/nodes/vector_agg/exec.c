@@ -357,8 +357,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			 * The values of the scalar columns have to be stored once at
 			 * initialization, they won't be updated per-row.
 			 */
-			*arg_value.output_value = PointerGetDatum(arg_value.buffers[1]);
-			*arg_value.output_isnull = DatumGetBool(PointerGetDatum(arg_value.buffers[0]));
+			*arg_value.output_value = arg_value.scalar_value;
+			*arg_value.output_isnull = arg_value.scalar_isnull;
 
 			have_null_scalars = *arg_value.output_isnull || have_null_scalars;
 		}
@@ -374,8 +374,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	{
 		pfree(fcinfo);
 		pfree(arg_values);
-		return (CompressedColumnValues){ .decompression_type = DT_Scalar,
-										 .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
+		return (CompressedColumnValues){ .decompression_type = DT_Scalar, .scalar_isnull = true };
 	}
 
 	/*
@@ -584,9 +583,8 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 			 * For the scalar values, the value in Postgres Datum format must be
 			 * set once at initialization.
 			 */
-			*branch_values[i].output_value = PointerGetDatum(branch_values[i].buffers[1]);
-			*branch_values[i].output_isnull =
-				DatumGetBool(PointerGetDatum(branch_values[i].buffers[0]));
+			*branch_values[i].output_value = branch_values[i].scalar_value;
+			*branch_values[i].output_isnull = branch_values[i].scalar_isnull;
 		}
 	}
 
@@ -697,9 +695,8 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 		{
 			const Const *c = (const Const *) argument;
 			result = (CompressedColumnValues){ .decompression_type = DT_Scalar,
-											   .buffers[1] = DatumGetPointer(c->constvalue),
-											   .buffers[0] =
-												   DatumGetPointer(BoolGetDatum(c->constisnull)) };
+											   .scalar_value = c->constvalue,
+											   .scalar_isnull = c->constisnull };
 			break;
 		}
 		case T_Var:
@@ -1275,8 +1272,8 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		}
 		else if (single_qual_result.decompression_type == DT_Scalar)
 		{
-			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
-			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			const bool isnull = single_qual_result.scalar_isnull;
+			const bool value = DatumGetBool(single_qual_result.scalar_value);
 			some_rows_are_filtered_out_by_this_qual |= isnull;
 			some_rows_are_filtered_out_by_this_qual |= !value;
 		}
@@ -1316,8 +1313,8 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		{
 			/* The other option is scalar bool as we have checked above. */
 			Assert(single_qual_result.decompression_type == DT_Scalar);
-			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
-			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			const bool isnull = single_qual_result.scalar_isnull;
+			const bool value = DatumGetBool(single_qual_result.scalar_value);
 			if (isnull || !value)
 			{
 				memset(combined_qual_result, 0x0, bitmap_bytes);

@@ -85,7 +85,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 		if (column_values->decompression_type == DT_Scalar)
 		{
-			if (!DatumGetBool(PointerGetDatum(column_values->buffers[0])))
+			if (!column_values->scalar_isnull)
 			{
 				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->value_bytes > 0)
@@ -98,7 +98,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 					 * The default value always has a long varlena header, but
 					 * we are going to use short if it fits.
 					 */
-					const int32 value_bytes = VARSIZE_ANY_EXHDR(column_values->buffers[1]);
+					const int32 value_bytes =
+						VARSIZE_ANY_EXHDR(DatumGetPointer(column_values->scalar_value));
 					if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 					{
 						/* Short varlena, unaligned. */
@@ -212,8 +213,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 		if (column_values->decompression_type == DT_Scalar)
 		{
-			const bool is_valid = !DatumGetBool(PointerGetDatum(column_values->buffers[0]));
-			Datum value = PointerGetDatum(column_values->buffers[1]);
+			const bool is_valid = !column_values->scalar_isnull;
+			Datum value = column_values->scalar_value;
 			byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
 			if (is_valid)
 			{

@@ -2407,6 +2407,8 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 	{
 		decompressor->decompressed_is_nulls[output_index] = true;
 		column_values->decompression_type = DT_Scalar;
+		column_values->scalar_value = (Datum) 0;
+		column_values->scalar_isnull = true;
 		return;
 	}
 

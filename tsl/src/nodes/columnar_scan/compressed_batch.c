@@ -176,9 +176,9 @@ static void
 decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnull)
 {
 	column->decompression_type = DT_Scalar;
-	column->buffers[0] = DatumGetPointer(BoolGetDatum(isnull));
-	column->buffers[1] = DatumGetPointer(value);
-	column->by_ref_storage = DatumGetPointer(value);
+	column->scalar_value = value;
+	column->scalar_isnull = isnull;
+	column->by_ref_storage = NULL;
 
 	*column->output_isnull = isnull;
 	*column->output_value = value;
@@ -441,8 +441,8 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		 * above, so pull it from there.
 		 */
 		vector = make_single_value_arrow(column_description->typid,
-										 PointerGetDatum(column_values->buffers[1]),
-										 DatumGetBool(PointerGetDatum(column_values->buffers[0])));
+										 column_values->scalar_value,
+										 column_values->scalar_isnull);
 
 		/*
 		 * We start from an all-valid bitmap, because the predicate is
@@ -1165,7 +1165,11 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 		for (int i = 0; i < num_data_columns; i++)
 		{
 			CompressedColumnValues *column = &batch_state->compressed_columns[i];
-			if (column->by_ref_storage != NULL)
+			if (column->decompression_type == DT_Scalar)
+			{
+				*column->output_value = column->scalar_value;
+			}
+			else if (column->by_ref_storage != NULL)
 			{
 				*column->output_value = PointerGetDatum(column->by_ref_storage);
 			}

@@ -170,8 +170,8 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 		else
 		{
 			Assert(values.decompression_type == DT_Scalar);
-			arg_isnull = DatumGetBool(PointerGetDatum(values.buffers[0]));
-			arg_datum = PointerGetDatum(values.buffers[1]);
+			arg_isnull = values.scalar_isnull;
+			arg_datum = values.scalar_value;
 		}
 	}
 
