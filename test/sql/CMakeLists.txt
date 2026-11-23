@@ -108,6 +108,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     alter_table_memory.sql
     bgw_launcher.sql
     c_unit_tests.sql
+    cache_invalidate_uaf.sql
     copy_memory_usage.sql
     metadata.sql
     multi_transaction_index.sql
@@ -122,7 +123,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES telemetry.sql)
   endif()
 
-  list(APPEND SOLO_TESTS cache_invalidate_uaf.sql)
+  list(APPEND SOLO_TESTS cache_invalidate_uaf)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

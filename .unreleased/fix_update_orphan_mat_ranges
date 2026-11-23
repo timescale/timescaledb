@@ -1,1 +1,0 @@
-Fixes: #11094 Fix update to 2.28.0 failing with leftover materialization ranges of dropped continuous aggregates

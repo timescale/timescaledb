@@ -4016,6 +4016,61 @@ lock_referenced_tables(Oid table_relid)
 	}
 }
 
+/* TODO: rename older_newer, it is unclear that false means created_before/after */
+static Chunk *
+find_chunks_to_drop(Hypertable *ht, int64 older_than, int64 newer_than, Oid time_type, Oid arg_type,
+					bool older_newer, uint64 *num_chunks, ScanTupLock *tuplock)
+{
+	/*
+	 * For INTEGER type dimensions, we support querying using intervals or any
+	 * timestamp or date input. For such INTEGER dimensions, we get the chunks
+	 * using their creation time values.
+	 */
+	if ((IS_INTEGER_TYPE(time_type) && (arg_type == INTERVALOID || IS_TIMESTAMP_TYPE(arg_type))) ||
+		!older_newer)
+	{
+		return get_chunks_in_creation_time_range(ht,
+												 older_than,
+												 newer_than,
+												 CurrentMemoryContext,
+												 num_chunks,
+												 tuplock);
+	}
+
+	return get_chunks_in_time_range(ht,
+									older_than,
+									newer_than,
+									CurrentMemoryContext,
+									num_chunks,
+									tuplock);
+}
+
+/*
+ * Lock the tables of the chunks to drop. Sort by OID so concurrent drops
+ * lock them in the same order.
+ */
+static void
+lock_chunk_tables_for_drop(Chunk *chunks, uint64 num_chunks)
+{
+	if (num_chunks == 0)
+	{
+		return;
+	}
+
+	Oid *relids = palloc(sizeof(Oid) * num_chunks);
+
+	for (uint64 i = 0; i < num_chunks; i++)
+	{
+		relids[i] = chunks[i].fd.relid;
+	}
+	qsort(relids, num_chunks, sizeof(Oid), oid_cmp);
+	for (uint64 i = 0; i < num_chunks; i++)
+	{
+		LockRelationOid(relids[i], ExclusiveLock);
+	}
+	pfree(relids);
+}
+
 List *
 ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int32 log_level,
 						Oid time_type, Oid arg_type, bool older_newer)
@@ -4068,40 +4123,32 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	PG_TRY();
 	{
 		/*
-		 * For INTEGER type dimensions, we support querying using intervals or any
-		 * timestamp or date input. For such INTEGER dimensions, we get the chunks
-		 * using their creation time values.
+		 * Lock the chunk tables before their catalog rows. Compression and
+		 * other chunk operations lock the chunk table first and update the
+		 * catalog row later, so locking in the other order can deadlock with
+		 * them. Find the chunks without locking their rows, lock the tables,
+		 * and then find them again while locking the rows.
 		 */
-		if (IS_INTEGER_TYPE(time_type) && (arg_type == INTERVALOID || IS_TIMESTAMP_TYPE(arg_type)))
-		{
-			chunks = get_chunks_in_creation_time_range(ht,
-													   older_than,
-													   newer_than,
-													   CurrentMemoryContext,
-													   &num_chunks,
-													   &tuplock);
-		}
-		else
-		{
-			if (!older_newer)
-			{
-				chunks = get_chunks_in_creation_time_range(ht,
-														   older_than,
-														   newer_than,
-														   CurrentMemoryContext,
-														   &num_chunks,
-														   &tuplock);
-			}
-			else
-			{
-				chunks = get_chunks_in_time_range(ht,
-												  older_than,
-												  newer_than,
-												  CurrentMemoryContext,
-												  &num_chunks,
-												  &tuplock);
-			}
-		}
+		chunks = find_chunks_to_drop(ht,
+									 older_than,
+									 newer_than,
+									 time_type,
+									 arg_type,
+									 older_newer,
+									 &num_chunks,
+									 NULL);
+		lock_chunk_tables_for_drop(chunks, num_chunks);
+
+		chunks = find_chunks_to_drop(ht,
+									 older_than,
+									 newer_than,
+									 time_type,
+									 arg_type,
+									 older_newer,
+									 &num_chunks,
+									 &tuplock);
+		/* Chunks created in between are not locked yet */
+		lock_chunk_tables_for_drop(chunks, num_chunks);
 
 		for (uint64 i = 0; i < num_chunks; i++)
 		{
@@ -4129,20 +4176,13 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	if (has_continuous_aggs)
 	{
-		/* Exclusively lock all chunks, and invalidate the continuous
-		 * aggregates in the regions covered by the chunks. We do this in two
-		 * steps: first lock all the chunks and then invalidate the
-		 * regions. Since we are going to drop the chunks, there is no point
-		 * in allowing inserts into them.
-		 *
-		 * Locking prevents further modification of the dropped region during
-		 * this transaction, which allows moving the invalidation threshold
-		 * without having to worry about new invalidations while
-		 * refreshing. */
+		/* Invalidate the continuous aggregates in the regions covered by the
+		 * chunks. All chunks are already exclusively locked above, which
+		 * prevents further modification of the dropped region during this
+		 * transaction and allows moving the invalidation threshold without
+		 * having to worry about new invalidations while refreshing. */
 		for (uint64 i = 0; i < num_chunks; i++)
 		{
-			LockRelationOid(chunks[i].fd.relid, ExclusiveLock);
-
 			Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 				   chunks[i].cube->slices[0]->fd.dimension_id);
 		}

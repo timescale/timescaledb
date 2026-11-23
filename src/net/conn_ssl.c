@@ -61,6 +61,18 @@ ssl_ctx_create(void)
 			SSL_CTX_free(ctx);
 			return NULL;
 		}
+
+#if defined(WIN32) && (OPENSSL_VERSION_NUMBER >= 0x30200000L)
+		/*
+		 * OpenSSL on Windows usually has no CA files in its default paths,
+		 * so also trust the root certificates in the Windows store.
+		 */
+		if (!SSL_CTX_load_verify_store(ctx, "org.openssl.winstore://"))
+		{
+			ERR_clear_error();
+		}
+#endif
+
 		SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
 	}
 
