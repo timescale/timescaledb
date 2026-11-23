@@ -10,6 +10,10 @@ name: LLM fuzzer
     branches:
       - main
       - trigger/llm-fuzzer
+  pull_request:
+    paths:
+        - ".github/workflows/llm-fuzzer.yaml"
+        - ".github/workflows/llm-fuzzer/**"
 
 env:
   PG_SRC_DIR: "pgbuild"
@@ -210,14 +214,19 @@ jobs:
         EVENT_NAME: ${{ github.event_name }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         ORACLE_NAME: ${{ matrix.oracle }}
-      timeout-minutes: 60
+      timeout-minutes: 120
       run: |
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         export PGDATABASE=postgres
 
+        # The workflow can be terminated if the fuzzer runs very slow commands.
+        # Help it guess this by setting a smallish timeout on commands.
+        export BASH_DEFAULT_TIMEOUT_MS=30000
+        export BASH_MAX_TIMEOUT_MS=60000
+
         rc=0
         claude -p --output-format stream-json --verbose \
-          --max-budget-usd 15.00 --dangerously-skip-permissions \
+          --max-budget-usd 10.00 --dangerously-skip-permissions \
           --model claude-opus-4-6[1m] --effort high \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
