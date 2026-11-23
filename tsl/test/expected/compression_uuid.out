@@ -416,6 +416,104 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
 -------
      3
 
+EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+SELECT count(*) FROM uuid_part
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+         Output: (PARTIAL count(*))
+         Grouping Policy: all compressed batches
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_16_chunk (actual rows=3.00 loops=1)
+               Filter: ((_hyper_3_16_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
+               Bulk Decompression: true
+               ->  Index Scan using _hyper_3_16_chunk_compressed__ts_meta_v2_first_id__ts_meta__idx on _timescaledb_internal._hyper_3_16_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_3_16_chunk_compressed._ts_meta_count, _hyper_3_16_chunk_compressed._ts_meta_min_1, _hyper_3_16_chunk_compressed._ts_meta_max_1, _hyper_3_16_chunk_compressed._ts_meta_v2_first_id, _hyper_3_16_chunk_compressed._ts_meta_v2_last_id, _hyper_3_16_chunk_compressed.id, _hyper_3_16_chunk_compressed.value
+                     Index Cond: ((_hyper_3_16_chunk_compressed._ts_meta_v2_first_id < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk_compressed._ts_meta_v2_last_id >= '0198a23a-8180-7000-8000-000000000000'::uuid))
+
+SET timescaledb.enable_vectorized_aggregation TO OFF;
+EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+SELECT count(*) FROM uuid_part
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
+--- QUERY PLAN ---
+ Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_16_chunk (actual rows=3.00 loops=1)
+         Filter: ((_hyper_3_16_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
+         Bulk Decompression: true
+         ->  Index Scan using _hyper_3_16_chunk_compressed__ts_meta_v2_first_id__ts_meta__idx on _timescaledb_internal._hyper_3_16_chunk_compressed (actual rows=1.00 loops=1)
+               Output: _hyper_3_16_chunk_compressed._ts_meta_count, _hyper_3_16_chunk_compressed._ts_meta_min_1, _hyper_3_16_chunk_compressed._ts_meta_max_1, _hyper_3_16_chunk_compressed._ts_meta_v2_first_id, _hyper_3_16_chunk_compressed._ts_meta_v2_last_id, _hyper_3_16_chunk_compressed.id, _hyper_3_16_chunk_compressed.value
+               Index Cond: ((_hyper_3_16_chunk_compressed._ts_meta_v2_first_id < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk_compressed._ts_meta_v2_last_id >= '0198a23a-8180-7000-8000-000000000000'::uuid))
+
+SELECT count(*) FROM uuid_part
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
+ count 
+-------
+     3
+
+SET timescaledb.enable_bulk_decompression TO off;
+EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+SELECT count(*) FROM uuid_part
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
+--- QUERY PLAN ---
+ Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_16_chunk (actual rows=3.00 loops=1)
+         Filter: ((_hyper_3_16_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
+         Bulk Decompression: false
+         ->  Index Scan using _hyper_3_16_chunk_compressed__ts_meta_v2_first_id__ts_meta__idx on _timescaledb_internal._hyper_3_16_chunk_compressed (actual rows=1.00 loops=1)
+               Output: _hyper_3_16_chunk_compressed._ts_meta_count, _hyper_3_16_chunk_compressed._ts_meta_min_1, _hyper_3_16_chunk_compressed._ts_meta_max_1, _hyper_3_16_chunk_compressed._ts_meta_v2_first_id, _hyper_3_16_chunk_compressed._ts_meta_v2_last_id, _hyper_3_16_chunk_compressed.id, _hyper_3_16_chunk_compressed.value
+               Index Cond: ((_hyper_3_16_chunk_compressed._ts_meta_v2_first_id < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk_compressed._ts_meta_v2_last_id >= '0198a23a-8180-7000-8000-000000000000'::uuid))
+
+SELECT count(*) FROM uuid_part
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
+ count 
+-------
+     3
+
+SET timescaledb.enable_optimizations TO off;
+EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+SELECT count(*) FROM uuid_part
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Gather (actual rows=3.00 loops=1)
+         Output: (PARTIAL count(*))
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1.00 loops=3)
+               Output: PARTIAL count(*)
+               Worker 0:  actual rows=1.00 loops=1
+               Worker 1:  actual rows=1.00 loops=1
+               ->  Parallel Append (actual rows=1.00 loops=3)
+                     Worker 0:  actual rows=0.00 loops=1
+                     Worker 1:  actual rows=0.00 loops=1
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_16_chunk uuid_part_2 (actual rows=3.00 loops=1)
+                           Filter: ((uuid_part_2.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (uuid_part_2.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
+                           Bulk Decompression: false
+                           ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_16_chunk_compressed (actual rows=1.00 loops=1)
+                                 Output: _hyper_3_16_chunk_compressed._ts_meta_count, _hyper_3_16_chunk_compressed._ts_meta_min_1, _hyper_3_16_chunk_compressed._ts_meta_max_1, _hyper_3_16_chunk_compressed._ts_meta_v2_first_id, _hyper_3_16_chunk_compressed._ts_meta_v2_last_id, _hyper_3_16_chunk_compressed.id, _hyper_3_16_chunk_compressed.value
+                     ->  Parallel Seq Scan on public.uuid_part uuid_part_1 (actual rows=0.00 loops=1)
+                           Filter: ((uuid_part_1.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (uuid_part_1.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
+
+SELECT count(*) FROM uuid_part
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
+ count 
+-------
+     3
+
+RESET timescaledb.enable_bulk_decompression;
+RESET timescaledb.enable_optimizations;
+RESET timescaledb.enable_vectorized_aggregation;
 -- Check that chunk exclusion still works and that filters are pushed
 -- down to a min-max scan on the compressed chunk.
 EXPLAIN (verbose, buffers off, costs off)
