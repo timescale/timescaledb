@@ -129,10 +129,11 @@ $result = $node->safe_psql('postgres',
 );
 is($result, '', "verify no locks exist on the chunk");
 
-# Session 2: Insert rows into the chunk
-# This blocks until session 2 releases its locks
-$s2->query_until(
-	'', q{
+# Session 2: Insert rows into the chunk and keep its lock until ABORT. Wait
+# for the insert to finish, or session 1 can lock the chunk first and the
+# insert blocks behind it.
+$s2->query_safe(
+	q{
     INSERT INTO sensor_data VALUES
     ('2022-01-05 12:00:00', 100, 0.5, 25.5),
     ('2022-01-05 13:00:00', 101, 0.6, 26.5);
@@ -143,6 +144,11 @@ $s1->query_until(
 	'', q{
     SELECT compress_chunk(show_chunks('sensor_data'));
 });
+
+# Wait until session 1 is blocked by session 2 and waits at the waitpoint
+$node->poll_query_until('postgres',
+	"SELECT count(*) > 0 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted;"
+) or die "timed out waiting for session 1 to reach the waitpoint";
 
 # Session 2 immediately aborts, releasing the RowExclusiveLock on the table
 $s2->query_safe("ABORT");

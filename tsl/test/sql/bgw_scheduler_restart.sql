@@ -5,12 +5,13 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- A new launcher briefly starts schedulers in databases without the
--- extension, so only show the launcher and this database.
+-- extension, so only show the launcher and this database. A starting
+-- scheduler has no database yet, so don't match on a missing database.
 CREATE VIEW tsdb_bgw AS
        SELECT datname, pid, backend_type, application_name
          FROM pg_stat_activity
         WHERE backend_type LIKE '%TimescaleDB%'
-          AND (datname IS NULL OR datname = current_database())
+          AND (backend_type LIKE '%Launcher%' OR datname = current_database())
      ORDER BY datname, backend_type, application_name;
 
 -- The procedures below poll pg_stat_activity in a single transaction,
