@@ -572,3 +572,30 @@ CREATE UNIQUE INDEX ok_idx ON :CHUNK (device_id, ts);
 SELECT indisunique FROM pg_index WHERE indexrelid::regclass::text LIKE '%ok_idx';
 DROP TABLE i9720;
 
+
+-- Segmentby and orderby columns can be DOMAIN types, so block them from
+-- being dropped via DROP DOMAIN ... CASCADE
+CREATE DOMAIN segmentby_dom AS integer;
+CREATE DOMAIN orderby_dom AS integer;
+CREATE TABLE dom_compress(time timestamptz NOT NULL, device segmentby_dom, seq orderby_dom, value float)
+WITH (tsdb.hypertable, tsdb.segmentby = 'device', tsdb.orderby = 'seq, time');
+INSERT INTO dom_compress VALUES ('2025-01-01', 1, 1, 1.0), ('2025-01-01', 2, 2, 2.0);
+SELECT count(compress_chunk(ch)) FROM show_chunks('dom_compress') ch;
+
+\set ON_ERROR_STOP 0
+DROP DOMAIN segmentby_dom CASCADE;
+DROP DOMAIN orderby_dom CASCADE;
+\set ON_ERROR_STOP 1
+SELECT * FROM dom_compress ORDER BY device;
+
+-- Existing compressed chunks keep their old settings, so the column is still
+-- blocked after removing it from the hypertable settings
+ALTER TABLE dom_compress SET (timescaledb.compress_segmentby = '');
+\set ON_ERROR_STOP 0
+DROP DOMAIN segmentby_dom CASCADE;
+\set ON_ERROR_STOP 1
+SELECT * FROM dom_compress ORDER BY device;
+
+DROP TABLE dom_compress;
+DROP DOMAIN segmentby_dom;
+DROP DOMAIN orderby_dom;

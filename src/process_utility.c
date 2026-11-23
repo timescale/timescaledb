@@ -3436,16 +3436,6 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 		}
 	}
 
-	if (is_granular_refresh_tracking_column(ht, cmd->name))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-				 errmsg("cannot drop column \"%s\" used to set up granular refresh", cmd->name),
-				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
-						   "column.",
-						   get_rel_name(ht->main_table_relid))));
-	}
-
 	/* Delete dimension range entries on this column, if any.  */
 	ts_chunk_column_stats_drop(ht, cmd->name, &dropped);
 }
@@ -6598,6 +6588,78 @@ process_drop_view(EventTriggerDropView *dropped_view)
 }
 
 static void
+process_drop_table_column(EventTriggerDropObject *obj)
+{
+	EventTriggerDropTableColumn *column = (EventTriggerDropTableColumn *) obj;
+	Hypertable *ht;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE_COLUMN);
+
+	ht = ts_hypertable_get_by_name(column->schema, column->table);
+
+	if (ht == NULL)
+	{
+		return;
+	}
+
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
+		CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
+
+		if (settings && (ts_array_is_member(settings->fd.segmentby, column->column) ||
+						 ts_array_is_member(settings->fd.orderby, column->column)))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot drop orderby or segmentby column from a hypertable with "
+							"columnstore enabled")));
+		}
+
+		/* Chunks can be compressed with settings that differ from the hypertable's */
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
+		ListCell *lc;
+
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
+
+			if (!OidIsValid(compressed_relid))
+			{
+				continue;
+			}
+
+			CompressionSettings *chunk_settings =
+				ts_compression_settings_get_by_compress_relid(compressed_relid);
+
+			if (chunk_settings &&
+				(ts_array_is_member(chunk_settings->fd.segmentby, column->column) ||
+				 ts_array_is_member(chunk_settings->fd.orderby, column->column)))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot drop orderby or segmentby column from a chunk with "
+								"columnstore enabled")));
+			}
+		}
+	}
+
+	if (is_granular_refresh_tracking_column(ht, column->column))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot drop column \"%s\" used to set up granular refresh",
+						column->column),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   column->table),
+				 errhint("Disable granular refresh with ALTER TABLE ... SET "
+						 "(timescaledb.cagg_enable_granular_refresh = false) before dropping the "
+						 "column.")));
+	}
+}
+
+static void
 process_ddl_sql_drop(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	switch (obj->type)
@@ -6616,6 +6678,9 @@ process_ddl_sql_drop(EventTriggerDropObject *obj, DropBehavior behavior)
 			break;
 		case EVENT_TRIGGER_DROP_VIEW:
 			process_drop_view((EventTriggerDropView *) obj);
+			break;
+		case EVENT_TRIGGER_DROP_TABLE_COLUMN:
+			process_drop_table_column(obj);
 			break;
 		case EVENT_TRIGGER_DROP_FOREIGN_TABLE:
 		case EVENT_TRIGGER_DROP_FOREIGN_SERVER:
