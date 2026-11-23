@@ -1,1 +1,0 @@
-Fixes: #11037 Only switch to catalog owner to create tables in the internal schema

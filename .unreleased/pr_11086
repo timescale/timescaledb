@@ -1,2 +1,0 @@
-Fixes: #10971, #11086 Keep the wait after a job crash when the scheduler reloads jobs
-Thanks: @erikdarlingdata for reporting crashed jobs being delayed by job list reloads

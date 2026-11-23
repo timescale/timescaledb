@@ -84,24 +84,23 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 
 	rel = table_open(relid, AccessShareLock);
 
-	if (rel->trigdesc != NULL)
+	/*
+	 * The handler can process invalidations, which rebuilds the relcache
+	 * entry and frees rel->trigdesc, so work on a copy like the executor does.
+	 */
+	TriggerDesc *trigdesc = CopyTriggerDesc(rel->trigdesc);
+
+	if (trigdesc != NULL)
 	{
-		int i;
-
-		/*
-		 * The TriggerDesc from rel->trigdesc seems to be modified during
-		 * iterations of the loop and sometimes gets reallocated so we
-		 * access trigdesc only through rel->trigdesc.
-		 */
-		for (i = 0; i < rel->trigdesc->numtriggers; i++)
+		for (int i = 0; i < trigdesc->numtriggers; i++)
 		{
-			Trigger *trigger = &rel->trigdesc->triggers[i];
-
-			if (!on_trigger(trigger, arg))
+			if (!on_trigger(&trigdesc->triggers[i], arg))
 			{
 				break;
 			}
 		}
+
+		FreeTriggerDesc(trigdesc);
 	}
 
 	table_close(rel, AccessShareLock);

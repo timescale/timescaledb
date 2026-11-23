@@ -289,9 +289,20 @@ jobs:
       run: |
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
+            SKIPS="${{ join(matrix.skipped_tests, ' ') }} ${{ contains(matrix.os, 'ubuntu') && 'net telemetry' || '' }}" \
+            ${{ matrix.installcheck_args }} \
             | tee installcheck.log
 
+    # The net and telemetry tests check the certificates of real servers, and
+    # those look expired when the clock is moved ahead with faketime. They are
+    # skipped above and run here with the real time instead.
+    - name: Run network tests without faketime
+      if: >-
+        matrix.installcheck && matrix.build_type == 'Debug' && contains(matrix.os, 'ubuntu')
+        && !contains(matrix.ignored_tests, 'net')
+      run: |
+        set -o pipefail
+        FAKETIME= make -C build regresscheck TESTS="net telemetry" | tee -a installcheck.log
     - name: Check valgrind logs
       if: always() && matrix.valgrind
       run: |

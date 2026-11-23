@@ -10,7 +10,6 @@ name: LLM fuzzer
     branches:
       - main
       - trigger/llm-fuzzer
-  pull_request:
 
 env:
   PG_SRC_DIR: "pgbuild"

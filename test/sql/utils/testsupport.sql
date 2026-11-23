@@ -406,6 +406,48 @@ BEGIN
 END
 $BODY$;
 
+-- Wait until a run of the job has failed. This is a procedure that
+-- commits between checks, so it also sees new rows under serializable
+-- isolation.
+CREATE OR REPLACE PROCEDURE test.wait_for_job_failure(job INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS)
+LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    FOR i IN 1..spins
+    LOOP
+        IF EXISTS (SELECT FROM _timescaledb_internal.bgw_job_stat_history
+                   WHERE job_id = job AND succeeded IS FALSE) THEN
+            RETURN;
+        END IF;
+        PERFORM pg_sleep(0.1);
+        COMMIT;
+    END LOOP;
+    RAISE EXCEPTION 'job % did not fail before timeout', job;
+END
+$BODY$;
+
+-- Wait until the given number of backends of the current database wait for
+-- a lock of the given type
+CREATE OR REPLACE PROCEDURE test.wait_for_lock_waiter(lock_type TEXT, waiters INTEGER=1, spins INTEGER=:TEST_SPINWAIT_ITERS)
+LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    FOR i IN 1..spins
+    LOOP
+        -- pg_stat_activity keeps the same snapshot within a transaction
+        PERFORM pg_stat_clear_snapshot();
+        IF (SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a USING (pid)
+            WHERE l.locktype = lock_type AND NOT l.granted
+              AND a.datname = current_database()) >= waiters THEN
+            RETURN;
+        END IF;
+        PERFORM pg_sleep(0.1);
+        COMMIT;
+    END LOOP;
+    RAISE EXCEPTION 'no backend waiting for % lock before timeout', lock_type;
+END
+$BODY$;
+
 CREATE OR REPLACE VIEW test.extension AS
 SELECT e.extname AS "Name",
        e.extversion AS "Version",

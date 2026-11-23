@@ -5,9 +5,9 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 \set client_min_messages TO NOTICE;
+
 create or replace procedure job_fail(jobid int, config jsonb) language plpgsql as $$
 begin
-perform pg_sleep(2);
 raise exception 'raising an exception';
 end
 $$;
@@ -31,36 +31,46 @@ SELECT pg_reload_conf();
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- test a concurrent update
+-- custom_proc1 holds the row until the test releases the advisory lock
 CREATE OR REPLACE PROCEDURE custom_proc1(jobid int, config jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
   UPDATE custom_log set msg = 'msg1' where msg = 'msg0';
-  perform pg_sleep(5);
+  PERFORM pg_advisory_xact_lock(4242);
   COMMIT;
 END
 $$;
 
+-- custom_proc2 waits until the test lets it update the row
 CREATE OR REPLACE PROCEDURE custom_proc2(jobid int, config jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
+  PERFORM pg_advisory_xact_lock(4243);
   UPDATE custom_log set msg = 'msg2' where msg = 'msg0';
   COMMIT;
 END
 $$;
 
+SELECT pg_advisory_lock(4242);
+SELECT pg_advisory_lock(4243);
 select add_job('custom_proc1', '2 min', initial_start => now());
--- to make sure custom_log is first updated by custom_proc_1
-select add_job('custom_proc2', '2 min', initial_start => now() + interval '2 seconds');
+select add_job('custom_proc2', '2 min', initial_start => now()) as custom_proc2_id \gset
 
 SELECT _timescaledb_functions.start_background_workers();
--- enough time to for job_fail to fail
-select pg_sleep(5);
+-- Once custom_proc1 has updated the row, let custom_proc2 update it too,
+-- and release custom_proc1 once custom_proc2 waits for that row
+CALL test.wait_for_lock_waiter('advisory', 2);
+SELECT pg_advisory_unlock(4243);
+CALL test.wait_for_lock_waiter('transactionid');
+SELECT pg_advisory_unlock(4242);
+
+CALL test.wait_for_job_failure(:jobf_id);
 select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history where job_id = :jobf_id and succeeded is false;
 
 select delete_job(:jobf_id);
 
-select pg_sleep(5);
+CALL test.wait_for_job_failure(:custom_proc2_id);
 -- exclude internal jobs
 select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history WHERE job_id >= 1000 and succeeded is false;

@@ -1,0 +1,50 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+CREATE PROCEDURE test.run_tss_bgw_job(job_id integer, expect_error boolean)
+AS :MODULE_PATHNAME, 'ts_test_tss_run_bgw_job' LANGUAGE C;
+
+CREATE FUNCTION test.tss_scope_active() RETURNS boolean
+AS :MODULE_PATHNAME, 'ts_test_tss_scope_active' LANGUAGE C;
+
+CREATE TABLE scope_job_log(failing boolean, phase text, scope_active boolean);
+
+CREATE PROCEDURE scope_job(job_id integer, config jsonb) LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO scope_job_log
+    VALUES ((config->>'fail')::boolean, 'before commit', test.tss_scope_active());
+    COMMIT;
+    INSERT INTO scope_job_log
+    VALUES ((config->>'fail')::boolean, 'after commit', test.tss_scope_active());
+    IF (config->>'fail')::boolean THEN
+        RAISE EXCEPTION 'scope job failure after commit';
+    END IF;
+END
+$$;
+
+SELECT add_job('scope_job', '1 hour', config => '{"fail":false}', scheduled => false) AS success_job \gset
+SELECT add_job('scope_job', '1 hour', config => '{"fail":true}', scheduled => false) AS failure_job \gset
+
+-- Run the real job entrypoint in a worker with the mock callbacks installed.
+-- Both runs must enter/exit exactly once and retain the scope across COMMIT.
+-- Only the successful run may store a synthetic statement, after scope exit.
+CALL test.run_tss_bgw_job(:success_job, false);
+CALL test.run_tss_bgw_job(:failure_job, true);
+
+-- The failing job commits its first write but rolls back the second one.
+SELECT * FROM scope_job_log ORDER BY failing, phase;
+SELECT j.config->>'fail' AS failing, s.total_successes, s.total_failures
+FROM _timescaledb_catalog.bgw_job j
+JOIN _timescaledb_internal.bgw_job_stat s ON s.job_id = j.id
+WHERE j.id IN (:success_job, :failure_job)
+ORDER BY failing;
+
+SELECT delete_job(:success_job);
+SELECT delete_job(:failure_job);
+DROP PROCEDURE scope_job;
+DROP TABLE scope_job_log;
+DROP PROCEDURE test.run_tss_bgw_job;
+DROP FUNCTION test.tss_scope_active;
