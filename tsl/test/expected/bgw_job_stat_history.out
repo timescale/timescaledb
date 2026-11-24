@@ -433,6 +433,25 @@ ORDER BY id;
      |           | }
    0 | t         | 
 
+-- The job_history view shows the same information for successful executions
+SELECT job_id - :job_id_4 AS job, succeeded, jsonb_pretty(execution_info) AS execution_info, err_message
+FROM timescaledb_information.job_history
+WHERE job_id = :job_id_4
+ORDER BY id;
+ job | succeeded |         execution_info          | err_message 
+-----+-----------+---------------------------------+-------------
+   0 | t         | {                              +| 
+     |           |     "cagg_refresh": {          +| 
+     |           |         "range_end": 100,      +| 
+     |           |         "range_start": 0,      +| 
+     |           |         "rows_deleted": 0,     +| 
+     |           |         "total_batches": 5,    +| 
+     |           |         "batches_processed": 5,+| 
+     |           |         "rows_materialized": 10+| 
+     |           |     }                          +| 
+     |           | }                               | 
+   0 | t         |                                 | 
+
 -- The same for a timestamptz bucketing column with interval offsets. The
 -- range is reported as ISO-8601 timestamps. The policy computes its window
 -- from the mocked current time, which the background worker picks up from
@@ -611,6 +630,24 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE job_id = :job_id_6
 ORDER BY id;
  job | succeeded |              info               |                            err_message                            
+-----+-----------+---------------------------------+-------------------------------------------------------------------
+   0 | f         | {                              +| error injected at debug point 'cagg_policy_batch_3_after_refresh'
+     |           |     "cagg_refresh": {          +| 
+     |           |         "range_end": 100,      +| 
+     |           |         "range_start": 40,     +| 
+     |           |         "rows_deleted": 0,     +| 
+     |           |         "total_batches": 5,    +| 
+     |           |         "batches_processed": 3,+| 
+     |           |         "rows_materialized": 6 +| 
+     |           |     }                          +| 
+     |           | }                               | 
+
+-- The job_history view shows the information next to the error
+SELECT job_id - :job_id_6 AS job, succeeded, jsonb_pretty(execution_info) AS execution_info, err_message
+FROM timescaledb_information.job_history
+WHERE job_id = :job_id_6
+ORDER BY id;
+ job | succeeded |         execution_info          |                            err_message                            
 -----+-----------+---------------------------------+-------------------------------------------------------------------
    0 | f         | {                              +| error injected at debug point 'cagg_policy_batch_3_after_refresh'
      |           |     "cagg_refresh": {          +| 
