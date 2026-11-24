@@ -227,7 +227,7 @@ jobs:
 
     - name: Show regression diffs
       if: always()
-      id: collectlogs
+      id: collectlogs-smoke
       run: |
         tail -vn +1 build/tsl/test/log/initdb.log | tee installcheck.log
 
