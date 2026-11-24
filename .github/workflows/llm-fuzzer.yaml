@@ -80,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
+        pg: "${{ fromJson(needs.config.outputs.pg_latest) }}"
         include:
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
