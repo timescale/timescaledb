@@ -86,6 +86,9 @@ order by device, time_bucket('1 minute', time) limit 1;
 -- Test incorrect transformation into a Pathkey on different relation through
 -- a join EquivalenceClass.
 set max_parallel_workers_per_gather = 0;
+-- The cost of an index-only scan depends on how much of the chunk VACUUM
+-- could mark all-visible, which varies with concurrent tests.
+set enable_indexonlyscan = off;
 :PREFIX
 select time_bucket('1 minute', a.time) from ht_metrics_partially_compressed a
 join ht_metrics_partially_compressed b
@@ -93,6 +96,7 @@ on a.time = b.time
 where b.time < '2020-01-07'
 group by 1
 ;
+reset enable_indexonlyscan;
 reset max_parallel_workers_per_gather;
 
 reset work_mem;

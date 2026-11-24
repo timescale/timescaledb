@@ -109,6 +109,22 @@ jobs:
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
           libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
 
+    # Ubuntu 26.04 uses uutils coreutils. Its mkdir (before 0.11.0) can report
+    # success for a directory that a concurrent mkdir just created, which
+    # breaks the mkdir locks in the test runners. Use GNU coreutils instead,
+    # like on the other runners. Remove this step once the runner image ships
+    # uutils 0.11.0 or newer.
+    - name: Use GNU coreutils
+      if: runner.os == 'Linux'
+      run: |
+        if mkdir --version | grep -q uutils; then
+          # Remove the uutils package in the same step, or apt keeps it and
+          # refuses to install the conflicting GNU one.
+          sudo apt-get install -y --allow-remove-essential \
+            coreutils-from-gnu coreutils-from-uutils-
+        fi
+        mkdir --version | head -1
+
     - name: Check macOS Build Dependencies
       if: runner.os == 'macOS'
       run: |
@@ -262,8 +278,20 @@ jobs:
       run: |
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
+            SKIPS="${{ join(matrix.skipped_tests, ' ') }} ${{ contains(matrix.os, 'ubuntu') && 'net telemetry' || '' }}" \
+            ${{ matrix.installcheck_args }} \
             | tee installcheck.log
+
+    # The net and telemetry tests check the certificates of real servers, and
+    # those look expired when the clock is moved ahead with faketime. They are
+    # skipped above and run here with the real time instead.
+    - name: Run network tests without faketime
+      if: >-
+        matrix.installcheck && matrix.build_type == 'Debug' && contains(matrix.os, 'ubuntu')
+        && !contains(matrix.ignored_tests, 'net')
+      run: |
+        set -o pipefail
+        FAKETIME= make -C build regresscheck TESTS="net telemetry" | tee -a installcheck.log
 
     - name: Wait for checks to finish
       wait-all:

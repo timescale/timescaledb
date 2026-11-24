@@ -12,6 +12,7 @@
 #include <utils/fmgrprotos.h>
 #include <utils/resowner.h>
 
+#include "debug_point.h"
 #include "guc.h"
 #include "job.h"
 #include "job_stat.h"
@@ -39,6 +40,8 @@ bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 
 	*job_stat_pp = STRUCT_FROM_SLOT(ti->slot, ti->mctx, BgwJobStat, FormData_bgw_job_stat);
 
+	DEBUG_WAITPOINT("bgw_job_stat_find_during_scan");
+
 	/*
 	 * Return SCAN_CONTINUE because we check for multiple tuples as an error
 	 * condition.
@@ -48,7 +51,8 @@ bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 
 static bool
 bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func tuple_found,
-					  tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
+					  tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode,
+					  bool use_catalog_snapshot)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
@@ -62,9 +66,20 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found
 		.data = data,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = use_catalog_snapshot,
 	};
 
 	return ts_scanner_scan_one(&scanctx, false, "bgw job stat");
+}
+
+static inline void
+bgw_job_stat_scankey_init(ScanKeyData *scankey, int32 bgw_job_id)
+{
+	ScanKeyInit(scankey,
+				Anum_bgw_job_stat_pkey_idx_job_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(bgw_job_id));
 }
 
 static inline bool
@@ -73,30 +88,37 @@ bgw_job_stat_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found,
 {
 	ScanKeyData scankey[1];
 
-	ScanKeyInit(&scankey[0],
-				Anum_bgw_job_stat_pkey_idx_job_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(bgw_job_id));
+	bgw_job_stat_scankey_init(&scankey[0], bgw_job_id);
 	return bgw_job_stat_scan_one(BGW_JOB_STAT_PKEY_IDX,
 								 scankey,
 								 1,
 								 tuple_found,
 								 tuple_filter,
 								 data,
-								 lockmode);
+								 lockmode,
+								 false);
 }
 
 TSDLLEXPORT BgwJobStat *
 ts_bgw_job_stat_find(int32 bgw_job_id)
 {
 	BgwJobStat *job_stat = NULL;
+	ScanKeyData scankey[1];
 
-	bgw_job_stat_scan_job_id(bgw_job_id,
-							 bgw_job_stat_tuple_found,
-							 NULL,
-							 (void *) &job_stat,
-							 AccessShareLock);
+	/*
+	 * Readers do not block job workers that update the stats, and a
+	 * SnapshotSelf scan can see both the old and the new row if the update
+	 * commits during the scan. An MVCC snapshot sees only one of them.
+	 */
+	bgw_job_stat_scankey_init(&scankey[0], bgw_job_id);
+	bgw_job_stat_scan_one(BGW_JOB_STAT_PKEY_IDX,
+						  scankey,
+						  1,
+						  bgw_job_stat_tuple_found,
+						  NULL,
+						  (void *) &job_stat,
+						  AccessShareLock,
+						  true);
 
 	return job_stat;
 }
@@ -696,7 +718,7 @@ ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result, TimestampTz n
 								  bgw_job_stat_tuple_mark_crash_reported,
 								  NULL,
 								  &next_start,
-								  RowExclusiveLock))
+								  ShareRowExclusiveLock))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -835,7 +857,7 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
 									  bgw_job_stat_tuple_set_next_start,
 									  NULL,
 									  &next_start,
-									  RowExclusiveLock))
+									  ShareRowExclusiveLock))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),

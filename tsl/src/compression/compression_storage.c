@@ -67,8 +67,7 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 #endif
 
 	Oid owner = ts_rel_get_owner(src_chunk->hypertable_relid);
-	Oid saved_uid;
-	int saved_sec_ctx;
+	TSSecurityContext secctx;
 
 	CreateStmt *create;
 	RangeVar *compress_rel;
@@ -105,18 +104,11 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 	NewRelationCreateToastTable(table_id, toast_options);
 
 	/* Alter the table as its owner since the calling user may not own it */
-	GetUserIdAndSecContext(&saved_uid, &saved_sec_ctx);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(owner, saved_sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
+	ts_security_context_enter(owner, 0, &secctx);
 	modify_compressed_toast_table_storage(settings, column_defs, table_id);
 	set_statistics_on_compressed_chunk(table_id);
 	set_toast_tuple_target_on_chunk(table_id);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(saved_uid, saved_sec_ctx);
-	}
+	ts_security_context_exit(&secctx);
 
 	create_compressed_chunk_indexes(table_id, settings);
 

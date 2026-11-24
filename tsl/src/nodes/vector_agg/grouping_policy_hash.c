@@ -419,7 +419,7 @@ gp_hash_do_emit(GroupingPolicy *gp, List *aggregated_tlist, TupleTableSlot *aggr
 		{
 			DEBUG_LOG("spill after " UINT64_FORMAT " input, " UINT64_FORMAT " valid, " UINT64_FORMAT
 					  " bulk filtered, " UINT64_FORMAT " cons, %.0f keys, "
-					  "%f ratio, %ld curctx bytes, %ld aggstate bytes",
+					  "%f ratio, %zu curctx bytes, %zu aggstate bytes",
 					  policy->stat_input_total_rows,
 					  policy->stat_input_valid_rows,
 					  policy->stat_bulk_filtered_rows,

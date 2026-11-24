@@ -16,15 +16,15 @@ RETURNS TIMESTAMPTZ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 DELETE FROM _timescaledb_catalog.bgw_job;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
-create or replace procedure job_20(jobid int, config jsonb) language plpgsql as $$
+create or replace procedure job_long(jobid int, config jsonb) language plpgsql as $$
 begin
-perform pg_sleep(5);
+perform pg_sleep(2);
 end
 $$;
 
-create or replace procedure job_5(jobid int, config jsonb) language plpgsql as $$
+create or replace procedure job_short(jobid int, config jsonb) language plpgsql as $$
 begin
-perform pg_sleep(1);
+perform pg_sleep(0.1);
 end
 $$;
 
@@ -33,9 +33,12 @@ select * from _timescaledb_internal.bgw_job_stat;
 -- add job that has a runtime well under the schedule interval
 select now() as initial_start \gset
 
-select add_job('job_5', schedule_interval => INTERVAL '15 seconds', initial_start => :'initial_start'::timestamptz) as short_job_fixed \gset
-select add_job('job_5', schedule_interval => INTERVAL '15 seconds', initial_start => :'initial_start'::timestamptz, fixed_schedule => false) as short_job_drifting \gset
+select add_job('job_short', schedule_interval => INTERVAL '15 seconds', initial_start => :'initial_start'::timestamptz) as short_job_fixed \gset
+select add_job('job_short', schedule_interval => INTERVAL '15 seconds', initial_start => :'initial_start'::timestamptz, fixed_schedule => false) as short_job_drifting \gset
+-- add job that runs for longer than the schedule interval
+select add_job('job_long', schedule_interval => INTERVAL '1 second', initial_start => now()) as long_job_fixed \gset
 
+-- Add the jobs before starting the scheduler, so it starts them right away
 SELECT _timescaledb_functions.start_background_workers();
 
 select initial_start as initial_start_given from timescaledb_information.jobs where job_id = :short_job_fixed \gset
@@ -49,12 +52,18 @@ select next_start as next_start_short from timescaledb_information.job_stats whe
 -- verify the next_start is 15 seconds after the initial_start for the fixed schedule job
 select :'next_start_short'::timestamptz - :'initial_start_given'::timestamptz as schedule_diff;
 -- test job that runs for longer than the schedule interval
-select add_job('job_20', schedule_interval => INTERVAL '15 seconds', initial_start => now()) as long_job_fixed \gset
 select test.wait_for_job_to_run(:long_job_fixed, 1);
 
 select initial_start as initial_start_long from timescaledb_information.jobs where job_id = :long_job_fixed \gset
-select next_start as next_start_long from timescaledb_information.job_stats where job_id = :long_job_fixed \gset
-select :'next_start_long'::timestamptz - :'initial_start_long'::timestamptz as schedule_diff;
+select last_finish as last_finish_long, next_start as next_start_long
+from _timescaledb_internal.bgw_job_stat where job_id = :long_job_fixed \gset
+-- The run took longer than the schedule interval, so the next start skips the
+-- slots it ran over and is the first slot after the run finished
+select :'next_start_long'::timestamptz - :'initial_start_long'::timestamptz > INTERVAL '1 second' as skipped_slot,
+       :'next_start_long'::timestamptz = ts_test_next_scheduled_execution_slot(INTERVAL '1 second',
+         :'last_finish_long'::timestamptz, :'initial_start_long'::timestamptz) as first_slot_after_finish;
+-- stop the job so it does not keep running for the rest of the test
+select scheduled from alter_job(:long_job_fixed, scheduled => false);
 
 -- test some possible schedule_interval, finish_time, initial_start combinations
 SET timezone = 'UTC';
@@ -97,7 +106,7 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
 
 \set ON_ERROR_STOP 0
 -- test some unacceptable values for schedule interval
-select add_job('job_5', schedule_interval => interval '1 month 1week', initial_start => :'initial_start'::timestamptz);
+select add_job('job_short', schedule_interval => interval '1 month 1week', initial_start => :'initial_start'::timestamptz);
 
 \set client_min_messages = DEBUG;
 

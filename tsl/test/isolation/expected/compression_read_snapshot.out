@@ -1,10 +1,6 @@
 Parsed test spec with 3 sessions
 
 starting permutation: enable_legacy r_legacy w_legacy release_legacy
-count
------
-    2
-
 step enable_legacy: SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided');
 debug_waitpoint_enable
 ----------------------
@@ -27,10 +23,6 @@ count
 
 
 starting permutation: enable_safe r_safe w_safe release_safe
-count
------
-    2
-
 step enable_safe: SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided');
 debug_waitpoint_enable
 ----------------------
@@ -53,10 +45,6 @@ count
 
 
 starting permutation: rr_begin_legacy w_recompress rr_count rr_commit
-count
------
-    2
-
 step rr_begin_legacy: 
     SET timescaledb.scan_uncompressed_chunks = off;
     BEGIN ISOLATION LEVEL REPEATABLE READ;
@@ -82,10 +70,6 @@ count
 step rr_commit: COMMIT;
 
 starting permutation: rr_begin_safe w_recompress rr_count rr_commit
-count
------
-    2
-
 step rr_begin_safe: 
     SET timescaledb.scan_uncompressed_chunks = on;
     BEGIN ISOLATION LEVEL REPEATABLE READ;
@@ -111,10 +95,6 @@ count
 step rr_commit: COMMIT;
 
 starting permutation: enable_dc dc_legacy w_dc release_dc dc_rows_read
-count
------
-    2
-
 step enable_dc: SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided');
 debug_waitpoint_enable
 ----------------------
@@ -147,10 +127,6 @@ seq_tup_read
 
 
 starting permutation: enable_dc dc_safe w_dc release_dc dc_rows_read
-count
------
-    2
-
 step enable_dc: SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided');
 debug_waitpoint_enable
 ----------------------
@@ -180,4 +156,60 @@ step dc_rows_read:
 seq_tup_read
 ------------
           96
+
+
+starting permutation: enable_ins ins_legacy w_ins release_ins
+step enable_ins: SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided');
+debug_waitpoint_enable
+----------------------
+                      
+
+step ins_legacy: 
+    SET timescaledb.scan_uncompressed_chunks = off;
+    SELECT (SELECT count(*) FROM metrics_ins) AS hypertable,
+           (SELECT count(*) FROM plain_ins) AS plain;
+ <waiting ...>
+step w_ins: 
+    BEGIN;
+    INSERT INTO metrics_ins VALUES (50, 1, 100);
+    INSERT INTO plain_ins VALUES (50, 1, 100);
+    COMMIT;
+
+step release_ins: SELECT debug_waitpoint_release('columnar_scan_uncompressed_part_decided');
+debug_waitpoint_release
+-----------------------
+                       
+
+step ins_legacy: <... completed>
+hypertable|plain
+----------+-----
+         3|    4
+
+
+starting permutation: enable_ins ins_safe w_ins release_ins
+step enable_ins: SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided');
+debug_waitpoint_enable
+----------------------
+                      
+
+step ins_safe: 
+    SET timescaledb.scan_uncompressed_chunks = on;
+    SELECT (SELECT count(*) FROM metrics_ins) AS hypertable,
+           (SELECT count(*) FROM plain_ins) AS plain;
+ <waiting ...>
+step w_ins: 
+    BEGIN;
+    INSERT INTO metrics_ins VALUES (50, 1, 100);
+    INSERT INTO plain_ins VALUES (50, 1, 100);
+    COMMIT;
+
+step release_ins: SELECT debug_waitpoint_release('columnar_scan_uncompressed_part_decided');
+debug_waitpoint_release
+-----------------------
+                       
+
+step ins_safe: <... completed>
+hypertable|plain
+----------+-----
+         4|    4
 

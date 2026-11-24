@@ -229,7 +229,9 @@ TRUNCATE custom_log;
 
 -- Forced Exception
 SELECT add_job('custom_proc4', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_3 \gset
-SELECT _timescaledb_functions.restart_background_workers();
+-- Wake the scheduler instead of restarting it here and below. The current
+-- scheduler can start the job right away, and a restart would kill it.
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_3, 1);
 
 -- Check results
@@ -262,7 +264,7 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
 
 -- Compression policy
 SELECT add_compression_policy('conditions', interval '1 day') AS job_id_4 \gset
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_4, 1);
 
 -- Chunk compress stats
@@ -279,7 +281,7 @@ order by id;
 
 --running job second time, wait for it to complete
 select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_4, 2);
 
 SELECT id, relid::text AS table_name, status from _timescaledb_catalog.chunk
@@ -307,7 +309,7 @@ WITH NO DATA;
 
 -- Refresh Continous Aggregate by Job
 SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_5 \gset
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_5, 1);
 SELECT count(*) FROM conditions_summary_daily;
 
@@ -509,8 +511,9 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- check that alter_job rejects a check function with invalid signature
+-- Don't schedule the job, so it does not run while alter_job reads its stats
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func',
-initial_start => :'time_zero'::timestamptz) as job_id_alter \gset
+initial_start => :'time_zero'::timestamptz, scheduled => false) as job_id_alter \gset
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter);
 -- test that we can unregister the check function
@@ -527,8 +530,7 @@ END
 $$;
 
 select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
--- wait for enough time
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:last_job_id, 1);
 select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
 

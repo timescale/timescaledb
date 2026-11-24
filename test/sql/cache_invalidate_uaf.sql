@@ -38,3 +38,46 @@ COMMIT;
 SELECT val FROM cache_inval_test ORDER BY time;
 
 DROP TABLE cache_inval_test;
+
+-- A new chunk gets a copy of each row trigger on the hypertable. A cache
+-- reset while the triggers are being copied frees the trigger list in the
+-- relcache entry, and the copy must not keep reading from it.
+CREATE TABLE trig_reset(time int NOT NULL);
+SELECT table_name FROM create_hypertable('trig_reset', 'time', chunk_time_interval => 1);
+
+CREATE FUNCTION trig_reset_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN NEW;
+END
+$$;
+
+-- Whether the freed trigger list gets reused before it is read depends
+-- on its size, and three triggers hit the problem on all PG versions.
+CREATE TRIGGER trig_reset_1 BEFORE INSERT ON trig_reset
+  FOR EACH ROW EXECUTE FUNCTION trig_reset_fn();
+CREATE TRIGGER trig_reset_2 BEFORE INSERT ON trig_reset
+  FOR EACH ROW EXECUTE FUNCTION trig_reset_fn();
+CREATE TRIGGER trig_reset_3 BEFORE INSERT ON trig_reset
+  FOR EACH ROW EXECUTE FUNCTION trig_reset_fn();
+
+-- Throw away all caches whenever invalidations are processed. Only
+-- builds with assertions support this.
+SELECT max_val::integer > 0 AS have_debug_discard_caches
+FROM pg_settings WHERE name = 'debug_discard_caches' \gset
+\if :have_debug_discard_caches
+SET debug_discard_caches = 1;
+\endif
+INSERT INTO trig_reset SELECT generate_series(1, 4);
+RESET debug_discard_caches;
+\unset have_debug_discard_caches
+
+-- Every chunk has all three triggers
+SELECT count(*) AS chunks,
+       count(*) FILTER (WHERE (SELECT count(*) FROM pg_trigger t
+                               WHERE t.tgrelid = c
+                                 AND t.tgname LIKE 'trig_reset_%') = 3)
+         AS chunks_with_triggers
+FROM show_chunks('trig_reset') c;
+
+DROP TABLE trig_reset;
+DROP FUNCTION trig_reset_fn();
