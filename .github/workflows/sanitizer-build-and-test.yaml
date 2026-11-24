@@ -57,7 +57,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-26.04
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
