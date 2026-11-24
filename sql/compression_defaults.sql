@@ -278,7 +278,7 @@ BEGIN
         _orderby_names := array[]::name[];
     end if;
 
-    --add dimension colomns to the end. A dimension column like time should probably always be part of the order by.
+    --add dimension columns to the end. A dimension column like time should probably always be part of the order by.
     SELECT
       array_agg(d.column_name) INTO _dimension_names
     FROM _timescaledb_catalog.dimension d

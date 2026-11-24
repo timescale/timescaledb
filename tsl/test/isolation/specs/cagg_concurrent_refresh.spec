@@ -154,7 +154,7 @@ setup
     CALL refresh_continuous_aggregate('cond_10', 0, 30);
 }
 
-# Generate some invalidations. Must be done in separate transcations
+# Generate some invalidations. Must be done in separate transactions
 # or otherwise there will be only one invalidation.
 setup
 {
@@ -480,7 +480,7 @@ permutation "R1_refresh" "R12_refresh"
 # TODO: pending materialization ranges not populated yet
 #permutation "WP_after_enable" "R1_refresh"("WP_after_enable") "R6_pending_materialization_ranges" "R5_refresh"("WP_after_enable") "R6_pending_materialization_ranges" "WP_after_release" "R6_pending_materialization_ranges" "S1_select"
 
-# CAgg materialization phase (third trasaction of the refresh procedure) terminated by another session and then
+# CAgg materialization phase (third transaction of the refresh procedure) terminated by another session and then
 # refreshing again and make sure the pending ranges will be processed
 # TODO: pending materialization ranges not populated yet
 #permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh1"("K1_cancelpid") "R6_pending_materialization_ranges" "R13_refresh2" "R6_pending_materialization_ranges"
