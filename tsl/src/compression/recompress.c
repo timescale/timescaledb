@@ -497,8 +497,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 		table_open(uncompressed_chunk->fd.relid, recompression_lockmode);
 	Relation compressed_chunk_rel = table_open(settings->fd.compress_relid, recompression_lockmode);
 
-	DEBUG_WAITPOINT("recompress_segmentwise_start");
-
 	bool has_unique_constraints =
 		ts_indexing_relation_has_primary_or_unique_index(uncompressed_chunk_rel);
 	int count;
@@ -1808,8 +1806,6 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk, bool keep_settings)
 	LOCKMODE lockmode = ExclusiveLock;
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->fd.relid, lockmode);
 	Relation compressed_chunk_rel = table_open(compressed_relid, lockmode);
-
-	DEBUG_WAITPOINT("recompress_in_memory_start");
 
 	CompressionSettings *new_settings =
 		keep_settings ? ts_compression_settings_get(uncompressed_chunk->fd.relid) :
