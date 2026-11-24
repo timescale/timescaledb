@@ -219,9 +219,19 @@ jobs:
 
     - name: make installcheck (smoke test)
       run: |
+        env
         set -o pipefail
         make -k -C build installcheck TESTS=compression \
           | tee installcheck.log
+        tail -vn +1 build/tsl/test/log/initdb.log | tee installcheck.log
+        tail -vn +1 build/tsl/test/regressions.diff | tee installcheck.log
+
+    - name: Upload installcheck smoke test log
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ matrix.display_name }} installcheck smoke test log
+        path: installcheck.log
 
     - name: Install Claude Code
       run: npm install -g @anthropic-ai/claude-code@2.1.215
