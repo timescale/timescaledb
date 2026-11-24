@@ -416,7 +416,7 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
 -------
      3
 
-EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+EXPLAIN (costs off, analyze, verbose, timing off, buffers off, summary off)
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
       id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
@@ -434,7 +434,7 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
                      Index Cond: ((_hyper_3_16_chunk_compressed._ts_meta_v2_first_id < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk_compressed._ts_meta_v2_last_id >= '0198a23a-8180-7000-8000-000000000000'::uuid))
 
 SET timescaledb.enable_vectorized_aggregation TO OFF;
-EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+EXPLAIN (costs off, analyze, verbose, timing off, buffers off, summary off)
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
       id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
@@ -456,7 +456,7 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
      3
 
 SET timescaledb.enable_bulk_decompression TO off;
-EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+EXPLAIN (costs off, analyze, verbose, timing off, buffers off, summary off)
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
       id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
@@ -478,7 +478,7 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
      3
 
 SET timescaledb.enable_optimizations TO off;
-EXPLAIN (costs off, analyze, verbose, timing off, summary off)
+EXPLAIN (costs off, analyze, verbose, timing off, buffers off, summary off)
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
       id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
