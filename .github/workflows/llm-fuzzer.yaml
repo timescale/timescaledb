@@ -16,8 +16,8 @@ name: LLM fuzzer
         - ".github/workflows/llm-fuzzer/**"
 
 env:
-  extra_packages: "clang-19 llvm-19 llvm-19-dev llvm-19-tools"
-  CC: "clang-19"
+  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
+  CC: "clang-15"
   CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
   CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
 
