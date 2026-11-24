@@ -178,9 +178,177 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE job_id = :job_id_3
 ORDER BY id;
 
+-- A continuous aggregate refresh policy records what it refreshed in the
+-- info field of its execution history entry. Integer time and a fixed
+-- integer_now keep the refreshed window deterministic.
+CREATE TABLE metrics(time int NOT NULL, value int);
+SELECT table_name FROM create_hypertable('metrics', 'time', chunk_time_interval => 50);
+CREATE FUNCTION metrics_now() RETURNS int LANGUAGE SQL IMMUTABLE AS 'SELECT 100';
+SELECT set_integer_now_func('metrics', 'metrics_now');
+INSERT INTO metrics SELECT t, t FROM generate_series(0, 99) t;
+
+-- Like the reported statistics, the information is only recorded when
+-- cagg_refresh_stats_level is not off, which is the default
+CREATE MATERIALIZED VIEW metrics_10_off
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(10, time) AS bucket, sum(value)
+FROM metrics
+GROUP BY 1
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('metrics_10_off', start_offset => 100, end_offset => 0,
+  schedule_interval => interval '1 hour', initial_start => now(),
+  buckets_per_batch => 2) AS job_id_off \gset
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_off, 1);
+
+SELECT job_id - :job_id_off AS job, succeeded, jsonb_pretty(data->'info') AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_off
+ORDER BY id;
+
+ALTER DATABASE :TEST_DBNAME SET timescaledb.cagg_refresh_stats_level TO summary;
+
+CREATE MATERIALIZED VIEW metrics_10
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(10, time) AS bucket, sum(value)
+FROM metrics
+GROUP BY 1
+WITH NO DATA;
+
+-- Window [0, 100] has 10 buckets, refreshed in 5 batches of 2 buckets
+SELECT add_continuous_aggregate_policy('metrics_10', start_offset => 100, end_offset => 0,
+  schedule_interval => interval '1 hour', initial_start => now(),
+  buckets_per_batch => 2) AS job_id_4 \gset
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_4, 1);
+
+SELECT job_id - :job_id_4 AS job, succeeded, jsonb_pretty(data->'info') AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_4
+ORDER BY id;
+
+-- Running the policy again finds the continuous aggregate up to date, so the
+-- second execution has no info
+SELECT scheduled FROM alter_job(:job_id_4, next_start => now());
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_4, 2);
+
+SELECT job_id - :job_id_4 AS job, succeeded, jsonb_pretty(data->'info') AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_4
+ORDER BY id;
+
+-- The same for a timestamptz bucketing column with interval offsets. The
+-- range is reported as ISO-8601 timestamps. The policy computes its window
+-- from the mocked current time, which the background worker picks up from
+-- the database settings.
+ALTER DATABASE :TEST_DBNAME SET timescaledb.current_timestamp_mock TO '2025-01-01 10:00:00+00';
+CREATE TABLE metrics_tz(time timestamptz NOT NULL, value int);
+SELECT table_name FROM create_hypertable('metrics_tz', 'time', chunk_time_interval => interval '1 day');
+INSERT INTO metrics_tz
+SELECT t, 1
+FROM generate_series('2025-01-01 00:00:00+00'::timestamptz, '2025-01-01 09:59:00+00', interval '1 minute') t;
+
+CREATE MATERIALIZED VIEW metrics_tz_1h
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(interval '1 hour', time) AS bucket, sum(value)
+FROM metrics_tz
+GROUP BY 1
+WITH NO DATA;
+
+-- Window [00:00, 09:00) has 9 buckets, refreshed in 3 batches of 3 buckets
+SELECT add_continuous_aggregate_policy('metrics_tz_1h', start_offset => interval '10 hours',
+  end_offset => interval '1 hour', schedule_interval => interval '1 hour', initial_start => now(),
+  buckets_per_batch => 3) AS job_id_5 \gset
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_5, 1);
+
+SELECT job_id - :job_id_5 AS job, succeeded, jsonb_pretty(data->'info') AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_5
+ORDER BY id;
+
+ALTER DATABASE :TEST_DBNAME RESET timescaledb.current_timestamp_mock;
+
+-- For a continuous aggregate with granular refresh, the information also says
+-- how the refreshed ranges were materialized. The tracking window starts
+-- before the 2020 rows below, whatever the current date.
+SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_lookback \gset
+CREATE TABLE readings(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT table_name FROM create_hypertable('readings', 'time');
+ALTER TABLE readings SET (
+  timescaledb.cagg_enable_granular_refresh = true,
+  timescaledb.cagg_granular_refresh_column = 'sensor_id',
+  timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+  timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+INSERT INTO readings VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 1),
+  ('2020-01-01 00:00+00', 'sensor_b', 2);
+
+CREATE MATERIALIZED VIEW readings_daily
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+FROM readings
+GROUP BY 1, 2
+WITH NO DATA;
+ALTER MATERIALIZED VIEW readings_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- The first refresh has no tracked writes to go by, so nothing is refreshed
+-- granularly
+ALTER DATABASE :TEST_DBNAME SET timescaledb.current_timestamp_mock TO '2025-01-10 00:00:00+00';
+SELECT add_continuous_aggregate_policy('readings_daily', start_offset => NULL,
+  end_offset => interval '1 day', schedule_interval => interval '1 hour',
+  initial_start => now()) AS job_id_7 \gset
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_7, 1);
+
+-- Late writes are tracked per sensor, so the next refresh is fully granular
+INSERT INTO readings VALUES ('2020-01-02 00:00+00', 'sensor_a', 3);
+SELECT scheduled FROM alter_job(:job_id_7, next_start => now());
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_7, 2);
+
+SELECT job_id - :job_id_7 AS job, succeeded, jsonb_pretty(data->'info') AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_7
+ORDER BY id;
+
+ALTER DATABASE :TEST_DBNAME RESET timescaledb.current_timestamp_mock;
+
+-- The information is recorded after each batch, so a refresh failing in a
+-- later batch still shows the batches it committed
+CREATE MATERIALIZED VIEW metrics_10_fail
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(10, time) AS bucket, sum(value)
+FROM metrics
+GROUP BY 1
+WITH NO DATA;
+
+SELECT debug_waitpoint_enable('cagg_policy_batch_3_after_refresh');
+SELECT add_continuous_aggregate_policy('metrics_10_fail', start_offset => 100, end_offset => 0,
+  schedule_interval => interval '1 hour', initial_start => now(),
+  buckets_per_batch => 2) AS job_id_6 \gset
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run_or_fail(:job_id_6);
+SELECT debug_waitpoint_release('cagg_policy_batch_3_after_refresh');
+
+SELECT job_id - :job_id_6 AS job, succeeded, jsonb_pretty(data->'info') AS info,
+       data->'error_data'->>'message' AS err_message
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_6
+ORDER BY id;
+
 SELECT delete_job(:job_id_1);
 SELECT delete_job(:job_id_2);
 SELECT delete_job(:job_id_3);
+SELECT remove_continuous_aggregate_policy('metrics_10');
+SELECT remove_continuous_aggregate_policy('metrics_tz_1h');
+SELECT remove_continuous_aggregate_policy('metrics_10_fail');
+SELECT remove_continuous_aggregate_policy('metrics_10_off');
+SELECT remove_continuous_aggregate_policy('readings_daily');
+ALTER DATABASE :TEST_DBNAME RESET timescaledb.cagg_refresh_stats_level;
 
 ALTER SYSTEM RESET timescaledb.enable_job_execution_logging;
 SELECT pg_reload_conf();
