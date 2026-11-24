@@ -44,12 +44,9 @@ SELECT test.wait_for_job_to_run(:job_id_1, 1);
 ---------------------
  t
 
-SELECT test.wait_for_job_to_run(:job_id_2, 1);
-INFO:  wait_for_job_to_run: job execution failed
- wait_for_job_to_run 
----------------------
- f
-
+-- wait_for_job_to_run stops at the first failure, so wait for the
+-- failures of the error job instead
+CALL test.wait_for_job_failure(:job_id_2, 1);
 -- only 1 failure
 SELECT count(*), succeeded FROM timescaledb_information.job_history WHERE job_id >= 1000 GROUP BY 2 ORDER BY 2;
  count | succeeded 
@@ -103,12 +100,7 @@ SELECT test.wait_for_job_to_run(:job_id_1, 2);
 ---------------------
  t
 
-SELECT test.wait_for_job_to_run(:job_id_2, 2);
-INFO:  wait_for_job_to_run: job execution failed
- wait_for_job_to_run 
----------------------
- f
-
+CALL test.wait_for_job_failure(:job_id_2, 2);
 -- 1 succeeded 2 failures
 SELECT count(*), succeeded FROM timescaledb_information.job_history WHERE job_id >= 1000 GROUP BY 2 ORDER BY 2;
  count | succeeded 
@@ -157,12 +149,7 @@ SELECT test.wait_for_job_to_run(:job_id_1, 3);
 ---------------------
  t
 
-SELECT test.wait_for_job_to_run(:job_id_2, 3);
-INFO:  wait_for_job_to_run: job execution failed
- wait_for_job_to_run 
----------------------
- f
-
+CALL test.wait_for_job_failure(:job_id_2, 3);
 -- Check job execution history
 SELECT job_id, pid IS NOT NULL AS pid, proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
 FROM timescaledb_information.job_history

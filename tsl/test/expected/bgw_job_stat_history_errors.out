@@ -135,9 +135,11 @@ DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 3;
 SELECT FROM alter_job(3, next_start => now());
 --
 
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+-- Wake the scheduler instead of restarting it. The current scheduler can
+-- start the job right away, and a restart would kill it.
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(3, 1);
