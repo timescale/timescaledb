@@ -45,7 +45,7 @@ typedef struct HypertableRestrictInfo
 	DimensionRestrictInfo *dimension_restriction[FLEXIBLE_ARRAY_MEMBER];
 } HypertableRestrictInfo;
 
-extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht);
+extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(Hypertable *ht);
 
 /* Add restrictions based on a List of RestrictInfo */
 extern void ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
@@ -65,5 +65,4 @@ extern Chunk **ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hr
 extern Chunk **ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri,
 															  Hypertable *ht, bool include_osm,
 															  Chunk **chunks, bool reverse,
-															  List **nested_oids,
 															  unsigned int *num_chunks);

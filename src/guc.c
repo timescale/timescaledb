@@ -5,10 +5,9 @@
  */
 #include <postgres.h>
 #include <miscadmin.h>
-#include <parser/parse_func.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
-#include <utils/regproc.h>
+#include <utils/lsyscache.h>
 #include <utils/timestamp.h>
 #include <utils/varlena.h>
 
@@ -66,6 +65,13 @@ static const struct config_enum_entry loglevel_options[] = {
 };
 #endif
 
+static const struct config_enum_entry cagg_refresh_stats_level_options[] = {
+	{ "off", CAGG_REFRESH_STATS_OFF, false },
+	{ "summary", CAGG_REFRESH_STATS_SUMMARY, false },
+	{ "verbose_log", CAGG_REFRESH_STATS_VERBOSE_LOG, false },
+	{ NULL, 0, false }
+};
+
 static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
 	{ "truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false },
@@ -77,6 +83,7 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
+TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit = 0;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
@@ -85,6 +92,7 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby = true;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows = 5000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit = 500;
+TSDLLEXPORT bool ts_guc_use_custom_toaster = false;
 bool ts_guc_enable_deprecation_warnings = true;
 TSDLLEXPORT bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -94,8 +102,11 @@ bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
+bool ts_guc_enable_hypertable_expansion_for_dml = true;
+TSDLLEXPORT bool ts_guc_enable_deferred_chunk_append = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
+TSDLLEXPORT bool ts_guc_scan_uncompressed_chunks = false;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
@@ -129,6 +140,7 @@ TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
+TSDLLEXPORT bool ts_guc_enable_aic_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = TARGET_COMPRESSED_BATCH_SIZE;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
@@ -142,8 +154,9 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
-TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
+TSDLLEXPORT bool ts_guc_debug_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+TSDLLEXPORT bool ts_guc_enable_columnarscan_metadata_only = true;
 #if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 #endif
@@ -152,12 +165,11 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan = true;
 TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
-static char *ts_guc_default_segmentby_fn = NULL;
-static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
+TSDLLEXPORT CaggRefreshStatsLevel ts_guc_cagg_refresh_stats_level = CAGG_REFRESH_STATS_OFF;
 
 bool ts_guc_enable_partitioned_hypertables = false;
 TSDLLEXPORT int ts_guc_stats_max_chunks = TS_STATS_MAX_CHUNKS_DEFAULT;
@@ -210,6 +222,8 @@ bool ts_guc_debug_have_int128;
 DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
+
+DebugRequireOption ts_guc_debug_require_deferred_chunk_append = DRO_Allow;
 #endif
 
 DebugRequireOption ts_guc_debug_require_batch_sorted_merge = DRO_Allow;
@@ -327,82 +341,6 @@ static void
 assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 {
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable, newval);
-}
-
-static Oid
-get_segmentby_func(char *input_name)
-{
-	List *namelist = NIL;
-
-	if (strlen(input_name) == 0)
-	{
-		return InvalidOid;
-	}
-
-	namelist = stringToQualifiedNameList(input_name, NULL);
-	Oid argtyp[] = { REGCLASSOID };
-	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
-}
-
-static bool
-check_segmentby_func(char **newval, void **extra, GucSource source)
-{
-	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded_and_not_upgrading())
-	{
-		Oid segment_func_oid = get_segmentby_func(*newval);
-
-		if (strlen(*newval) > 0 && !OidIsValid(segment_func_oid))
-		{
-			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
-			return false;
-		}
-	}
-	return true;
-}
-
-Oid
-ts_guc_default_segmentby_fn_oid()
-{
-	return get_segmentby_func(ts_guc_default_segmentby_fn);
-}
-
-static Oid
-get_orderby_func(char *input_name)
-{
-	List *namelist = NIL;
-
-	if (strlen(input_name) == 0)
-	{
-		return InvalidOid;
-	}
-
-	namelist = stringToQualifiedNameList(input_name, NULL);
-	Oid argtyp[] = { REGCLASSOID, TEXTARRAYOID };
-	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
-}
-
-static bool
-check_orderby_func(char **newval, void **extra, GucSource source)
-{
-	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded_and_not_upgrading())
-	{
-		Oid func_oid = get_orderby_func(*newval);
-
-		if (strlen(*newval) > 0 && !OidIsValid(func_oid))
-		{
-			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
-			return false;
-		}
-	}
-	return true;
-}
-
-Oid
-ts_guc_default_orderby_fn_oid()
-{
-	return get_orderby_func(ts_guc_default_orderby_fn);
 }
 
 /*
@@ -534,6 +472,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_sort_batches"),
 							 "Enable batch sorting during direct compress COPY",
 							 NULL,
@@ -544,6 +483,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_client_sorted"),
 							 "Enable direct compress COPY with presorted data",
@@ -572,6 +512,22 @@ _guc_init(void)
 							NULL,
 							NULL);
 
+	DefineCustomIntVariable(MAKE_EXTOPTION("move_to_columnstore_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once when moving a chunk "
+							"to the columnstore",
+							"This is mainly used to keep the memory footprint down when moving "
+							"large amounts of uncompressed data in a single transaction. "
+							"Setting this to 0 would make it unlimited.",
+							&ts_guc_move_to_columnstore_tuple_sort_limit,
+							0,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert"),
 							 "Enable direct compression during INSERT",
 							 "Enable experimental support for direct compression during INSERT",
@@ -583,6 +539,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert_sort_batches"),
 							 "Enable batch sorting during direct compress INSERT",
 							 NULL,
@@ -593,6 +550,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert_client_sorted"),
 							 "Enable direct compress INSERT with presorted data",
@@ -624,6 +582,18 @@ _guc_init(void)
 							 "an optimal segmentby column if none is configured.",
 							 &ts_guc_enable_direct_compress_auto_segmentby,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("use_custom_toaster"),
+							 "Use a custom TOAST writer for compressed row inserts",
+							 "This setting is only used for compression. It has no effect on "
+							 "PostgreSQL 19 and above.",
+							 &ts_guc_use_custom_toaster,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -678,6 +648,18 @@ _guc_init(void)
 							 NULL,
 							 &ts_guc_enable_optimizations,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("scan_uncompressed_chunks"),
+							 "Scan the uncompressed part of fully compressed chunks",
+							 "Enable to avoid missing rows when another transaction changes the "
+							 "chunk status between planning and execution.",
+							 &ts_guc_scan_uncompressed_chunks,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -757,6 +739,31 @@ _guc_init(void)
 							 "Enable constraint exclusion",
 							 "Enable planner constraint exclusion",
 							 &ts_guc_enable_constraint_exclusion,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_hypertable_expansion_for_dml"),
+							 "Enable TimescaleDB hypertable expansion for DML",
+							 "Allow using the TimescaleDB hypertable expansion code for "
+							 "UPDATE/DELETE queries, instead of the slower Postgres inheritance "
+							 "hierarchy expansion code.",
+							 &ts_guc_enable_hypertable_expansion_for_dml,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deferred_chunk_append"),
+							 "Enable DeferredChunkAppend for LIMIT queries",
+							 "Custom scan node for hypertables that iterates chunks at "
+							 "execution instead of expanding every chunk at plan time.",
+							 &ts_guc_enable_deferred_chunk_append,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1088,6 +1095,22 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomEnumVariable(MAKE_EXTOPTION("cagg_refresh_stats_level"),
+							 "Continuous aggregate refresh statistics level",
+							 "Level of statistics reporting for a continuous aggregate refresh. "
+							 "'off' reports nothing. 'summary' reports a summary to the server "
+							 "log and as a notice to the client. 'verbose_log' reports the same "
+							 "as summary, and additionally records more detailed statistics, "
+							 "when applicable, to the server log.",
+							 (int *) &ts_guc_cagg_refresh_stats_level,
+							 CAGG_REFRESH_STATS_OFF,
+							 cagg_refresh_stats_level_options,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_skipping"),
 							 "Enable chunk skipping functionality",
 							 "Enable using chunk column stats to filter chunks based on column "
@@ -1147,6 +1170,17 @@ _guc_init(void)
 							 "Enable uuid compression functionality",
 							 "Enable uuid compression",
 							 &ts_guc_enable_uuid_compression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_aic_compression"),
+							 "Enable adaptive integer compression (AIC) functionality",
+							 "Enable adaptive integer compression (AIC)",
+							 &ts_guc_enable_aic_compression,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1341,12 +1375,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
-							 "Enable ColumnarScan for columnar storage",
-							 "Transparently decompress columnar data using ColumnarScan custom "
-							 "node. Disabling columnar scan will ignore data stored in columnar "
-							 "format in queries.",
-							 &ts_guc_enable_columnarscan,
+	DefineCustomBoolVariable(MAKE_EXTOPTION("debug_enable_columnarscan"),
+							 "this setting is used for debugging",
+							 "Do not use",
+							 &ts_guc_debug_enable_columnarscan,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1359,6 +1391,18 @@ _guc_init(void)
 							 "Enable experimental support for returning results directly from "
 							 "compression metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan_metadata_only"),
+							 "Enable metadata-only ColumnarScan for LIMIT 1 queries",
+							 "Answer LIMIT 1 queries, with or without ORDER BY, from the "
+							 "compression metadata without decompression",
+							 &ts_guc_enable_columnarscan_metadata_only,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1482,32 +1526,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_segmentby_default_function"),
-							   /* short_desc= */ "Function that sets default segment_by",
-							   /* long_desc= */
-							   "Function to use for calculating default segment_by setting for "
-							   "compression",
-							   /* valueAddr= */ &ts_guc_default_segmentby_fn,
-							   /* Value= */ "_timescaledb_functions.get_segmentby_defaults",
-							   /* context= */ PGC_USERSET,
-							   /* flags= */ 0,
-							   /* check_hook= */ check_segmentby_func,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_orderby_default_function"),
-							   /* short_desc= */ "Function that sets default order_by",
-							   /* long_desc= */
-							   "Function to use for calculating default order_by setting for "
-							   "compression",
-							   /* valueAddr= */ &ts_guc_default_orderby_fn,
-							   /* Value= */ "_timescaledb_functions.get_orderby_defaults",
-							   /* context= */ PGC_USERSET,
-							   /* flags= */ 0,
-							   /* check_hook= */ check_orderby_func,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("license"),
 							   /* short_desc= */ "TimescaleDB license type",
@@ -1689,6 +1707,21 @@ _guc_init(void)
 							 "and "
 							 "using the test templates is a pain",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_deferred_chunk_append"),
+							 /* short_desc= */
+							 "ensure that DeferredChunkAppend is used or not",
+							 /* long_desc= */
+							 "this is for debugging purposes, to check whether a query uses the "
+							 "DeferredChunkAppend node without depending on EXPLAIN output",
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_deferred_chunk_append,
 							 /* bootValue= */ DRO_Allow,
 							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,

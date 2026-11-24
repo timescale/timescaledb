@@ -17,10 +17,7 @@
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
-	Datum ts_##func(PG_FUNCTION_ARGS)                                           \
-	{                                                                                              \
-		PG_RETURN_DATUM(ts_cm_functions->func(fcinfo));                                            \
-	}
+	Datum ts_##func(PG_FUNCTION_ARGS) { PG_RETURN_DATUM(ts_cm_functions->func(fcinfo)); }
 
 /* bgw policy functions */
 CROSSMODULE_WRAPPER(policy_compression_add);
@@ -72,6 +69,8 @@ CROSSMODULE_WRAPPER(compressed_data_info);
 CROSSMODULE_WRAPPER(compressed_data_has_nulls);
 CROSSMODULE_WRAPPER(deltadelta_compressor_append);
 CROSSMODULE_WRAPPER(deltadelta_compressor_finish);
+CROSSMODULE_WRAPPER(aic_compressor_append);
+CROSSMODULE_WRAPPER(aic_compressor_finish);
 CROSSMODULE_WRAPPER(gorilla_compressor_append);
 CROSSMODULE_WRAPPER(gorilla_compressor_finish);
 CROSSMODULE_WRAPPER(dictionary_compressor_append);
@@ -87,7 +86,7 @@ CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(rebuild_columnstore);
 CROSSMODULE_WRAPPER(rebuild_sparse_index);
-CROSSMODULE_WRAPPER(bloom1_contains);
+CROSSMODULE_WRAPPER(move_to_columnstore);
 CROSSMODULE_WRAPPER(bloom1_contains_any);
 CROSSMODULE_WRAPPER(bloom1_contains_any_hashes);
 CROSSMODULE_WRAPPER(bloom1_hash);
@@ -112,6 +111,9 @@ CROSSMODULE_WRAPPER(detach_chunk);
 CROSSMODULE_WRAPPER(attach_chunk);
 
 CROSSMODULE_WRAPPER(estimate_compressed_batch_size);
+
+CROSSMODULE_WRAPPER(hypertable_get_tenant_tracking_info);
+CROSSMODULE_WRAPPER(tenant_tracking_map);
 
 /*
  * casting a function pointer to a pointer of another type is undefined
@@ -286,6 +288,18 @@ preprocess_query_tsl_default_fn_community(Query *parse, int *cursor_opts)
 	/* No op in community licensed code */
 }
 
+static void
+tenant_tracker_cache_invalidate_default(Oid relid)
+{
+	/* No op in community licensed code */
+}
+
+static void
+tenant_tracker_remove_at_commit_default(int32 hypertable_id, Oid main_table_relid)
+{
+	/* No op in community licensed code: nothing is tracked without TSL. */
+}
+
 static PGFunction
 bloom1_get_hash_function_default(Oid type, FmgrInfo **finfo)
 {
@@ -359,6 +373,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
+	.tenant_tracker_cache_invalidate = tenant_tracker_cache_invalidate_default,
+	.tenant_tracker_remove_at_commit = tenant_tracker_remove_at_commit_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_add_column = continuous_agg_add_column_default,
 	.continuous_agg_apply_rewrites_tsl = NULL,
@@ -379,6 +395,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.decompress_chunk = error_no_default_fn_pg_community,
 	.rebuild_columnstore = error_no_default_fn_pg_community,
 	.rebuild_sparse_index = error_no_default_fn_pg_community,
+	.move_to_columnstore = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.compressed_data_column_size = error_no_default_fn_pg_community,
@@ -386,6 +403,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.decompress_batch = error_no_default_fn_pg_community,
 	.deltadelta_compressor_append = error_no_default_fn_pg_community,
 	.deltadelta_compressor_finish = error_no_default_fn_pg_community,
+	.aic_compressor_append = error_no_default_fn_pg_community,
+	.aic_compressor_finish = error_no_default_fn_pg_community,
 	.gorilla_compressor_append = error_no_default_fn_pg_community,
 	.gorilla_compressor_finish = error_no_default_fn_pg_community,
 	.dictionary_compressor_append = error_no_default_fn_pg_community,
@@ -396,7 +415,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.bool_compressor_finish = error_no_default_fn_pg_community,
 	.uuid_compressor_append = error_no_default_fn_pg_community,
 	.uuid_compressor_finish = error_no_default_fn_pg_community,
-	.bloom1_contains = error_no_default_fn_pg_community,
 	.bloom1_contains_any = error_no_default_fn_pg_community,
 	.bloom1_contains_any_hashes = error_no_default_fn_pg_community,
 	.bloom1_hash = error_no_default_fn_pg_community,
@@ -421,6 +439,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	.detach_chunk = error_no_default_fn_pg_community,
 	.attach_chunk = error_no_default_fn_pg_community,
+
+	.hypertable_get_tenant_tracking_info = error_no_default_fn_pg_community,
+	.tenant_tracking_map = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

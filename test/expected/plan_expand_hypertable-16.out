@@ -836,17 +836,22 @@ joins
          ->  Seq Scan on _hyper_3_123_chunk
                Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
 
+-- Disabling nested loop join to keep the test cross-version stable
+-- between pg16.15/17.11/18.6 and newer
+SET enable_nestloop = off;
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.name='tag1') and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_3_116_chunk.value
-   ->  Nested Loop
-         Join Filter: (_hyper_3_116_chunk.tag_id = tag.id)
-         ->  Seq Scan on _hyper_3_116_chunk
-               Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
+   ->  Hash Join
+         Hash Cond: (tag.id = _hyper_3_116_chunk.tag_id)
          ->  Seq Scan on tag
                Filter: (name = 'tag1'::text)
+         ->  Hash
+               ->  Seq Scan on _hyper_3_116_chunk
+                     Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
 
+RESET enable_nestloop;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 --- QUERY PLAN ---
  Sort
@@ -2263,6 +2268,15 @@ no transformation
          ->  Seq Scan on _hyper_1_15_chunk
                Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
 
+\qecho user-defined function named time_bucket should not trigger internal error
+user-defined function named time_bucket should not trigger internal error
+CREATE FUNCTION time_bucket(int, text) RETURNS text AS $$ BEGIN RETURN left($2, $1); END $$ LANGUAGE plpgsql;
+SELECT count(*) FROM hyper WHERE time_bucket(1, 'foo') < 'z';
+ count 
+-------
+  1002
+
+DROP FUNCTION time_bucket(int, text);
 \qecho exclude chunks based on time column with partitioning function. This
 exclude chunks based on time column with partitioning function. This
 \qecho transparently applies the time partitioning function on the time
@@ -3670,5 +3684,74 @@ EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM
          Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
    ->  Index Scan using _hyper_21_203_chunk_metrics_space_time_idx on _hyper_21_203_chunk (actual rows=1.00 loops=1)
          Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
+
+CREATE TABLE join_removal_main(time timestamptz NOT NULL, device int, val float);
+SELECT create_hypertable('join_removal_main', 'time');
+        create_hypertable        
+---------------------------------
+ (22,public,join_removal_main,t)
+
+CREATE TABLE join_removal_aux(time timestamptz NOT NULL, device int NOT NULL, extra float);
+SELECT create_hypertable('join_removal_aux', 'time');
+       create_hypertable        
+--------------------------------
+ (23,public,join_removal_aux,t)
+
+CREATE UNIQUE INDEX join_removal_aux_uq ON join_removal_aux (device, time);
+INSERT INTO join_removal_main VALUES ('2021-01-01', 1, 1.0), ('2021-01-02', 2, 2.0);
+INSERT INTO join_removal_aux VALUES ('2021-01-01', 1, 10.0), ('2021-01-02', 2, 20.0);
+ANALYZE join_removal_main, join_removal_aux;
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT m.time, m.device, m.val
+FROM join_removal_main m
+LEFT JOIN join_removal_aux a ON a.device = m.device AND a.time = m.time;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_22_204_chunk m (actual rows=2.00 loops=1)
+
+CREATE TABLE self_join_test(time timestamptz NOT NULL, device int NOT NULL, val float);
+SELECT create_hypertable('self_join_test', 'time');
+      create_hypertable       
+------------------------------
+ (24,public,self_join_test,t)
+
+CREATE UNIQUE INDEX self_join_test_uq ON self_join_test (device, time);
+INSERT INTO self_join_test VALUES ('2021-01-01', 1, 1.0), ('2021-01-02', 2, 2.0);
+ANALYZE self_join_test;
+CREATE FUNCTION plan_lines(query text) RETURNS SETOF text
+LANGUAGE plpgsql AS
+$$
+DECLARE
+	ln text;
+BEGIN
+	FOR ln IN EXECUTE 'EXPLAIN (buffers off, costs off) ' || query
+	LOOP
+		RETURN NEXT ln;
+	END LOOP;
+END;
+$$;
+SELECT count(*) FILTER (WHERE ln LIKE '%Scan on %') AS scans,
+       count(*) FILTER (WHERE ln ~ 'Nested Loop|Hash Join|Merge Join') AS join_nodes
+FROM plan_lines('SELECT t1.val
+                 FROM self_join_test t1, self_join_test t2
+                 WHERE t1.device = t2.device AND t1.time = t2.time') AS ln;
+ scans | join_nodes 
+-------+------------
+     2 |          1
+
+SELECT t1.val
+FROM self_join_test t1, self_join_test t2
+WHERE t1.device = t2.device AND t1.time = t2.time
+ORDER BY t1.val;
+ val 
+-----
+   1
+   2
+
+CREATE VIEW join_removal_view AS
+SELECT m.time, m.device, m.val, a.extra
+FROM join_removal_main m
+LEFT JOIN join_removal_aux a ON a.device = m.device AND a.time = m.time;
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT time, device, val FROM join_removal_view;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_22_204_chunk m (actual rows=2.00 loops=1)
 
 --TEST END--

@@ -8,6 +8,7 @@
 #include <postgres.h>
 #include <access/skey.h>
 #include <nodes/nodes.h>
+#include <utils/lsyscache.h>
 
 #include "ts_catalog/compression_settings.h"
 
@@ -19,6 +20,8 @@ typedef struct tuple_filtering_constraints
 	 * add/subtract FirstLowInvalidHeapAttributeNumber from these.
 	 */
 	Bitmapset *key_columns;
+	/* collation of each key column in its unique index, indexed by attno */
+	Oid *key_collations;
 	/*
 	 * The covered flag is set to true if we have a single constraint that is covered
 	 * by all the columns present in the Bitmapset.
@@ -28,8 +31,14 @@ typedef struct tuple_filtering_constraints
 	OnConflictAction on_conflict;
 	Oid index_relid; /* used for better error messages */
 	bool nullsnotdistinct;
-	bool vectorized_filtering;
 } tuple_filtering_constraints;
+
+/* get_collation_isdeterministic() cannot be called for columns without a collation */
+static inline bool
+collation_is_deterministic(Oid collation)
+{
+	return !OidIsValid(collation) || get_collation_isdeterministic(collation);
+}
 
 bool slot_key_test(TupleTableSlot *slot, ScanKey skey, bool nulls_first);
 
@@ -41,12 +50,12 @@ ScanKeyData *build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *set
 ScanKeyData *build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys);
 ScanKeyData *build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel,
 											 Relation out_rel, Bitmapset *key_columns,
-											 TupleTableSlot *slot, Relation *result_index_rel,
-											 Bitmapset **index_columns, int *num_scan_keys,
-											 AttrNumber **slot_attnos);
+											 Oid *key_collations, TupleTableSlot *slot,
+											 Relation *result_index_rel, Bitmapset **index_columns,
+											 int *num_scan_keys, AttrNumber **slot_attnos);
 ScanKeyData *build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 								 CompressionSettings *settings, Bitmapset *key_columns,
-								 Bitmapset **null_columns, TupleTableSlot *slot, int *num_scankeys,
-								 AttrNumber **slot_attnos);
+								 Oid *key_collations, Bitmapset **null_columns,
+								 TupleTableSlot *slot, int *num_scankeys, AttrNumber **slot_attnos);
 ScanKeyData *build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scankeys,
 										  Bitmapset **null_columns, bool *delete_only);

@@ -672,6 +672,9 @@ SELECT * FROM hypertable_approximate_size('ht_try');
 -- Error for a hypertable that has no OSM chunk
 SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('test1.hyper1');
 ERROR:  no OSM chunk found for hypertable test1.hyper1
+-- Cannot add dimensions with tiering
+SELECT add_dimension('ht_try', 'acq_id', number_partitions => 2);
+ERROR:  multiple dimensions not supported for hypertables with data tiering enabled
 \set ON_ERROR_STOP 1
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
@@ -868,6 +871,15 @@ ERROR:  must be owner of hypertable "ht_try"
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 ERROR:  "non_ht" is not a hypertable
+-- TEST error have to be hypertable owner to drop the OSM chunk
+SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
+ERROR:  must be owner of hypertable "ht_try"
+-- TEST error have to be hypertable owner to update the OSM chunk range
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', NULL::timestamptz, NULL::timestamptz);
+ERROR:  must be owner of hypertable "ht_try"
+-- TEST error have to be hypertable owner to lock the OSM chunk dimension slice
+SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('ht_try');
+ERROR:  must be owner of hypertable "ht_try"
 -- TEST drop OSM chunk
 \c :TEST_DBNAME :ROLE_4
 -- We need the OSM chunk for other tests so we run the test in a single
@@ -1791,7 +1803,10 @@ INSERT INTO ht_pub_test VALUES ('2023-01-01 01:00', 1, 10.5);
 -- Create publication
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.enable_chunk_auto_publication = true;
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
 CREATE PUBLICATION test_pub_osm FOR TABLE ht_pub_test;
+RESET client_min_messages;
 -- Verify: 1 normal chunk in publication
 SELECT schemaname, tablename
 FROM pg_publication_tables
@@ -1856,6 +1871,41 @@ ORDER BY schemaname, tablename;
  _timescaledb_internal | _hyper_24_42_chunk
  public                | ht_pub_test
 
+-- Backfill path: recreating the publication as FOR TABLES IN SCHEMA must
+-- backfill the existing normal chunks but skip the OSM chunk.
+SET timescaledb.enable_chunk_auto_publication = true;
+DROP PUBLICATION test_pub_osm;
+CREATE SCHEMA pub_osm_schema;
+ALTER TABLE public.ht_pub_test SET SCHEMA pub_osm_schema;
+-- Show that the hypertable has both normal and OSM chunks before backfill
+SELECT relid::text AS table_name, osm_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id IN (SELECT id FROM _timescaledb_catalog.hypertable
+                        WHERE table_name = 'ht_pub_test')
+ORDER BY relid::text COLLATE "C";
+                table_name                | osm_chunk 
+------------------------------------------+-----------
+ _timescaledb_internal._hyper_24_40_chunk | f
+ _timescaledb_internal._hyper_24_42_chunk | f
+ osm_chunk_pub_test                       | t
+
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
+CREATE PUBLICATION test_pub_osm FOR TABLES IN SCHEMA pub_osm_schema;
+RESET client_min_messages;
+-- Only normal chunks should appear; OSM chunk is skipped.
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+      schemaname       |     tablename      
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_24_40_chunk
+ _timescaledb_internal | _hyper_24_42_chunk
+ pub_osm_schema        | ht_pub_test
+
+ALTER TABLE pub_osm_schema.ht_pub_test SET SCHEMA public;
+DROP SCHEMA pub_osm_schema;
 -- Cleanup
 DROP PUBLICATION test_pub_osm CASCADE;
 \c :TEST_DBNAME :ROLE_4
@@ -1886,3 +1936,22 @@ SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
 ERROR:  chunk "_timescaledb_internal._hyper_25_43_chunk" is frozen, skipping compression
 ROLLBACK;
 \set ON_ERROR_STOP 1
+-- A non-owner must not be able to freeze or unfreeze a chunk
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE freeze_perm(time timestamptz NOT NULL);
+SELECT create_hypertable('freeze_perm', 'time');
+     create_hypertable     
+---------------------------
+ (26,public,freeze_perm,t)
+
+INSERT INTO freeze_perm VALUES ('2025-01-01');
+SELECT ch AS "FREEZECHUNK" FROM show_chunks('freeze_perm') ch \gset
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.freeze_chunk(:'FREEZECHUNK');
+ERROR:  must be owner of hypertable "freeze_perm"
+SELECT _timescaledb_functions.unfreeze_chunk(:'FREEZECHUNK');
+ERROR:  must be owner of hypertable "freeze_perm"
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE freeze_perm;

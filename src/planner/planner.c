@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/table.h>
 #include <access/tsmapi.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
@@ -50,9 +51,12 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
+#include "import/createplan.h"
+#include "import/optimizer/plancat.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "nodes/deferred_chunk_append/deferred_chunk_append.h"
 #include "nodes/modify_hypertable.h"
 #include "partitioning.h"
 #include "planner/planner.h"
@@ -824,7 +828,7 @@ get_parent_rte(const PlannerInfo *root, Index rti)
  * related metadata: like chunk_status and pointer to hypertable entry.
  * It is okay to cache a pointer to the hypertable, since this cache is
  * confined to the lifetime of the query and not used across queries.
- * If the parent reolid is known, the caller can specify it to avoid the costly
+ * If the parent relid is known, the caller can specify it to avoid the costly
  * lookup. Otherwise pass InvalidOid.
  */
 static BaserelInfoEntry *
@@ -1017,27 +1021,48 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
-	if (path->param_info != NULL && ordered)
+	if (!ts_guc_enable_chunk_append)
+	{
+		return false;
+	}
+
+	if ((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
+		bms_num_members(root->all_baserels) > 1)
 	{
 		/*
-		 * Ordered ChunkAppend might create MergeAppend path for individual
-		 * chunks when we have space partitioning or partial chunks. MergeAppend
-		 * paths cannot be parameterized. Refuse to use parameterized ordered
-		 * ChunkAppend altogether, because the more precise conditions are
-		 * difficult to check.
+		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved.
 		 */
 		return false;
 	}
 
-	if (
-		/*
-		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
-		 */
-		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
-		 bms_num_members(root->all_baserels) > 1) ||
-		!ts_guc_enable_chunk_append)
+	if (path->param_info != NULL)
 	{
-		return false;
+		if (ordered)
+		{
+			/*
+			 * Ordered ChunkAppend might create MergeAppend path for individual
+			 * chunks when we have space partitioning or partial chunks. MergeAppend
+			 * paths cannot be parameterized. Refuse to use parameterized ordered
+			 * ChunkAppend altogether, because the more precise conditions are
+			 * difficult to check.
+			 */
+			return false;
+		}
+
+		if (path->param_info->ppi_clauses != NIL)
+		{
+			/*
+			 * If we have any clauses with join parameters, we can apply runtime
+			 * chunk exclusion.
+			 */
+			return true;
+		}
+
+		/*
+		 * The path can be parameterized but not have any parameterized clauses,
+		 * effectively if it's a cross join written as LATERAL. Check the other
+		 * conditions for chunk append in this case.
+		 */
 	}
 
 	switch (nodeTag(path))
@@ -1088,13 +1113,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				/*
 				 * Do not try to do ordered append if the OSM chunk range is noncontiguous
 				 */
-				if (ht && ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID)
+				if (ht && ts_hypertable_has_noncontiguous_osm_chunk(ht))
 				{
-					if (ts_flags_are_set_32(ht->fd.status,
-											HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
-					{
-						return false;
-					}
+					return false;
 				}
 
 				/*
@@ -1217,13 +1238,44 @@ expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
-			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
+			Assert(in_rel != NULL);
 
-			Assert(ht != NULL && in_rel != NULL);
-			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
+			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
+			Assert(ht != NULL);
+
+			if (!IS_DUMMY_REL(in_rel))
+			{
+				ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
+			}
 
 			in_rte->inh = true;
 			expanded_some_hypertables = true;
+
+			/*
+			 * For DML target that is an inheritance parent, we need to properly
+			 * create the row identity variables. Postgres didn't do this for us
+			 * because we wanted to expand the inheritance hierarchy ourselves,
+			 * and marked the table as inh = false to prevent expansion. Now just
+			 * call the standard Postgres function to do this.
+			 */
+			if (bms_is_member(i, root->all_result_relids))
+			{
+				/*
+				 * Side-effect of setting inh = false, Postgres might have included
+				 * the hypertable into leaf_result_relids in latest PG versions.
+				 * We remove it here because hypertable relation never contains
+				 * any heap tuples. This is compatible with older versions
+				 * which don't contain hypertable leaf result relid (its a no-op).
+				 */
+				root->leaf_result_relids = bms_del_member(root->leaf_result_relids, i);
+
+				distribute_row_identity_vars(root);
+			}
+
+			if (IS_DUMMY_REL(in_rel))
+			{
+				continue;
+			}
 
 			/*
 			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
@@ -1324,7 +1376,11 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			if (transformed_query_pathkeys != NIL)
 			{
 				List *orig_query_pathkeys = root->query_pathkeys;
+				List *orig_sort_pathkeys = root->sort_pathkeys;
+				List *orig_window_pathkeys = root->window_pathkeys;
 				root->query_pathkeys = transformed_query_pathkeys;
+				root->sort_pathkeys = transformed_query_pathkeys;
+				root->window_pathkeys = transformed_query_pathkeys;
 
 				/* Create index paths with transformed pathkeys */
 				create_index_paths(root, rel);
@@ -1339,6 +1395,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				}
 
 				root->query_pathkeys = orig_query_pathkeys;
+				root->sort_pathkeys = orig_sort_pathkeys;
+				root->window_pathkeys = orig_window_pathkeys;
 
 				/*
 				 * change returned paths to use original pathkeys. have to go through
@@ -1371,7 +1429,6 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 		TimescaleDBPrivate *private = ts_get_private_reloptinfo(rel);
 		bool ordered = private->appends_ordered;
 		int order_attno = private->order_attno;
-		List *nested_oids = private->nested_oids;
 		ListCell *lc;
 
 		Assert(ht != NULL);
@@ -1386,13 +1443,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				case T_MergeAppendPath:
 					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
 					{
-						*pathptr = ts_chunk_append_path_create(root,
-															   rel,
-															   ht,
-															   *pathptr,
-															   false,
-															   ordered,
-															   nested_oids);
+						*pathptr =
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, false, ordered);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
@@ -1415,7 +1467,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 					if (should_chunk_append(ht, root, rel, *pathptr, false, 0))
 					{
 						*pathptr =
-							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
@@ -1457,8 +1509,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 * the relation rte->relid (e.g., a transition table for a trigger), but
 	 * not the relation itself.
 	 */
-	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid) ||
-		IS_DUMMY_REL(rel))
+	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid))
 	{
 		if (prev_set_rel_pathlist_hook != NULL)
 		{
@@ -1468,6 +1519,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	}
 
 	reltype = ts_classify_relation(root, rel, &ht);
+
+	/*
+	 * Attach DeferredChunkAppend path for the (unexpanded) hypertable.
+	 */
+	if (reltype == TS_REL_HYPERTABLE && ht && ts_get_private_reloptinfo(rel)->deferred_chunk_append)
+	{
+		ts_deferred_chunk_append_add_path(root, rel, ht);
+		if (prev_set_rel_pathlist_hook != NULL)
+		{
+			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+		}
+		return;
+	}
 
 	/*
 	 * Check for unexpanded hypertable.
@@ -1508,6 +1572,10 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
+			if (IS_DUMMY_REL(rel))
+			{
+				break;
+			}
 			/* Check for UPDATE/DELETE/MERGE (DML) on compressed chunks */
 			if ((IS_UPDL_CMD(root->parse) || root->parse->commandType == CMD_MERGE) &&
 				dml_involves_hypertable(root, ht, rti))
@@ -1579,27 +1647,91 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 		case TS_REL_HYPERTABLE:
 		{
 			/*
-			 * Mark hypertable RTEs we'd like to expand ourselves.
-			 * We always do this for SELECTs from hypertables.
-			 *
-			 * For DML, we also always expand the non-target relations.
-			 *
-			 * The hypertables that are not expanded by our custom code
-			 * here fall back to the standard Postgres inheritance
-			 * hierarchy expansion.
-			 *
-			 * `inhparent` goes to false in two cases: a hypertable without
-			 * chunks or a SELECT FROM ONLY hypertable. We still want to run our
-			 * hypertable expansion code for hypertables w/o chunks.
+			 * The tables are not yet marked as dummy at this point, it happens
+			 * after this hook is called. We have to have some special handling
+			 * for dummy tables, but only at later stages.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL &&
-				rel->relid != (Index) query->resultRelation)
+			Assert(!IS_DUMMY_REL(rel));
+
+			/*
+			 * Postgres skips building rel->indexlist for a relation it
+			 * considers an inheritance parent. But useless-join and self-join
+			 * elimination need a populated indexlist to prove this relation is
+			 * unique.
+			 */
+			if (ts_guc_enable_optimizations && inhparent)
 			{
-				rte_mark_for_expansion(rte);
+				ts_build_indexlist(root, rel);
 			}
 
-			ts_create_private_reloptinfo(rel);
+#if PG17_GE
+			/*
+			 * Postgres also skips filling rel->notnullattnums for an
+			 * inheritance parent. Fill it manually as well, it is used for e.g.
+			 * removing the always-false null tests.
+			 */
+			if (inhparent)
+			{
+				Relation relation = table_open(rte->relid, NoLock);
+				for (int i = 0; i < relation->rd_att->natts; i++)
+				{
+#if PG18_GE
+					CompactAttribute *attr = TupleDescCompactAttr(relation->rd_att, i);
+
+					Assert(attr->attnullability != ATTNULLABLE_UNKNOWN);
+
+					if (attr->attnullability == ATTNULLABLE_VALID)
+					{
+						rel->notnullattnums = bms_add_member(rel->notnullattnums, i + 1);
+					}
+#else
+					FormData_pg_attribute *attr = TupleDescAttr(relation->rd_att, i);
+
+					if (attr->attnotnull)
+					{
+						rel->notnullattnums = bms_add_member(rel->notnullattnums, attr->attnum);
+					}
+#endif
+				}
+				table_close(relation, NoLock);
+			}
+#endif
+
+			/*
+			 * Mark hypertable RTEs we'd like to expand ourselves. We do this
+			 * for hypertables participating SELECT, UPDATE and DELETE,
+			 * including the target relation. The support for expanding target
+			 * relation of MERGE is not implemented at the moment.
+			 *
+			 * For DeferredChunkAppend we don't expand during planning.
+			 *
+			 * The hypertables that are not expanded by our custom code here
+			 * fall back to the standard Postgres inheritance hierarchy
+			 * expansion.
+			 *
+			 * `inhparent` goes to false in two cases: a hypertable without
+			 * chunks or a SELECT FROM ONLY hypertable.
+			 */
+			bool use_deferred_chunk_append =
+				inhparent && ts_should_deferred_chunk_append(query, ht);
+			if (use_deferred_chunk_append)
+			{
+				rte->inh = false;
+			}
+			else if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
+					 inhparent && rte->ctename == NULL)
+			{
+				if (rel->relid != (Index) query->resultRelation)
+				{
+					rte_mark_for_expansion(rte);
+				}
+				else if (IS_UPDL_CMD(query) && ts_guc_enable_hypertable_expansion_for_dml)
+				{
+					rte_mark_for_expansion(rte);
+				}
+			}
+
+			ts_create_private_reloptinfo(rel)->deferred_chunk_append = use_deferred_chunk_append;
 
 			if (ts_guc_enable_optimizations)
 			{
@@ -1635,7 +1767,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 									"current \"timescaledb.license\""),
 							 errdetail("Chunk \"%s\" is compressed and requires "
 									   "the TimescaleDB Community Edition to query.",
-									   get_rel_name(chunk->table_id)),
+									   get_rel_name(chunk->fd.relid)),
 							 errhint("Set timescaledb.license to 'timescale' and install the "
 									 "TimescaleDB Community Edition to query compressed data.")));
 				}
@@ -1653,7 +1785,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * in cases when these functions don't run, we have to do it here.
 			 */
 			const bool use_columnar_scan =
-				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
+				ts_guc_debug_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
 			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
@@ -1854,8 +1986,14 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					 * - INSERT actions need chunk tuple routing
 					 * - Compressed chunks need decompression for correct
 					 *   join evaluation of matched vs not-matched rows
+					 * - Continuous aggregates need invalidation for
+					 *   UPDATE/DELETE actions
 					 */
 					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+					if (!need_modify && ht != NULL)
+					{
+						need_modify = ts_hypertable_has_continuous_aggregates(ht->fd.id);
+					}
 					if (!need_modify)
 					{
 						List *firstMergeActionList = linitial(mt->mergeActionLists);
@@ -1885,6 +2023,89 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 	}
 
 	return new_pathlist;
+}
+
+/*
+ * Move a projection below a single-chunk Append, MergeAppend or ChunkAppend, so
+ * the chunk scan computes it and no Result node is needed.
+ */
+static void
+push_projection_below_single_child_append(PlannerInfo *root, List *pathlist)
+{
+	ListCell *lc;
+	foreach (lc, pathlist)
+	{
+		ProjectionPath *projection = lfirst(lc);
+		if (!IsA(projection, ProjectionPath))
+		{
+			continue;
+		}
+
+		Path *append = projection->subpath;
+		List *subpaths;
+		if (IsA(append, AppendPath))
+		{
+			subpaths = castNode(AppendPath, append)->subpaths;
+		}
+		else if (IsA(append, MergeAppendPath))
+		{
+			subpaths = castNode(MergeAppendPath, append)->subpaths;
+		}
+		else if (ts_is_chunk_append_path(append))
+		{
+			subpaths = castNode(CustomPath, append)->custom_paths;
+		}
+		else
+		{
+			continue;
+		}
+
+		/* Skip appends with several chunks and projections already pushed down. */
+		if (list_length(subpaths) != 1 || append->pathtarget == projection->path.pathtarget)
+		{
+			continue;
+		}
+
+		/* ChunkAppend can have a MergeAppend over the whole hypertable as child. */
+		Path *child = linitial(subpaths);
+		if (child->parent->reloptkind != RELOPT_OTHER_MEMBER_REL)
+		{
+			continue;
+		}
+
+		AppendRelInfo *appinfo = ts_get_appendrelinfo(root, child->parent->relid, false);
+
+		PathTarget *child_target = copy_pathtarget(projection->path.pathtarget);
+		child_target->exprs =
+			castNode(List, adjust_appendrel_attrs(root, (Node *) child_target->exprs, 1, &appinfo));
+		List *new_subpaths =
+			list_make1(create_projection_path(root, child->parent, child, child_target));
+
+		Path *new_append;
+		if (IsA(append, AppendPath))
+		{
+			AppendPath *copy = makeNode(AppendPath);
+			memcpy(copy, append, sizeof(AppendPath));
+			copy->subpaths = new_subpaths;
+			new_append = &copy->path;
+		}
+		else if (IsA(append, MergeAppendPath))
+		{
+			MergeAppendPath *copy = makeNode(MergeAppendPath);
+			memcpy(copy, append, sizeof(MergeAppendPath));
+			copy->subpaths = new_subpaths;
+			new_append = &copy->path;
+		}
+		else
+		{
+			ChunkAppendPath *copy = ts_chunk_append_path_copy((ChunkAppendPath *) append,
+															  new_subpaths,
+															  projection->path.pathtarget);
+			new_append = &copy->cpath.path;
+		}
+		new_append->pathtarget = projection->path.pathtarget;
+		projection->subpath = new_append;
+	}
 }
 
 static void
@@ -1927,6 +2148,19 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		{
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
 		}
+	}
+
+	/*
+	 * Skip ORDERED and FINAL: they add input_rel paths to output_rel as they
+	 * are, and add_path frees the ones that lose to a cheaper path while
+	 * they are still in input_rel->pathlist. Test the stage first, since
+	 * IS_DUMMY_REL also reads that list.
+	 */
+	if (stage != UPPERREL_ORDERED && stage != UPPERREL_FINAL && reltype == TS_REL_HYPERTABLE &&
+		ts_guc_enable_optimizations && !IS_DUMMY_REL(input_rel))
+	{
+		push_projection_below_single_child_append(root, input_rel->pathlist);
+		push_projection_below_single_child_append(root, input_rel->partial_pathlist);
 	}
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
@@ -2104,6 +2338,45 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 			subq->groupClause = fill_missing_groupclause(new_groupclause, subq_groupclause_copy);
 		}
 	}
+}
+
+/*
+ * Add Sort over a given plan if it's not sufficiently ordered.
+ */
+Plan *
+ts_add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
+					  const AttrNumber *reqColIdx, double limit_tuples)
+{
+	int numsortkeys;
+	AttrNumber *sortColIdx;
+	Oid *sortOperators;
+	Oid *collations;
+	bool *nullsFirst;
+
+	/* Compute sort column info, and adjust the child's tlist as needed */
+	plan = ts_prepare_sort_from_pathkeys(plan,
+										 pathkeys,
+										 path->parent->relids,
+										 reqColIdx,
+										 true,
+										 &numsortkeys,
+										 &sortColIdx,
+										 &sortOperators,
+										 &collations,
+										 &nullsFirst);
+
+	/* Now, insert a Sort node if child isn't sufficiently ordered */
+	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
+	{
+		Sort *sort;
+
+		Assert(!IsA(plan, Sort));
+		sort = ts_make_sort(plan, numsortkeys, sortColIdx, sortOperators, collations, nullsFirst);
+		ts_label_sort_with_costsize(root, sort, limit_tuples);
+		plan = (Plan *) sort;
+	}
+
+	return plan;
 }
 
 void

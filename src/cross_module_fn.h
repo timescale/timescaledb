@@ -106,6 +106,8 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_dml_invalidate)(int32 hypertable_id, Relation chunk_rel,
 										  HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
 										  bool update);
+	void (*tenant_tracker_cache_invalidate)(Oid relid);
+	void (*tenant_tracker_remove_at_commit)(int32 hypertable_id, Oid main_table_relid);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	void (*continuous_agg_add_column)(ContinuousAgg *cagg, AlterTableStmt *stmt);
@@ -130,6 +132,7 @@ typedef struct CrossModuleFunctions
 	PGFunction decompress_chunk;
 	PGFunction rebuild_columnstore;
 	PGFunction rebuild_sparse_index;
+	PGFunction move_to_columnstore;
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
@@ -156,6 +159,8 @@ typedef struct CrossModuleFunctions
 	PGFunction decompress_batch;
 	PGFunction deltadelta_compressor_append;
 	PGFunction deltadelta_compressor_finish;
+	PGFunction aic_compressor_append;
+	PGFunction aic_compressor_finish;
 	PGFunction gorilla_compressor_append;
 	PGFunction gorilla_compressor_finish;
 	PGFunction dictionary_compressor_append;
@@ -166,7 +171,6 @@ typedef struct CrossModuleFunctions
 	PGFunction bool_compressor_finish;
 	PGFunction uuid_compressor_append;
 	PGFunction uuid_compressor_finish;
-	PGFunction bloom1_contains;
 	PGFunction bloom1_contains_any;
 	PGFunction bloom1_contains_any_hashes;
 	PGFunction bloom1_hash;
@@ -189,6 +193,9 @@ typedef struct CrossModuleFunctions
 	PGFunction attach_chunk;
 
 	PGFunction estimate_compressed_batch_size;
+
+	PGFunction hypertable_get_tenant_tracking_info;
+	PGFunction tenant_tracking_map;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

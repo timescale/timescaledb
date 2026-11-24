@@ -509,8 +509,9 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- check that alter_job rejects a check function with invalid signature
+-- Don't schedule the job, so it does not run while alter_job reads its stats
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func',
-initial_start => :'time_zero'::timestamptz) as job_id_alter \gset
+initial_start => :'time_zero'::timestamptz, scheduled => false) as job_id_alter \gset
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter);
 -- test that we can unregister the check function
@@ -730,10 +731,13 @@ $$;
 -- Hold the lock so any worker running proc_that_blocks waits on it.
 SELECT pg_advisory_lock(8584);
 
+-- Stop the scheduler while the jobs are added. A running scheduler could
+-- start one of them before the workers are started below.
+SELECT _timescaledb_functions.stop_background_workers();
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_1 \gset
 SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_2 \gset
 
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 -- wait for both jobs to be picked up and blocked on the lock
 CALL wait_for_job_status(:job_id_1, 'Running');
 CALL wait_for_job_status(:job_id_2, 'Running');
@@ -787,8 +791,10 @@ SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS 
 SELECT ts_test_bgw_job_function_call_string(:job_func);
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 
--- Remove the procedure and let's check it errors out when we try to call the function that gets the proc name
-DROP PROCEDURE custom_proc(jobid int, args jsonb);
+-- Point the job at a procedure that does not exist (dropping the procedure
+-- is blocked while a job depends on it) and check that building the call
+-- string errors out.
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'custom_proc_missing' WHERE id = :job_proc;
 \set ON_ERROR_STOP 0
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 \set ON_ERROR_STOP 1
@@ -826,3 +832,56 @@ SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
 SELECT job_id FROM alter_job(:job_no_config, config_merge => '{"fresh":"config"}');
 SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
 SELECT delete_job(:job_no_config);
+
+-- Changing the hypertable owner moves policy jobs but not user-defined jobs
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE owner_ht(time timestamptz NOT NULL, value int) WITH (tsdb.hypertable);
+SELECT add_retention_policy('owner_ht', INTERVAL '1 month') AS job_owner_policy \gset
+SELECT add_job('custom_func', '1h') AS job_owner_custom \gset
+SELECT _timescaledb_functions.alter_job_set_hypertable_id(:job_owner_custom, 'owner_ht');
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER TABLE owner_ht OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+SELECT proc_name, owner::regrole FROM _timescaledb_config.bgw_job
+WHERE id IN (:job_owner_policy, :job_owner_custom) ORDER BY id;
+SELECT delete_job(:job_owner_custom);
+DROP TABLE owner_ht;
+
+-- The config check function runs as the job owner even when another
+-- role alters the job
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE check_caller_log(caller name);
+GRANT INSERT ON check_caller_log TO PUBLIC;
+CREATE FUNCTION check_caller(config jsonb) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO public.check_caller_log VALUES (current_user);
+END
+$$;
+SELECT add_job('custom_func', '1h', config => '{}', check_config => 'check_caller') AS job_check_caller \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT scheduled FROM alter_job(:job_check_caller, scheduled => false);
+SELECT caller FROM check_caller_log;
+SELECT delete_job(:job_check_caller);
+DROP TABLE check_caller_log;
+DROP FUNCTION check_caller;
+
+-- Job doing transaction control cannot be run from a function or a transaction block
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE custom_log(job_id int, args jsonb, extra text, runner NAME DEFAULT CURRENT_ROLE);
+SELECT add_job('custom_proc2', '1h', config => '{"type":"procedure"}') AS job_commit \gset
+CREATE FUNCTION run_job_func(job_id int) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    CALL run_job(job_id);
+END
+$$;
+\set ON_ERROR_STOP 0
+SELECT run_job_func(:job_commit);
+BEGIN;
+CALL run_job(:job_commit);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM custom_log;
+CALL run_job(:job_commit);
+SELECT extra FROM custom_log ORDER BY extra;
+SELECT delete_job(:job_commit);
+DROP FUNCTION run_job_func;
+DROP TABLE custom_log;

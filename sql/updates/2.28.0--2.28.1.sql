@@ -9,6 +9,7 @@ BEGIN
     -- START bgw_job_stat_history
     --
     DROP VIEW IF EXISTS timescaledb_information.job_history;
+    DROP VIEW IF EXISTS timescaledb_information.job_errors;
 
     CREATE TABLE _timescaledb_internal._tmp_bgw_job_stat_history AS SELECT * FROM _timescaledb_internal.bgw_job_stat_history;
     CREATE TABLE _timescaledb_internal._tmp_job_stat_history_id_seq AS SELECT last_value, is_called FROM _timescaledb_internal.bgw_job_stat_history_id_seq;

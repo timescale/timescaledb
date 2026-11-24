@@ -17,6 +17,7 @@
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
 #include "chunk_api.h"
+#include "compression/algorithms/aic.h"
 #include "compression/algorithms/array.h"
 #include "compression/algorithms/bool_compress.h"
 #include "compression/algorithms/deltadelta.h"
@@ -35,6 +36,8 @@
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/rewrite_with_caggs.h"
+#include "continuous_aggs/tenant_tracker.h"
+#include "continuous_aggs/tenant_tracker_function.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
@@ -127,6 +130,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
+	.tenant_tracker_cache_invalidate = continuous_agg_tenant_tracker_cache_invalidate,
+	.tenant_tracker_remove_at_commit = ts_tenant_tracker_remove_at_commit,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_add_column = continuous_agg_add_column,
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
@@ -149,6 +154,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_has_nulls = tsl_compressed_data_has_nulls,
 	.deltadelta_compressor_append = tsl_deltadelta_compressor_append,
 	.deltadelta_compressor_finish = tsl_deltadelta_compressor_finish,
+	.aic_compressor_append = tsl_aic_compressor_append,
+	.aic_compressor_finish = tsl_aic_compressor_finish,
 	.gorilla_compressor_append = tsl_gorilla_compressor_append,
 	.gorilla_compressor_finish = tsl_gorilla_compressor_finish,
 	.dictionary_compressor_append = tsl_dictionary_compressor_append,
@@ -159,7 +166,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.bool_compressor_finish = tsl_bool_compressor_finish,
 	.uuid_compressor_append = tsl_uuid_compressor_append,
 	.uuid_compressor_finish = tsl_uuid_compressor_finish,
-	.bloom1_contains = bloom1_contains,
 	.bloom1_contains_any = bloom1_contains_any,
 	.bloom1_contains_any_hashes = bloom1_contains_any_hashes,
 	.bloom1_hash = bloom1_hash,
@@ -172,6 +178,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_chunk = tsl_decompress_chunk,
 	.rebuild_columnstore = tsl_rebuild_columnstore,
 	.rebuild_sparse_index = tsl_rebuild_sparse_index,
+	.move_to_columnstore = tsl_move_to_columnstore,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
@@ -197,12 +204,16 @@ CrossModuleFunctions tsl_cm_functions = {
 	.detach_chunk = chunk_detach,
 	.attach_chunk = chunk_attach,
 	.estimate_compressed_batch_size = tsl_estimate_compressed_batch_size,
+
+	.hypertable_get_tenant_tracking_info = tsl_hypertable_get_tenant_tracking_info,
+	.tenant_tracking_map = tsl_tenant_tracking_map,
 };
 
 static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
 	_continuous_aggs_cache_inval_fini();
+	_tenant_tracker_fini();
 }
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -216,6 +227,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
+	_tenant_tracker_init();
 	_columnar_index_scan_init();
 	_columnar_scan_init();
 	_skip_scan_init();

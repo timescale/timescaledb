@@ -31,6 +31,7 @@ set(TEST_FILES
     extension_scripts.sql
     generated_as_identity.sql
     hash.sql
+    hash_collation_icu.sql
     histogram.sql
     index.sql
     information_views.sql
@@ -85,12 +86,6 @@ set(TEST_TEMPLATES
     plan_expand_hypertable.sql.in
     ts_merge.sql.in)
 
-# Loader test must distinguish between Apache and TSL builds so we parametrize
-# this here
-set(LOADER_TEST_FILE loader-${TEST_LICENSE_SUFFIX})
-configure_file(loader.sql.in
-               ${CMAKE_CURRENT_SOURCE_DIR}/${LOADER_TEST_FILE}.sql)
-
 # tests that fail or are unreliable when run in parallel bgw tests need to run
 # first otherwise they are flaky
 set(SOLO_TESTS
@@ -104,7 +99,7 @@ set(SOLO_TESTS
     telemetry
     net)
 
-list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
+list(APPEND SOLO_TESTS loader)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -113,6 +108,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     alter_table_memory.sql
     bgw_launcher.sql
     c_unit_tests.sql
+    cache_invalidate_uaf.sql
     copy_memory_usage.sql
     metadata.sql
     multi_transaction_index.sql
@@ -122,21 +118,25 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     symbol_conflict.sql
     test_tss_callbacks.sql
     test_utils.sql
-    ${LOADER_TEST_FILE}.sql)
+    loader.sql)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry.sql)
   endif()
 
-  list(APPEND SOLO_TESTS cache_invalidate_uaf.sql)
+  list(APPEND SOLO_TESTS cache_invalidate_uaf)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES tableam_alter_defaults.sql
+  list(APPEND TEST_FILES copy_on_error.sql tableam_alter_defaults.sql
        merge_not_matched_by_source.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES insert_returning_old_new.sql)
+  list(APPEND TEST_FILES copy_reject_limit.sql insert_returning_old_new.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
+  list(APPEND TEST_FILES repack.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture

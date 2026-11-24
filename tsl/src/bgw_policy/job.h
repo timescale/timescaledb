@@ -69,3 +69,4 @@ extern void policy_compression_read_and_validate_config(Jsonb *config,
 extern void policy_recompression_read_and_validate_config(Jsonb *config,
 														  PolicyCompressionData *policy_data);
 extern bool job_execute(BgwJob *job);
+extern bool job_execute_in_context(BgwJob *job, bool atomic);

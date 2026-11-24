@@ -1,2 +1,0 @@
-Fixes: #10179 Allow enabling and disabling triggers on hypertables with columnstore enabled
-Thanks: @juantxorena for reporting that triggers could not be enabled or disabled on hypertables with columnstore enabled

@@ -54,7 +54,7 @@ extern void ts_process_utility_set_expect_chunk_modification(bool expect);
  * SPI_inside_nonatomic_context function, that would have been sufficient
  * for isTopLevel flag, but it currently returns false when SPI connection
  * is absent (that is a valid scenario when C procedures are called from
- * top-lelev SQL instead of PLPG procedures or DO blocks) so it cannot be
+ * top-level SQL instead of PLPG procedures or DO blocks) so it cannot be
  * used.
  *
  * To work around this the value of ProcessUtilityContext parameter is

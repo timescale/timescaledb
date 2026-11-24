@@ -49,8 +49,7 @@ array_compressed_has_nulls(const CompressedDataHeader *header)
 	return ac->has_nulls;
 }
 
-static void
-pg_attribute_unused() assertions(void)
+pg_attribute_unused() static void assertions(void)
 {
 	ArrayCompressed test_val = { .vl_len_ = { 0 } };
 	Simple8bRleSerialized test_simple8b = { 0 };
@@ -646,7 +645,7 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	CheckCompressedData(n_notnull * 16 <= (uint32) (si.len - si.cursor));
 
 	uint64 *restrict validity_bitmap = NULL;
-	uint64 *restrict values = MemoryContextAlloc(dest_mctx, n_bytes);
+	uint64 *restrict values = MemoryContextAllocZero(dest_mctx, n_bytes);
 
 	MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
 	/* Decompress the nulls */

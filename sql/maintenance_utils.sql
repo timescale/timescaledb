@@ -36,7 +36,7 @@ CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = true,
     recompress BOOLEAN = false
-) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C VOLATILE;
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C STRICT VOLATILE;
 
 -- Alias for compress_chunk above.
 CREATE OR REPLACE PROCEDURE @extschema@.convert_to_columnstore(
@@ -64,6 +64,11 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.rebuild_sparse_index(
     force BOOLEAN = false
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_rebuild_sparse_index' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.move_to_columnstore(
+    chunk REGCLASS,
+    fallback BOOLEAN = false
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_to_columnstore' LANGUAGE C VOLATILE;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.chunk_rewrite_cleanup()
 LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_chunk_rewrite_cleanup';
 
@@ -90,7 +95,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_segmentwise' LANGUAGE C STRICT VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.compact_chunk(
-    uncompressed_chunk REGCLASS
+    uncompressed_chunk REGCLASS,
+    max_batches INTEGER DEFAULT 0
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compact_chunk' LANGUAGE C STRICT VOLATILE;
 
 -- find the index on the compressed chunk that can be used to recompress efficiently

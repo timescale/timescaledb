@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 SELECT
        format('include/%s_setup.sql', :'TEST_BASE_NAME') as "TEST_SETUP_NAME",

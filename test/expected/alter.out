@@ -24,10 +24,10 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 \set VERBOSITY default
 ALTER TABLE alter_before SET (tsdb.invalid_option = true);
 ERROR:  unrecognized parameter "tsdb.invalid_option"
-HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, compress_column_codec, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, cagg_granular_refresh_column, cagg_granular_refresh_start_offset, cagg_granular_refresh_end_offset, cagg_enable_granular_refresh, direct_compress, direct_compress_schedule_interval
 ALTER TABLE alter_before SET (timescaledb.nonexistent = false);
 ERROR:  unrecognized parameter "timescaledb.nonexistent"
-HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, compress_column_codec, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, cagg_granular_refresh_column, cagg_granular_refresh_start_offset, cagg_granular_refresh_end_offset, cagg_enable_granular_refresh, direct_compress, direct_compress_schedule_interval
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
 INSERT INTO alter_before VALUES ('2017-03-22T09:18:22', 23.5, 1);
@@ -39,7 +39,7 @@ SELECT * FROM alter_before;
 -- Show that deleted column is marked as dropped and that attnums are
 -- now different for the root table and the chunk
 -- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
-SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+SELECT c.relname, a.attname, a.attnum, (SELECT array_agg(o) FROM unnest(a.attoptions) o WHERE o NOT LIKE 'pg_attver=%') AS attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
 AND a.attnum > 0
@@ -132,7 +132,7 @@ ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET (n_dis
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET STATISTICS 201;
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN notes SET STORAGE EXTERNAL;
 -- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
-SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+SELECT c.relname, a.attname, a.attnum, (SELECT array_agg(o) FROM unnest(a.attoptions) o WHERE o NOT LIKE 'pg_attver=%') AS attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0
@@ -694,19 +694,23 @@ ALTER TABLE p_hypertable DROP COLUMN b, ADD COLUMN d boolean;
 CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
-\d _timescaledb_internal._hyper_14_28_chunk
- Table "_timescaledb_internal._hyper_14_28_chunk"
- Column |  Type   | Collation | Nullable | Default 
---------+---------+-----------+----------+---------
- a      | integer |           | not null | 
- c      | integer |           |          | 
- d      | boolean |           |          | 
-Indexes:
-    "_hyper_14_28_chunk_idx_ht" btree (a, c) WHERE NOT d
-    "_hyper_14_28_chunk_p_hypertable_a_idx" btree (a DESC)
-Check constraints:
-    "constraint_39" CHECK (a >= 0 AND a < 3)
-Inherits: p_hypertable
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_columns(ch) ORDER BY 1, 2;
+                    ch                    | Column |  Type   | NotNull 
+------------------------------------------+--------+---------+---------
+ _timescaledb_internal._hyper_14_28_chunk | a      | integer | t
+ _timescaledb_internal._hyper_14_28_chunk | c      | integer | f
+ _timescaledb_internal._hyper_14_28_chunk | d      | boolean | f
+
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_indexespred(ch) ORDER BY 1, 2;
+                    ch                    |                            Index                            | Columns | Expr | Pred  | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------+-------------------------------------------------------------+---------+------+-------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_14_28_chunk | _timescaledb_internal._hyper_14_28_chunk_p_hypertable_a_idx | {a}     |      |       | f      | f       | f         | 
+ _timescaledb_internal._hyper_14_28_chunk | _timescaledb_internal._hyper_14_28_chunk_idx_ht             | {a,c}   |      | NOT d | f      | f       | f         | 
+
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_constraints(ch) ORDER BY 1, 2;
+                    ch                    |  Constraint   | Type | Columns | Index |          Expr          | Deferrable | Deferred | Validated 
+------------------------------------------+---------------+------+---------+-------+------------------------+------------+----------+-----------
+ _timescaledb_internal._hyper_14_28_chunk | constraint_39 | c    | {a}     | -     | ((a >= 0) AND (a < 3)) | f          | f        | t
 
 DROP TABLE p_hypertable;
 -- check none of our hooks interact badly with normal alter view handling

@@ -18,6 +18,7 @@
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <tcop/utility.h>
+#include <utils/acl.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
 
@@ -34,6 +35,7 @@
 #include "loader/function_telemetry.h"
 #include "loader/loader.h"
 #include "loader/lwlocks.h"
+#include "loader/tenant_tracker_shmem.h"
 #include "loader/ts_stats_handles.h"
 
 /*
@@ -41,7 +43,8 @@
  *
  *   1. _PG_init starts up cluster-wide background worker stuff, and sets the
  *      post_parse_analyze_hook (a postgres-defined hook which is called after
- *      every statement is parsed) to our function post_analyze_hook
+ *      every statement is parsed) to our function post_analyze_hook, plus a
+ *      ProcessUtility shim keeping TimescaleDB last in the hook chain.
  *   2. When a command is run with timescale not loaded, post_analyze_hook:
  *        a. Gets the extension version.
  *        b. Loads the versioned extension.
@@ -50,6 +53,8 @@
  *           post_analyze_hook, but may not be our function, for instance, if
  *           another extension is loaded).
  *        d. Calls the prev_post_parse_analyze_hook.
+ *   3. When the versioned extension loads, do_load captures its ProcessUtility
+ *      handler into the shim slot (see loader_process_utility).
  *
  * Some notes on design:
  *
@@ -98,6 +103,8 @@ int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
 static shmem_request_hook_type prev_shmem_request_hook;
+static ProcessUtility_hook_type prev_ProcessUtility_hook;
+static ProcessUtility_hook_type versioned_ProcessUtility_hook;
 
 typedef struct TsExtension
 {
@@ -393,6 +400,27 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 }
 
 static bool
+should_load_on_transaction(Node const *const utility_stmt)
+{
+	TransactionStmt *stmt = (TransactionStmt *) utility_stmt;
+
+	/*
+	 * Do not load the extension just to open a transaction. This lets ALTER
+	 * EXTENSION ... UPDATE run as the first extension-touching command inside
+	 * a transaction block instead of failing because BEGIN already loaded the
+	 * old version.
+	 */
+	switch (stmt->kind)
+	{
+		case TRANS_STMT_BEGIN:
+		case TRANS_STMT_START:
+			return false;
+		default:
+			return true;
+	}
+}
+
+static bool
 load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	switch (nodeTag(utility_stmt))
@@ -403,6 +431,8 @@ load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 			return should_load_on_alter_extension(utility_stmt, ext);
 		case T_CreateExtensionStmt:
 			return should_load_on_create_extension(utility_stmt, ext);
+		case T_TransactionStmt:
+			return should_load_on_transaction(utility_stmt);
 		case T_DropStmt:
 			return !drop_statement_drops_extension((DropStmt *) utility_stmt, ext);
 		default:
@@ -410,33 +440,26 @@ load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 	}
 }
 
-static void
-stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
+/*
+ * The hook runs before PostgreSQL checks database ownership, so skip the
+ * message for other users and let PostgreSQL raise the permission error.
+ */
+static bool
+is_db_owner(Oid db_oid)
 {
-	/*
-	 * Don't check if extension exists here because even though the current
-	 * database might not have TimescaleDB installed the database we are
-	 * dropping might.
-	 */
-	Oid dropped_db_oid = get_database_oid(drop_db_statement->dbname, drop_db_statement->missing_ok);
-
-	if (OidIsValid(dropped_db_oid))
-	{
-		ereport(LOG,
-				(errmsg("TimescaleDB background worker scheduler for database %u will be stopped",
-						dropped_db_oid)));
-		ts_bgw_message_send_and_wait(STOP, dropped_db_oid);
-	}
+	return OidIsValid(db_oid) && object_ownercheck(DatabaseRelationId, db_oid, GetUserId());
 }
 
+/* Whether the database may be used as template for CREATE DATABASE */
 static bool
-database_allowconn(const Oid db_oid)
+database_usable_as_template(const Oid db_oid)
 {
 	Relation pg_database;
 	ScanKeyData entry[1];
 	SysScanDesc scan;
 	HeapTuple dbtuple;
-	bool allowconn = false;
+	Form_pg_database dbform;
+	bool usable = false;
 
 	pg_database = table_open(DatabaseRelationId, AccessShareLock);
 	ScanKeyInit(&entry[0],
@@ -456,12 +479,13 @@ database_allowconn(const Oid db_oid)
 				 errmsg("database with OID \"%u\" does not exist", db_oid)));
 	}
 
-	allowconn = ((Form_pg_database) GETSTRUCT(dbtuple))->datallowconn;
+	dbform = (Form_pg_database) GETSTRUCT(dbtuple);
+	usable = dbform->datallowconn && (dbform->datistemplate || is_db_owner(db_oid));
 
 	systable_endscan(scan);
 	table_close(pg_database, AccessShareLock);
 
-	return allowconn;
+	return usable;
 }
 
 static void
@@ -475,68 +499,6 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 	{
 		switch (nodeTag(query->utilityStmt))
 		{
-			case T_AlterDatabaseStmt:
-			{
-				/*
-				 * On ALTER DATABASE SET TABLESPACE we need to stop background
-				 * workers for the command to succeed.
-				 */
-				AlterDatabaseStmt *stmt = (AlterDatabaseStmt *) query->utilityStmt;
-				if (list_length(stmt->options) == 1)
-				{
-					DefElem *option = linitial(stmt->options);
-					if (option->defname && strcmp(option->defname, "tablespace") == 0)
-					{
-						Oid db_oid = get_database_oid(stmt->dbname, false);
-
-						if (OidIsValid(db_oid))
-						{
-							ts_bgw_message_send_and_wait(RESTART, db_oid);
-							ereport(WARNING,
-									(errmsg("you may need to manually restart any running "
-											"background workers after this command")));
-						}
-					}
-				}
-				break;
-			}
-			case T_CreatedbStmt:
-			{
-				/*
-				 * If we create a database and the database used as template
-				 * has background workers we need to stop those background
-				 * workers connected to the template database.
-				 */
-				CreatedbStmt *stmt = (CreatedbStmt *) query->utilityStmt;
-				ListCell *lc;
-
-				foreach (lc, stmt->options)
-				{
-					DefElem *option = lfirst(lc);
-					if (option->defname != NULL && option->arg != NULL &&
-						strcmp(option->defname, "template") == 0)
-					{
-						Oid db_oid = get_database_oid(defGetString(option), false);
-
-						if (OidIsValid(db_oid) && database_allowconn(db_oid))
-						{
-							ts_bgw_message_send_and_wait(RESTART, db_oid);
-						}
-					}
-				}
-				break;
-			}
-			case T_DropdbStmt:
-			{
-				DropdbStmt *stmt = (DropdbStmt *) query->utilityStmt;
-
-				/*
-				 * If we drop a database, we need to intercept and stop any of our
-				 * schedulers that might be connected to said db.
-				 */
-				stop_workers_on_db_drop(stmt);
-				break;
-			}
 			case T_DropStmt:
 				for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
 				{
@@ -560,21 +522,6 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 					{
 						ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
 						break;
-					}
-				}
-				break;
-			case T_RenameStmt:
-				if (((RenameStmt *) query->utilityStmt)->renameType == OBJECT_DATABASE)
-				{
-					RenameStmt *stmt = (RenameStmt *) query->utilityStmt;
-					Oid db_oid = get_database_oid(stmt->subname, stmt->missing_ok);
-
-					if (OidIsValid(db_oid))
-					{
-						ts_bgw_message_send_and_wait(STOP, db_oid);
-						ereport(WARNING,
-								(errmsg("you need to manually restart any running "
-										"background workers after this command")));
 					}
 				}
 				break;
@@ -616,10 +563,9 @@ timescaledb_shmem_startup_hook(void)
 	ts_bgw_counter_shmem_startup();
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
+	ts_tenant_tracker_shmem_startup();
 	ts_function_telemetry_shmem_startup();
-#if PG17_LT
 	ts_stats_shmem_startup();
-#endif
 }
 
 static void
@@ -633,10 +579,137 @@ timescaledb_shmem_request_hook(void)
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
 	ts_lwlocks_shmem_alloc();
+	ts_tenant_tracker_shmem_alloc();
 	ts_function_telemetry_shmem_alloc();
-#if PG17_LT
 	ts_stats_shmem_request();
-#endif
+}
+
+/*
+ * Stop or restart the scheduler of a database before a command that needs
+ * the database to be unused. Runs from ProcessUtility so that the message
+ * is only sent for commands PostgreSQL will accept.
+ */
+static void
+notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
+{
+	switch (nodeTag(stmt))
+	{
+		case T_AlterDatabaseStmt:
+		{
+			AlterDatabaseStmt *alter = (AlterDatabaseStmt *) stmt;
+
+			if (list_length(alter->options) == 1)
+			{
+				DefElem *option = linitial(alter->options);
+
+				if (option->defname && strcmp(option->defname, "tablespace") == 0)
+				{
+					Oid db_oid = get_database_oid(alter->dbname, false);
+
+					if (is_db_owner(db_oid))
+					{
+						ts_bgw_message_send_and_wait(RESTART, db_oid);
+						ereport(WARNING,
+								(errmsg("you may need to manually restart any running "
+										"background workers after this command")));
+					}
+				}
+			}
+			break;
+		}
+		case T_CreatedbStmt:
+		{
+			CreatedbStmt *createdb = (CreatedbStmt *) stmt;
+			ListCell *lc;
+
+			foreach (lc, createdb->options)
+			{
+				DefElem *option = lfirst(lc);
+
+				if (option->defname != NULL && option->arg != NULL &&
+					strcmp(option->defname, "template") == 0)
+				{
+					Oid db_oid = get_database_oid(defGetString(option), false);
+
+					if (have_createdb_privilege() && OidIsValid(db_oid) &&
+						database_usable_as_template(db_oid))
+					{
+						ts_bgw_message_send_and_wait(RESTART, db_oid);
+					}
+				}
+			}
+			break;
+		}
+		case T_DropdbStmt:
+		{
+			DropdbStmt *dropdb = (DropdbStmt *) stmt;
+			/*
+			 * The current database might not have TimescaleDB installed but
+			 * the database we are dropping might.
+			 */
+			Oid db_oid = get_database_oid(dropdb->dbname, dropdb->missing_ok);
+
+			/* PostgreSQL rejects DROP DATABASE inside a transaction block or function */
+			if (is_db_owner(db_oid) && context == PROCESS_UTILITY_TOPLEVEL && !IsTransactionBlock())
+			{
+				ereport(LOG,
+						(errmsg("TimescaleDB background worker scheduler for database %u will be "
+								"stopped",
+								db_oid)));
+				ts_bgw_message_send_and_wait(STOP, db_oid);
+			}
+			break;
+		}
+		case T_RenameStmt:
+		{
+			RenameStmt *rename = (RenameStmt *) stmt;
+
+			if (rename->renameType == OBJECT_DATABASE)
+			{
+				Oid db_oid = get_database_oid(rename->subname, rename->missing_ok);
+
+				/* The database keeps its OID, so the scheduler can reconnect */
+				if (is_db_owner(db_oid) && have_createdb_privilege())
+				{
+					ts_bgw_message_send_and_wait(RESTART, db_oid);
+				}
+			}
+			break;
+		}
+		default:
+			break;
+	}
+}
+
+/*
+ * Loader ProcessUtility shim, installed at preload time so later-preloaded
+ * hooks (e.g., pgaudit) run first. Needed because TimescaleDB handles some
+ * commands itself (e.g., hypertable COPY) without chaining. The handler is
+ * captured at load time (see do_load); until then chain to the previous hook.
+ */
+static void
+loader_process_utility(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
+					   ProcessUtilityContext context, ParamListInfo params,
+					   QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
+{
+	ProcessUtility_hook_type hook;
+
+	notify_bg_workers_of_database_command(pstmt->utilityStmt, context);
+
+	if (versioned_ProcessUtility_hook != NULL)
+	{
+		hook = versioned_ProcessUtility_hook;
+	}
+	else if (prev_ProcessUtility_hook != NULL)
+	{
+		hook = prev_ProcessUtility_hook;
+	}
+	else
+	{
+		hook = standard_ProcessUtility;
+	}
+
+	hook(pstmt, queryString, readOnlyTree, context, params, queryEnv, dest, qc);
 }
 
 static void
@@ -707,6 +780,10 @@ _PG_init(void)
 
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
+
+	/* Install the ProcessUtility shim (see loader_process_utility). */
+	prev_ProcessUtility_hook = ProcessUtility_hook;
+	ProcessUtility_hook = loader_process_utility;
 }
 
 inline static void
@@ -715,6 +792,8 @@ do_load(TsExtension *const ext)
 	char *version = extension_version(ext->name);
 	char soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
+	ProcessUtility_hook_type saved_pu_hook = NULL;
+	bool capture_pu_hook = false;
 
 	/* If the right version of the library is already loaded, we will just
 	 * skip the actual loading. If the wrong version of the library is loaded,
@@ -749,26 +828,39 @@ do_load(TsExtension *const ext)
 	}
 
 	/*
-	 * Set the config option to let versions 0.9.0 and 0.9.1 know that the
-	 * loader was preloaded, newer versions use rendezvous variables instead.
-	 */
-	if ((strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0) &&
-		strcmp(ext->name, EXTENSION_NAME) == 0)
-	{
-		SetConfigOption(MAKE_EXTOPTION("loader_present"), "on", PGC_USERSET, PGC_S_SESSION);
-	}
-
-	/*
 	 * Save and restore post_parse_analyze_hook around the load so that
 	 * loading the versioned extension cannot modify our hook chain.
 	 */
 	old_hook = post_parse_analyze_hook;
 	post_parse_analyze_hook = NULL;
 
+	/*
+	 * Capture the versioned handler (reverse of the post_parse_analyze save above):
+	 * load with the head pointed at our preload-time predecessor so the extension
+	 * chains to the right tail, stash its handler in the shim slot, restore the
+	 * saved head. Later-preloaded hooks thus stay ahead of TimescaleDB. Main
+	 * extension only; OSM/lake keep the classic behavior.
+	 */
+	capture_pu_hook = (strcmp(ext->name, EXTENSION_NAME) == 0);
+	if (capture_pu_hook)
+	{
+		saved_pu_hook = ProcessUtility_hook;
+		ProcessUtility_hook = prev_ProcessUtility_hook;
+	}
+
 	PG_TRY();
 	{
 		PGFunction ts_post_load_init =
 			load_external_function(soname, POST_LOAD_INIT_FN, false, NULL);
+		/*
+		 * Capture now so later loads (e.g., TSL below) aren't mistaken for the
+		 * versioned handler. If the head is unchanged the library was already
+		 * loaded uncontrolled; leave the shim unset rather than capture wrong.
+		 */
+		if (capture_pu_hook && ProcessUtility_hook != prev_ProcessUtility_hook)
+		{
+			versioned_ProcessUtility_hook = ProcessUtility_hook;
+		}
 		if (ts_post_load_init != NULL)
 		{
 			DirectFunctionCall1(ts_post_load_init, CharGetDatum(0));
@@ -777,6 +869,21 @@ do_load(TsExtension *const ext)
 	PG_CATCH();
 	{
 		post_parse_analyze_hook = old_hook;
+		if (capture_pu_hook)
+		{
+			/*
+			 * A handler installed before a failed load won't be reinstalled
+			 * (library already marked loaded), so capture it to keep it
+			 * reachable via the shim. Skip if TRY already captured; never
+			 * capture anything installed later.
+			 */
+			if (versioned_ProcessUtility_hook == NULL &&
+				ProcessUtility_hook != prev_ProcessUtility_hook)
+			{
+				versioned_ProcessUtility_hook = ProcessUtility_hook;
+			}
+			ProcessUtility_hook = saved_pu_hook;
+		}
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
@@ -785,6 +892,11 @@ do_load(TsExtension *const ext)
 	 * the loader would silently drop it when restoring old_hook below. */
 	Assert(post_parse_analyze_hook == NULL);
 	post_parse_analyze_hook = old_hook;
+
+	if (capture_pu_hook)
+	{
+		ProcessUtility_hook = saved_pu_hook;
+	}
 }
 
 inline static void

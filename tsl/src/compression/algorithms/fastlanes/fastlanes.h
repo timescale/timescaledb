@@ -9,9 +9,9 @@
  * layer.
  *
  *   This is the ONLY header callers should include. All functions are
- *   declared here; their definitions live in fastlanes_sizing.c
- *   (tier selection + sizing API), fastlanes_pack.c (plain pack and
- *   unpack), and fastlanes_ffor.c (FFOR pack and unpack).
+ *   declared here; their definitions are either inline, or in
+ *   fastlanes_pack.c (plain pack and unpack), and fastlanes_ffor.c
+ *   (FFOR pack and unpack).
  *
  * Conventions:
  *
@@ -39,42 +39,113 @@
  *   |  33..64  | FL64  | FL64   | FL64   | FL128  |
  *   |  65..128 | FL128 | FL128  | FL128  | FL128  |
  *   | 129..256 | FL256 | FL256  | FL256  | FL256  |
+ *
+ * T=64 routes straight to FL128/256 (better SIMD utilisation than
+ * FL64 for 64-bit values).
  */
-extern fl_tier_width_t fl_tier_select(uint32 n, fl_elem_width_t t);
+static inline fl_tier_width_t
+fl_tier_select(uint32 n, fl_elem_width_t t)
+{
+	if (t == FL_ELEM_W64)
+	{
+		return (n <= 128) ? FL_TIER_W128 : FL_TIER_W256;
+	}
+	if (n <= 8 && t == FL_ELEM_W8)
+	{
+		return FL_TIER_W8;
+	}
+	if (n <= 16 && (t == FL_ELEM_W8 || t == FL_ELEM_W16))
+	{
+		return FL_TIER_W16;
+	}
+	if (n <= 32)
+	{
+		return FL_TIER_W32;
+	}
+	if (n <= 64)
+	{
+		return FL_TIER_W64;
+	}
+	if (n <= 128)
+	{
+		return FL_TIER_W128;
+	}
+	return FL_TIER_W256;
+}
 
 /* Required size for the tier (selected by fl_tier_select(N, T)).
  * Determines the sizes of pack output and unpack input buffers exactly.
  */
-extern size_t fl_required_bytes(uint32 n, uint8 w, fl_elem_width_t t);
+static inline size_t
+fl_required_bytes(uint32 n, uint8 w, fl_elem_width_t t)
+{
+	return (size_t) w * (((uint32) fl_tier_select(n, t)) >> 3);
+}
 
 /* Bytes the encoded output carries for N elements (<= fl_required_bytes).
  * Matches the return of fl_pack / fl_pack_ffor; useful for sizing the
  * truncated prefix without running the encoder. */
-extern size_t fl_result_bytes(uint32 n, uint8 w, fl_elem_width_t t);
+static inline size_t
+fl_result_bytes(uint32 n, uint8 w, fl_elem_width_t t)
+{
+	/* tier is defined as bitwidth */
+	uint32 tier = (uint32) fl_tier_select(n, t);
+
+	/* stride length (s) is the number of 't' elems fit in the tier */
+	uint32 s = (t == FL_ELEM_W64) ? (tier >> 6) :
+			   (t == FL_ELEM_W32) ? (tier >> 5) :
+			   (t == FL_ELEM_W16) ? (tier >> 4) :
+									(tier >> 3);
+
+	/* n_pad is 'n' rounded up to full strides */
+	uint32 n_pad = (n + s - 1) & ~(s - 1);
+
+	/* the size is n_pad elems of w bits, rounded up to
+	 * full tier widths, expressed in bytes */
+	return (size_t) ((n_pad * w + tier - 1) & ~(tier - 1)) >> 3;
+}
 
 /* Required alignment for the _packed_ input and output buffers.
  * Recommended alignment for the input and output _values_.
  */
-extern size_t fl_alignment(uint32 n, fl_elem_width_t t);
+static inline size_t
+fl_alignment(uint32 n, fl_elem_width_t t)
+{
+	return (size_t) (((uint32) fl_tier_select(n, t)) >> 3);
+}
 
 /* Number of input ELEMENTS the kernel reads -- callers must provide
  * at least this many readable elements at `values` (positions past N
  * are read but only the [0..N) outputs are meaningful). */
-extern uint32 fl_input_count(uint32 n, fl_elem_width_t t);
+static inline uint32
+fl_input_count(uint32 n, fl_elem_width_t t)
+{
+	return (uint32) fl_tier_select(n, t);
+}
 
 /* Byte size of the input buffer (= fl_input_count() * t / 8). */
-extern size_t fl_input_bytes(uint32 n, fl_elem_width_t t);
+static inline size_t
+fl_input_bytes(uint32 n, fl_elem_width_t t)
+{
+	return (size_t) (((uint32) fl_tier_select(n, t) * (uint32) t) >> 3);
+}
 
 /*
  * Plain pack / unpack.
+ *
+ *   the `packed` result is in little-endian format and the library
+ *   does the necessary conversions on big-endian platforms such
+ *   that `values` are in native format
  *
  *   fl_pack returns the truncated byte count (<= fl_required_bytes) --
  *   the size of the `packed` data in bytes. The kernel reads
  *   fl_input_count() elements from `values` and writes fl_required_bytes
  *   to `packed`.
  *
- *   fl_unpack reverses the operation. The caller MUST pre-zero
- *   packed[truncated_bytes..alloc_bytes) before calling unpack.
+ *   fl_unpack reverses the operation. The data at
+ *   packed[truncated_bytes..alloc_bytes) may impact the output values
+ *   beyond N, when fl_input_count() > N. If these extra values matter
+ *   to the caller, the tail must be zeroed before calling fl_unpack.
  *
  *   W = 0 (constant block) is a special case: fl_pack returns 0 and
  *   writes nothing; fl_unpack fills outputs [0..N) with 0.

@@ -604,3 +604,25 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
  _timescaledb_internal._hyper_15_21_chunk_test_temp_idx | {temp}  |      | f      | f       | f         | 
  _timescaledb_internal._hyper_15_21_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
 
+-- opclass options are copied to chunk indexes
+CREATE TABLE index_opclass_options(time timestamptz NOT NULL, doc tsvector);
+SELECT table_name FROM create_hypertable('index_opclass_options', 'time');
+      table_name       
+-----------------------
+ index_opclass_options
+
+INSERT INTO index_opclass_options VALUES ('2025-01-01', 'a b c'::tsvector);
+CREATE INDEX index_opclass_options_doc_idx ON index_opclass_options USING gist (doc tsvector_ops(siglen=200));
+INSERT INTO index_opclass_options VALUES ('2025-03-01', 'd e f'::tsvector);
+SELECT c.relname, a.attoptions
+FROM show_chunks('index_opclass_options') ch
+JOIN pg_index i ON i.indrelid = ch
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_attribute a ON a.attrelid = i.indexrelid
+WHERE a.attoptions IS NOT NULL
+ORDER BY 1;
+                     relname                      |  attoptions  
+--------------------------------------------------+--------------
+ _hyper_16_23_chunk_index_opclass_options_doc_idx | {siglen=200}
+ _hyper_16_24_chunk_index_opclass_options_doc_idx | {siglen=200}
+

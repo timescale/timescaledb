@@ -323,6 +323,9 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 			Int64GetDatum(fd->schema_change_timestamp);
 	}
 
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
+		BoolGetDatum(fd->granular_refresh_enabled);
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -385,6 +388,9 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		fd->schema_change_timestamp = DatumGetInt64(
 			values[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)]);
 	}
+
+	fd->granular_refresh_enabled =
+		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)]);
 
 	if (should_free)
 	{
@@ -586,6 +592,7 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 	all_caggs_info.mat_hypertable_ids = NIL;
 	all_caggs_info.bucket_functions = NIL;
+	all_caggs_info.granular_refresh_enabled = NIL;
 
 	Assert(list_length(caggs) > 0);
 
@@ -598,6 +605,10 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 		all_caggs_info.mat_hypertable_ids =
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
+
+		all_caggs_info.granular_refresh_enabled =
+			lappend_int(all_caggs_info.granular_refresh_enabled,
+						cagg->data.granular_refresh_enabled);
 	}
 	return all_caggs_info;
 }
@@ -708,7 +719,6 @@ ts_continuous_agg_set_schema_change_timestamp(int32 mat_hypertable_id, int64 thr
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
-	CatalogSecurityContext sec_ctx;
 
 	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
@@ -725,9 +735,7 @@ ts_continuous_agg_set_schema_change_timestamp(int32 mat_hypertable_id, int64 thr
 
 			HeapTuple new_tuple =
 				continuous_agg_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-			ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 			ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-			ts_catalog_restore_user(&sec_ctx);
 			heap_freetuple(new_tuple);
 		}
 	}
@@ -1045,7 +1053,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	if (OidIsValid(mat_hypertable.objectId))
 	{
 		ts_compression_settings_delete(mat_hypertable.objectId);
-		ts_hypertable_delete_by_id(cadata->mat_hypertable_id);
+		ts_hypertable_delete_by_id(cadata->mat_hypertable_id, mat_hypertable.objectId);
 		performDeletion(&mat_hypertable, DROP_CASCADE, 0);
 	}
 
@@ -1286,7 +1294,6 @@ continuous_agg_rename(TupleInfo *ti, void *data)
 	CaggRenameCtx *ctx = (CaggRenameCtx *) data;
 	FormData_continuous_agg form;
 	bool do_update = false;
-	CatalogSecurityContext sec_ctx;
 
 	continuous_agg_formdata_fill(&form, ti);
 
@@ -1296,9 +1303,7 @@ continuous_agg_rename(TupleInfo *ti, void *data)
 	{
 		HeapTuple new_tuple =
 			continuous_agg_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-		ts_catalog_restore_user(&sec_ctx);
 		heap_freetuple(new_tuple);
 	}
 
@@ -1508,7 +1513,7 @@ generic_time_bucket(const ContinuousAggBucketFunction *bf, Datum timestamp)
 }
 
 /*
- * Adds one bf->bucket_size interval to the timestamp. This is a common
+ * Adds one bf->bucket_time_width interval to the timestamp. This is a common
  * procedure used by ts_compute_* below.
  *
  * If bf->bucket_time_timezone is specified, the math happens in this timezone.
@@ -1519,6 +1524,16 @@ generic_add_interval(const ContinuousAggBucketFunction *bf, Datum timestamp)
 {
 	Datum tzname = 0;
 	bool has_timezone = (bf->bucket_time_timezone != NULL);
+	bool has_offset = (bf->bucket_time_offset != NULL);
+
+	/* Remove the offset, in UTC space for timezone buckets like ts_timestamptz_timezone_bucket */
+	if (has_offset)
+	{
+		timestamp =
+			DirectFunctionCall2(has_timezone ? timestamptz_mi_interval : timestamp_mi_interval,
+								timestamp,
+								IntervalPGetDatum(bf->bucket_time_offset));
+	}
 
 	if (has_timezone)
 	{
@@ -1538,6 +1553,14 @@ generic_add_interval(const ContinuousAggBucketFunction *bf, Datum timestamp)
 	{
 		Assert(tzname != 0);
 		timestamp = DirectFunctionCall2(timestamp_zone, tzname, timestamp);
+	}
+
+	if (has_offset)
+	{
+		timestamp =
+			DirectFunctionCall2(has_timezone ? timestamptz_pl_interval : timestamp_pl_interval,
+								timestamp,
+								IntervalPGetDatum(bf->bucket_time_offset));
 	}
 
 	return timestamp;
@@ -1642,6 +1665,9 @@ ts_cagg_variable_current_bucket_start(int64 timeval, const ContinuousAggBucketFu
 	return ts_time_value_to_internal(generic_time_bucket(bf, val_beg), TIMESTAMPOID);
 }
 
+/*
+ * Allows the CAgg owner, superusers, and the database owner.
+ */
 Oid
 ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {

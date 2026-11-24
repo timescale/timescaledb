@@ -8,7 +8,10 @@
 --------------------------
 -- cheap rand generator --
 --------------------------
-create table rand_minstd_state(i bigint);
+-- The state is kept in a sequence, seeded with 321. Updating a sequence
+-- does not leave dead row versions behind like updating a table does, so
+-- each call costs the same no matter how often it was called before.
+create sequence rand_minstd_state minvalue 1 maxvalue 2147483646 start with 321;
 create function rand_minstd_advance(bigint) returns bigint
 language sql immutable as
 $$
@@ -17,10 +20,8 @@ $$;
 create function gen_rand_minstd() returns bigint
 language sql security definer as
 $$
-	update rand_minstd_state set i = rand_minstd_advance(i) returning i
+	select setval('rand_minstd_state', rand_minstd_advance(last_value)) from rand_minstd_state
 $$;
--- seed the random num generator
-insert into rand_minstd_state values (321);
 \c :TEST_DBNAME :ROLE_SUPERUSER
 \ir include/compression_utils.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -860,3 +861,52 @@ SELECT 'test_defaults' AS "HYPERTABLE_NAME" \gset
  t           | t
 
 DROP TABLE test_defaults;
+-- Test chunk merging works with default sparse indexes
+CREATE TABLE test_sparse_default("Time" timestamptz NOT NULL, i integer, tag integer, value integer);
+SELECT table_name from create_hypertable('test_sparse_default', 'Time', chunk_time_interval => INTERVAL '1 hour');
+     table_name      
+---------------------
+ test_sparse_default
+
+-- A btree index so that default sparse indexes are set
+CREATE INDEX ON test_sparse_default (tag);
+-- This will generate 8 chunks
+INSERT INTO test_sparse_default
+SELECT t, i, i, gen_rand_minstd()
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 8:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+ALTER TABLE test_sparse_default
+SET (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='4 hours');
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_sparse_default') ch;
+ count 
+-------
+     8
+
+SELECT index FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_sparse_default'::regclass;
+                                                           index                                                           
+---------------------------------------------------------------------------------------------------------------------------
+ [{"type": "minmax", "column": "Time", "source": "orderby"}, {"type": "firstlast", "column": "Time", "source": "orderby"}]
+
+SELECT DISTINCT cs.index
+FROM _timescaledb_catalog.compression_settings cs
+JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid
+JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'test_sparse_default';
+                                                                                       index                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"type": "bloom", "column": "tag", "source": "default"}, {"type": "minmax", "column": "Time", "source": "orderby"}, {"type": "firstlast", "column": "Time", "source": "orderby"}]
+
+-- chunks merged upon compression due to compress_chunk_time_interval
+SELECT count(*) AS chunk_count FROM show_chunks('test_sparse_default');
+ chunk_count 
+-------------
+           2
+
+SELECT range_start, range_end FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_sparse_default' ORDER BY 1;
+         range_start          |          range_end           
+------------------------------+------------------------------
+ Fri Mar 02 01:00:00 2018 PST | Fri Mar 02 05:00:00 2018 PST
+ Fri Mar 02 05:00:00 2018 PST | Fri Mar 02 09:00:00 2018 PST
+
+DROP TABLE test_sparse_default;

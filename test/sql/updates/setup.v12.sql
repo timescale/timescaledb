@@ -3,6 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \ir setup.v11.sql
+\ir setup.locking.sql
 
 -- Skip int2 boom test in singlestep mode cause otherwise we
 -- would have to skip too many intermediate steps

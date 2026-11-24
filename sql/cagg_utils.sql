@@ -32,3 +32,26 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_get_grouping_columns(
     cagg REGCLASS )
     RETURNS TEXT[] AS '@MODULE_PATHNAME@', 'ts_continuous_agg_get_grouping_columns'
 LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_get_tenant_tracking_info(
+    hypertable REGCLASS,
+    OUT seq_num int4,
+    OUT active_generation int4,
+    OUT nentries int4,
+    OUT status int4,
+    OUT late_threshold_start int8,
+    OUT late_threshold_end int8)
+AS '@MODULE_PATHNAME@', 'ts_hypertable_get_tenant_tracking_info' LANGUAGE C VOLATILE;
+
+-- Lists hypertables in the per-tenant invalidation tracker.  The tracker map is
+-- process-global, so rows for other databases show up too (identified by
+-- database_id, since their names are not readable from here).  is_tracked is false
+-- when the map has an entry but its tracker could not be allocated (out of shared
+-- memory): tracking is off for that hypertable until restart.  Superuser only,
+-- since the listing spans databases.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.tenant_tracking_map()
+RETURNS TABLE (
+    database_id   oid,
+    hypertable_id int4,
+    is_tracked    boolean)
+AS '@MODULE_PATHNAME@', 'ts_tenant_tracking_map' LANGUAGE C VOLATILE;

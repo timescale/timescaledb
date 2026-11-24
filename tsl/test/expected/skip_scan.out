@@ -358,9 +358,9 @@ UNION SELECT b.* FROM
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;
@@ -611,9 +611,9 @@ UNION SELECT b.* FROM
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;
@@ -882,9 +882,9 @@ UNION SELECT b.* FROM
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;
@@ -1135,9 +1135,9 @@ UNION SELECT b.* FROM
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;
@@ -1405,9 +1405,9 @@ UNION SELECT b.* FROM
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
 -- parallel query
 RESET max_parallel_workers_per_gather;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE where val IS NULL;
@@ -1651,9 +1651,9 @@ UNION SELECT b.* FROM
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
 -- parallel query
 RESET max_parallel_workers_per_gather;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE where val IS NULL;
@@ -2063,9 +2063,9 @@ set enable_seqscan=0;
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 SET timescaledb.enable_multikey_skipscan TO false;
 \o :TEST_RESULTS_UNOPTIMIZED
@@ -2143,9 +2143,9 @@ set enable_seqscan=0;
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 RESET timescaledb.enable_multikey_skipscan;
 -- compare SkipScan results on table
@@ -2235,9 +2235,9 @@ set enable_seqscan=0;
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 SET timescaledb.enable_multikey_skipscan TO false;
 \o :TEST_RESULTS_UNOPTIMIZED
@@ -2315,9 +2315,9 @@ set enable_seqscan=0;
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 RESET timescaledb.enable_multikey_skipscan;
 -- compare SkipScan results on hypertable
@@ -2407,9 +2407,9 @@ set enable_seqscan=0;
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 SET timescaledb.enable_multikey_skipscan TO false;
 \o :TEST_RESULTS_UNOPTIMIZED
@@ -2487,9 +2487,9 @@ set enable_seqscan=0;
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 RESET timescaledb.enable_multikey_skipscan;
 -- compare SkipScan results on compressed hypertable
@@ -2605,10 +2605,10 @@ psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on mskip_scan_st
 psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 \set TABLE mskip_scan_ht
 \o :TEST_RESULTS_OPTIMIZED
@@ -2779,13 +2779,13 @@ psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_4_15_c
 psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 \set TABLE mskip_scan_htc
 \o :TEST_RESULTS_OPTIMIZED
@@ -2944,12 +2944,12 @@ psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_5_19_c
 psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 reset enable_seqscan;
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 \o
 RESET timescaledb.debug_skip_scan_info;

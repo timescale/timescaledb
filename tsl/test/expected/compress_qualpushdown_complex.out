@@ -406,3 +406,58 @@ blm1 = blm2 and segby in (1,2,3);
    ->  Index Scan using _hyper_1_1_chunk_compressed_segby__ts_meta_v2_first_ts__ts__idx on _hyper_1_1_chunk_compressed
          Index Cond: (segby = ANY ('{1,2,3}'::integer[]))
 
+-- NullTest over a minmax-pushdown column
+CREATE TABLE sparse_isnull(ts timestamptz NOT NULL, v int)
+WITH (
+    tsdb.hypertable,
+    tsdb.partition_column = 'ts',
+    tsdb.compress,
+    tsdb.orderby = 'ts, v'
+);
+INSERT INTO sparse_isnull VALUES ('2024-01-01', NULL), ('2024-01-02', 1);
+SELECT count(compress_chunk(c)) FROM show_chunks('sparse_isnull') c;
+ count 
+-------
+     1
+
+-- IS NULL is not pushed to the compressed scan
+explain (buffers off, costs off)
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NULL;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_2_2_chunk
+   Filter: ((v > 0) IS NULL)
+   ->  Seq Scan on _hyper_2_2_chunk_compressed
+
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NULL;
+              ts              | v 
+------------------------------+---
+ Mon Jan 01 00:00:00 2024 PST |  
+
+-- IS NOT NULL is not pushed to the compressed scan
+explain (buffers off, costs off)
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NOT NULL;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_2_2_chunk
+   Filter: ((v > 0) IS NOT NULL)
+   ->  Seq Scan on _hyper_2_2_chunk_compressed
+
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NOT NULL;
+              ts              | v 
+------------------------------+---
+ Tue Jan 02 00:00:00 2024 PST | 1
+
+-- plain minmax range pushdown
+explain (buffers off, costs off)
+SELECT * FROM sparse_isnull WHERE v > 0;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_2_2_chunk
+   Vectorized Filter: (v > 0)
+   ->  Seq Scan on _hyper_2_2_chunk_compressed
+         Filter: (_ts_meta_max_2 > 0)
+
+SELECT * FROM sparse_isnull WHERE v > 0;
+              ts              | v 
+------------------------------+---
+ Tue Jan 02 00:00:00 2024 PST | 1
+
+DROP TABLE sparse_isnull;

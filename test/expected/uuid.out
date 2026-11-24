@@ -57,7 +57,7 @@ FROM uuid_events ORDER BY id;
 \set ON_ERROR_STOP 0
 UPDATE uuid_events SET id = 'ffff0000-0000-4000-8000-000000000000'
 WHERE id = '00000000-0001-4000-8000-000000000000';
-ERROR:  new row for relation "_hyper_1_1_chunk" violates check constraint "constraint_1"
+ERROR:  00000000-0001-4000-8000-000000000000 is not a version 7 UUID
 \set ON_ERROR_STOP 1
 ROLLBACK;
 -- Last value with min time: 00000000-0000-7fff-bfff-ffffffffffff
@@ -322,12 +322,10 @@ EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
 FROM uuid_events WHERE time_bucket('1 day', id) >= :'chunk_range_end'
 GROUP BY id ORDER BY id DESC;
 --- QUERY PLAN ---
- Sort
-   Sort Key: _hyper_1_8_chunk.id DESC
-   ->  HashAggregate
-         Group Key: _hyper_1_8_chunk.id
-         ->  Seq Scan on _hyper_1_8_chunk
-               Filter: (time_bucket('@ 1 day'::interval, id) >= 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+ GroupAggregate
+   Group Key: _hyper_1_8_chunk.id
+   ->  Index Scan Backward using "8_uuid_events_pkey" on _hyper_1_8_chunk
+         Filter: (time_bucket('@ 1 day'::interval, id) >= 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
 
 SELECT time_bucket('1 day', id) AS day, avg(temp)
 FROM uuid_events WHERE time_bucket('1 day', id) >= :'chunk_range_end'
@@ -363,15 +361,14 @@ EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
 FROM uuid_events WHERE time_bucket('1 day', id) < :'chunk_range_end'
 GROUP BY id ORDER BY id DESC;
 --- QUERY PLAN ---
- Sort
-   Sort Key: uuid_events.id DESC
-   ->  HashAggregate
-         Group Key: uuid_events.id
-         ->  Append
-               ->  Seq Scan on _hyper_1_7_chunk
-                     Filter: (time_bucket('@ 1 day'::interval, id) < 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
-               ->  Seq Scan on _hyper_1_6_chunk
-                     Filter: (time_bucket('@ 1 day'::interval, id) < 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+ GroupAggregate
+   Group Key: uuid_events.id
+   ->  Custom Scan (ChunkAppend) on uuid_events
+         Order: uuid_events.id DESC
+         ->  Index Scan Backward using "7_uuid_events_pkey" on _hyper_1_7_chunk
+               Filter: (time_bucket('@ 1 day'::interval, id) < 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+         ->  Index Scan Backward using "6_uuid_events_pkey" on _hyper_1_6_chunk
+               Filter: (time_bucket('@ 1 day'::interval, id) < 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
 
 SELECT time_bucket('1 day', id) AS day, avg(temp)
 FROM uuid_events WHERE time_bucket('1 day', id) < :'chunk_range_end'
@@ -387,18 +384,17 @@ EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
 FROM uuid_events WHERE time_bucket('1 day', id) <= :'chunk_range_start'
 GROUP BY id ORDER BY id DESC;
 --- QUERY PLAN ---
- Sort
-   Sort Key: uuid_events.id DESC
-   ->  HashAggregate
-         Group Key: uuid_events.id
-         ->  Append
-               ->  Index Scan Backward using "8_uuid_events_pkey" on _hyper_1_8_chunk
-                     Index Cond: (id <= '01942976-3400-7000-8000-000000000000'::uuid)
-                     Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
-               ->  Seq Scan on _hyper_1_7_chunk
-                     Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
-               ->  Seq Scan on _hyper_1_6_chunk
-                     Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+ GroupAggregate
+   Group Key: uuid_events.id
+   ->  Custom Scan (ChunkAppend) on uuid_events
+         Order: uuid_events.id DESC
+         ->  Index Scan Backward using "8_uuid_events_pkey" on _hyper_1_8_chunk
+               Index Cond: (id <= '01942976-3400-7000-8000-000000000000'::uuid)
+               Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+         ->  Index Scan Backward using "7_uuid_events_pkey" on _hyper_1_7_chunk
+               Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+         ->  Index Scan Backward using "6_uuid_events_pkey" on _hyper_1_6_chunk
+               Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
 
 SELECT time_bucket('1 day', id) AS day, avg(temp)
 FROM uuid_events WHERE time_bucket('1 day', id) <= :'chunk_range_start'
@@ -607,3 +603,37 @@ WHERE h.table_name='events';
    60
 
 ROLLBACK;
+-- Test enable_hypertable_expansion_for_dml GUC.
+-- With our expansion, UPDATE hits UUID v7 validation before the chunk
+-- constraint. With GUC off, PG's own expansion hits the constraint first.
+CREATE TABLE uuid_guc_test(id uuid primary key);
+SELECT create_hypertable('uuid_guc_test', 'id', chunk_time_interval => interval '1 day');
+     create_hypertable      
+----------------------------
+ (6,public,uuid_guc_test,t)
+
+BEGIN;
+INSERT INTO uuid_guc_test VALUES ('00000000-0000-7000-8000-000000000000');
+UPDATE uuid_guc_test SET id = '00000000-0001-4000-8000-000000000000'
+WHERE id = '00000000-0000-7000-8000-000000000000';
+-- GUC on (default): UUID v7 validation error
+\set ON_ERROR_STOP 0
+UPDATE uuid_guc_test SET id = 'ffff0000-0000-4000-8000-000000000000'
+WHERE id = '00000000-0001-4000-8000-000000000000';
+ERROR:  00000000-0001-4000-8000-000000000000 is not a version 7 UUID
+\set ON_ERROR_STOP 1
+ROLLBACK;
+-- GUC off: check constraint violation
+BEGIN;
+INSERT INTO uuid_guc_test VALUES ('00000000-0000-7000-8000-000000000000');
+UPDATE uuid_guc_test SET id = '00000000-0001-4000-8000-000000000000'
+WHERE id = '00000000-0000-7000-8000-000000000000';
+SET timescaledb.enable_hypertable_expansion_for_dml TO off;
+\set ON_ERROR_STOP 0
+UPDATE uuid_guc_test SET id = 'ffff0000-0000-4000-8000-000000000000'
+WHERE id = '00000000-0001-4000-8000-000000000000';
+ERROR:  new row for relation "_hyper_6_12_chunk" violates check constraint "constraint_12"
+\set ON_ERROR_STOP 1
+ROLLBACK;
+RESET timescaledb.enable_hypertable_expansion_for_dml;
+DROP TABLE uuid_guc_test;

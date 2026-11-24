@@ -44,8 +44,7 @@ typedef struct UuidCompressed
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } UuidCompressed;
 
-static void
-pg_attribute_unused() assertions(void)
+pg_attribute_unused() static void assertions(void)
 {
 	StaticAssertStmt(sizeof(UuidCompressed) == 16, "UuidCompressed wrong size");
 	StaticAssertStmt(offsetof(UuidCompressed, alignment_sentinel) % MAXIMUM_ALIGNOF == 0,
@@ -632,7 +631,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	old_context = MemoryContextSwitchTo(dest_mctx);
 
 	/* Make sure we use a 128bit aligned buffer */
-	char *unaligned = (char *) palloc((total_elements * sizeof(UuidType)) + 15);
+	char *unaligned = (char *) palloc0((total_elements * sizeof(UuidType)) + 15);
 	UuidType *uuid_buffer = (UuidType *) TYPEALIGN(16, unaligned);
 
 	/*
@@ -663,12 +662,15 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 		{
 			if (arrow_row_is_valid(validity_bitmap, i))
 			{
-				Assert(value_position < num_values);
+				CheckCompressedData(value_position < num_values);
 				uuid_buffer[i].components[0] = pg_ntoh64(timestamp_values[i]);
 				uuid_buffer[i].components[1] = rand_b_and_variant[value_position];
 				++value_position;
 			}
 		}
+
+		/* check that we returned all values */
+		CheckCompressedData(value_position == num_values);
 	}
 	else
 	{
@@ -681,7 +683,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	/*
 	 * At this point I combined the uncompressed data in the rand_b_and_variant array
-	 * and the freshly decompressed data from the delta delta bulk decompressison.
+	 * and the freshly decompressed data from the delta delta bulk decompression.
 	 * I now free the temp data. Note that `timestamp_values` is the same pointer
 	 * as timestamp_array->buffers[1] , the second buffer in the ArrowArray.
 	 * This will be replaced with the uuid array.
@@ -763,8 +765,7 @@ decompression_iterator_init(UuidDecompressionIterator *iter, void *compressed, O
 	};
 }
 
-static void
-pg_attribute_unused() silence_unused_warning(void)
+pg_attribute_unused() static void silence_unused_warning(void)
 {
 	simple8brle_serialized_recv(NULL);
 }

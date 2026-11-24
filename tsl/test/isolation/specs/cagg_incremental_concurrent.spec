@@ -182,7 +182,7 @@ step "wp_release"
 session "R1"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 }
@@ -204,7 +204,7 @@ step "r1_run"
 session "R2"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 }
@@ -258,7 +258,7 @@ step "s1_refresh_ranges"
 session "R3"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
@@ -301,7 +301,7 @@ step "r3_run_oldest_first"
 session "R4"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 }

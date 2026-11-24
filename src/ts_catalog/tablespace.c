@@ -366,13 +366,10 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 {
 	TablespaceScanInfo *info = data;
 	bool should_free;
-	CatalogSecurityContext sec_ctx;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	FormData_tablespace *form = (FormData_tablespace *) GETSTRUCT(tuple);
 
-	ts_catalog_database_info_become_owner(info->database_info, &sec_ctx);
 	ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 	info->hypertables = lappend_int(info->hypertables, form->hypertable_id);
 
 	if (should_free)
@@ -384,7 +381,7 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
+ts_tablespace_delete(int32 hypertable_id, const char *tspcname)
 
 {
 	ScanKeyData scankey[2];
@@ -400,7 +397,7 @@ ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
 				F_INT4EQ,
 				Int32GetDatum(hypertable_id));
 
-	if (NULL != tspcname)
+	if (tspcname)
 	{
 		ScanKeyInit(&scankey[nkeys++],
 					Anum_tablespace_hypertable_id_tablespace_name_idx_tablespace_name,
@@ -549,7 +546,6 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 	Oid tspc_oid;
 	Oid ownerid;
 	AclResult aclresult;
-	CatalogSecurityContext sec_ctx;
 
 	if (NULL == tspcname)
 	{
@@ -626,9 +622,7 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 	}
 	else
 	{
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		tablespace_insert(ht->fd.id, NameStr(*tspcname));
-		ts_catalog_restore_user(&sec_ctx);
 	}
 
 	ts_cache_release(&hcache);
@@ -647,7 +641,7 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 
 	if (ts_hypertable_has_tablespace(ht, tspcoid))
 	{
-		ret = ts_tablespace_delete(ht->fd.id, tspcname, tspcoid);
+		ret = ts_tablespace_delete(ht->fd.id, tspcname);
 	}
 	else if (if_attached)
 	{
@@ -682,7 +676,7 @@ tablespace_detach_all(Oid hypertable_oid)
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
-	ret = ts_tablespace_delete(ht->fd.id, NULL, InvalidOid);
+	ret = ts_tablespace_delete(ht->fd.id, NULL);
 
 	ts_cache_release(&hcache);
 

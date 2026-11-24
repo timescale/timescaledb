@@ -7,8 +7,6 @@
 
 #include "postgres.h"
 
-Datum bloom1_contains(PG_FUNCTION_ARGS);
-
 Datum bloom1_contains_any(PG_FUNCTION_ARGS);
 
 Datum bloom1_contains_any_hashes(PG_FUNCTION_ARGS);

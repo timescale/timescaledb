@@ -69,7 +69,8 @@ step "UnlockChunk" {ROLLBACK;}
 session "C"
 step "C1"   {
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress

@@ -1297,3 +1297,200 @@ ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE text;
 
 DROP TABLE alter_col_type_test;
 
+
+-- Dropping the schema of a hypertable should also drop its compressed chunks
+-- and evict their chunk statistics, including those of a continuous aggregate
+-- in the same schema
+CREATE SCHEMA drop_schema_test;
+CREATE TABLE drop_schema_test.t(time timestamptz NOT NULL, value int)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
+INSERT INTO drop_schema_test.t
+  SELECT t, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-03', '1 hour') t;
+CREATE MATERIALIZED VIEW drop_schema_test.agg WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, sum(value) FROM drop_schema_test.t GROUP BY 1
+  WITH DATA;
+ALTER MATERIALIZED VIEW drop_schema_test.agg SET (timescaledb.compress);
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_schema_test.t') c;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_schema_test.agg') c;
+SELECT count(*) FROM drop_schema_test.t WHERE value > 0;
+SELECT count(*) FROM drop_schema_test.agg WHERE sum > 0;
+
+CREATE TEMP TABLE drop_schema_compressed AS
+  SELECT compress_relid::oid AS relid
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid IN (SELECT show_chunks('drop_schema_test.t')
+                  UNION ALL SELECT show_chunks('drop_schema_test.agg'));
+SELECT count(*) AS compressed_chunks FROM drop_schema_compressed;
+SELECT count(*) AS stats FROM _timescaledb_functions.chunk_statistics() s
+  WHERE s.compressed_relid::oid IN (SELECT relid FROM drop_schema_compressed);
+
+DROP SCHEMA drop_schema_test CASCADE;
+
+SELECT count(*) AS leftover_compressed_chunks FROM pg_class
+  WHERE oid IN (SELECT relid FROM drop_schema_compressed);
+SELECT count(*) AS leftover_stats FROM _timescaledb_functions.chunk_statistics() s
+  WHERE s.compressed_relid::oid IN (SELECT relid FROM drop_schema_compressed);
+DROP TABLE drop_schema_compressed;
+
+-- rows written before ADD COLUMN ... DEFAULT sort by the default value when compressed
+CREATE TABLE add_col_orderby (ts int NOT NULL, s int);
+SELECT create_hypertable('add_col_orderby', 'ts', chunk_time_interval => 1000);
+INSERT INTO add_col_orderby VALUES (1, 1), (2, 2);
+ALTER TABLE add_col_orderby ADD COLUMN v float8 DEFAULT 0;
+INSERT INTO add_col_orderby VALUES (3, 1, NULL), (4, 2, 5), (5, 3, 0);
+ALTER TABLE add_col_orderby SET (timescaledb.compress, timescaledb.compress_segmentby = 's',
+                                 timescaledb.compress_orderby = 'v DESC NULLS FIRST, ts');
+SELECT count(compress_chunk(c)) FROM show_chunks('add_col_orderby') c;
+SELECT ts, v FROM add_col_orderby ORDER BY v, ts;
+SELECT count(DISTINCT v) FROM add_col_orderby;
+DROP TABLE add_col_orderby;
+
+-- plain DROP TABLE removes the compressed relations
+CREATE TABLE drop_plain (time timestamptz NOT NULL, d int, v float)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.segmentby = 'd');
+INSERT INTO drop_plain SELECT t, 1, 1
+  FROM generate_series('2024-01-01'::timestamptz, '2024-01-20', '1h') t;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_plain') c;
+CREATE TEMP TABLE drop_plain_compressed AS
+  SELECT compress_relid::oid AS relid
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid IN (SELECT show_chunks('drop_plain'));
+SELECT count(*) AS compressed_relations FROM drop_plain_compressed;
+DROP TABLE drop_plain;
+SELECT count(*) AS leftover_compressed_relations FROM pg_class
+  WHERE oid IN (SELECT relid FROM drop_plain_compressed);
+DROP TABLE drop_plain_compressed;
+
+-- drop_chunk removes the compressed relation
+CREATE TABLE drop_one (time timestamptz NOT NULL, d int, v float)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.segmentby = 'd');
+INSERT INTO drop_one SELECT t, 1, 1
+  FROM generate_series('2024-01-01'::timestamptz, '2024-01-20', '1h') t;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_one') c;
+SELECT show_chunks('drop_one') AS "DROP_ONE_CHUNK" LIMIT 1 \gset
+SELECT compress_relid::oid AS "DROP_ONE_COMPRESSED"
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid = :'DROP_ONE_CHUNK'::regclass \gset
+SELECT _timescaledb_functions.drop_chunk(:'DROP_ONE_CHUNK');
+SELECT EXISTS (SELECT FROM pg_class WHERE oid = :DROP_ONE_COMPRESSED) AS leftover_compressed_relation;
+DROP TABLE drop_one;
+
+-- drop_chunks removes the compressed relations
+CREATE TABLE drop_many (time timestamptz NOT NULL, d int, v float)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.segmentby = 'd');
+INSERT INTO drop_many SELECT t, 1, 1
+  FROM generate_series('2024-01-01'::timestamptz, '2024-01-20', '1h') t;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_many') c;
+CREATE TEMP TABLE drop_many_compressed AS
+  SELECT compress_relid::oid AS relid
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid IN (SELECT show_chunks('drop_many', older_than => '2024-01-15'::timestamptz));
+SELECT count(*) AS compressed_relations FROM drop_many_compressed;
+SELECT count(*) FROM drop_chunks('drop_many', older_than => '2024-01-15'::timestamptz);
+SELECT count(*) AS leftover_compressed_relations FROM pg_class
+  WHERE oid IN (SELECT relid FROM drop_many_compressed);
+DROP TABLE drop_many_compressed;
+DROP TABLE drop_many;
+
+-- When adding a column to a hypertable, check every chunk if it has the column
+-- instead of quitting after finding the first chunk with the column
+CREATE TABLE t_addcol(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('t_addcol', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE t_addcol SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+INSERT INTO t_addcol VALUES ('2024-01-01 00:00:00+00', 1, 1), ('2024-01-02 00:00:00+00', 1, 1);
+
+-- table has 2 chunks
+SELECT show_chunks('t_addcol', older_than => '2024-01-02 00:00:00+00') AS "CHUNK1" \gset
+SELECT show_chunks('t_addcol', newer_than => '2024-01-02 00:00:00+00') AS "CHUNK2" \gset
+-- compress second chunk
+SELECT count(compress_chunk(:'CHUNK2'));
+SELECT compress_relid::regclass AS "COMP2" FROM _timescaledb_catalog.compression_settings WHERE relid::regclass = :'CHUNK2'::regclass \gset
+
+-- Create 1st chunk with a source table, add "newcol" column to it and compress it
+CREATE TABLE prebuilt (LIKE :COMP2);
+
+ALTER TABLE prebuilt ADD COLUMN newcol _timescaledb_internal.compressed_data;
+SELECT _timescaledb_functions.create_compressed_chunk(:'CHUNK1', 'prebuilt', 0, 0, 0, 0, 0, 0, 0, 0);
+
+-- Now add "newcol" column to the entire hypertable.
+-- Should skip 1st chunk as it already has "newcol" column, should add "newcol" to second chunk.
+ALTER TABLE t_addcol ADD COLUMN newcol int DEFAULT 42;
+SELECT count(*) AS newcol_in_chunk2_compressed FROM pg_attribute WHERE attrelid = :'COMP2'::regclass AND attname = 'newcol';
+
+-- Should not crash as all chunks have correct columns
+CALL merge_chunks(:'CHUNK1', :'CHUNK2');
+
+drop table t_addcol cascade;
+
+CREATE OR REPLACE FUNCTION test_has_proper_errcode(stmt text)
+    RETURNS boolean
+    LANGUAGE plpgsql
+AS $$
+DECLARE
+    sqlstate_code text;
+    msg          text;
+BEGIN
+    EXECUTE stmt;
+    -- statement did NOT raise: there is no error code to classify
+    RAISE NOTICE 'no error raised by: %', stmt;
+    RETURN false;
+EXCEPTION
+    WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS
+            sqlstate_code = RETURNED_SQLSTATE,
+            msg           = MESSAGE_TEXT;
+        RAISE NOTICE 'sqlstate=% message=%', sqlstate_code, msg;
+        RETURN sqlstate_code <> 'XX000';   -- TRUE = proper (non-internal) error
+END;
+$$;
+
+-- Check that adding a new column of wrong type to compressed chunk gives correct error message
+CREATE TABLE t_addcol(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('t_addcol', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE t_addcol SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+INSERT INTO t_addcol VALUES ('2024-01-01 00:00:00+00', 1, 1), ('2024-01-02 00:00:00+00', 1, 1);
+
+-- table has 2 chunks
+SELECT show_chunks('t_addcol', older_than => '2024-01-02 00:00:00+00') AS "CHUNK1" \gset
+SELECT show_chunks('t_addcol', newer_than => '2024-01-02 00:00:00+00') AS "CHUNK2" \gset
+-- compress second chunk
+SELECT count(compress_chunk(:'CHUNK2'));
+SELECT compress_relid::regclass AS "COMP2" FROM _timescaledb_catalog.compression_settings WHERE relid::regclass = :'CHUNK2'::regclass \gset
+
+-- Create 1st chunk with a source table, add "newcol" column of wrong type to it and compress it
+CREATE TABLE prebuilt (LIKE :COMP2);
+
+ALTER TABLE prebuilt ADD COLUMN wrongcol text;
+SELECT _timescaledb_functions.create_compressed_chunk(:'CHUNK1', 'prebuilt', 0, 0, 0, 0, 0, 0, 0, 0);
+
+-- New column of compressed integers is added to 2nd chunk, 1st compressed chunk has new column of wrong type
+ALTER TABLE t_addcol ADD COLUMN wrongcol int DEFAULT 42;
+SELECT count(*) AS newcol_in_chunk2_compressed FROM pg_attribute WHERE attrelid = :'COMP2'::regclass AND attname = 'newcol';
+
+-- decompress_chunk should detect that "wrongcol" has wrong type and print error message with non-internal error code
+\set ON_ERROR_STOP 0
+SELECT test_has_proper_errcode(format('SELECT count(decompress_chunk(%L))', :'CHUNK1'));
+SELECT count(decompress_chunk(:'CHUNK1'));
+\set ON_ERROR_STOP 1
+
+drop table t_addcol cascade;
+
+-- Check that adding new column with metadata column name produces correct error message
+CREATE TABLE t_addcol(time timestamptz NOT NULL, device int, v float);
+SELECT table_name FROM create_hypertable('t_addcol', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE t_addcol SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device');
+
+INSERT INTO t_addcol VALUES ('2024-01-01', 1, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('t_addcol') c;
+
+ALTER TABLE t_addcol ADD COLUMN "_ts_meta_count" int DEFAULT 42;
+
+INSERT INTO t_addcol VALUES ('2024-01-01 12:00', 2, 2.0, 99);
+
+\set ON_ERROR_STOP 0
+SELECT test_has_proper_errcode(format('SELECT compress_chunk(c, recompress => true) FROM show_chunks(%L) c', 't_addcol'));
+SELECT compress_chunk(c, recompress => true) FROM show_chunks('t_addcol') c;
+\set ON_ERROR_STOP 1
+
+drop table t_addcol cascade;
+drop FUNCTION test_has_proper_errcode cascade;

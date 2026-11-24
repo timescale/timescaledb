@@ -33,7 +33,7 @@ SELECT * FROM alter_before;
 -- Show that deleted column is marked as dropped and that attnums are
 -- now different for the root table and the chunk
 -- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
-SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+SELECT c.relname, a.attname, a.attnum, (SELECT array_agg(o) FROM unnest(a.attoptions) o WHERE o NOT LIKE 'pg_attver=%') AS attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
 AND a.attnum > 0
@@ -84,7 +84,7 @@ ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET STATIS
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN notes SET STORAGE EXTERNAL;
 
 -- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
-SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+SELECT c.relname, a.attname, a.attnum, (SELECT array_agg(o) FROM unnest(a.attoptions) o WHERE o NOT LIKE 'pg_attver=%') AS attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0
@@ -435,7 +435,9 @@ CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
 
-\d _timescaledb_internal._hyper_14_28_chunk
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_columns(ch) ORDER BY 1, 2;
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_indexespred(ch) ORDER BY 1, 2;
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_constraints(ch) ORDER BY 1, 2;
 
 DROP TABLE p_hypertable;
 

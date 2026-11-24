@@ -15,7 +15,7 @@ name: "Packaging tests: Installcheck for APT"
   workflow_dispatch:
 jobs:
   apt_tests:
-    name: APT ${{ matrix.runner }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    name: APT ${{ matrix.arch }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
     container:
       image: ${{ matrix.image }}
       env:
@@ -23,9 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner:
-          - ubuntu-latest
-          - timescaledb-runner-arm64
+        arch:
+          - AMD64
+          - ARM
         image:
           - ubuntu:22.04
         pg:
@@ -33,16 +33,29 @@ jobs:
         license:
           - "TSL"
         include:
-          - runner: ubuntu-latest
-            arch: AMD64
-          - runner: timescaledb-runner-arm64
-            arch: ARM
+          - arch: AMD64
+            runner: ubuntu-latest
+          - arch: ARM
+            runner: runs-on/fleet=linux-2cpu/env=ue1
           - image: ubuntu:22.04
             image_friendly: Ubuntu 22.04
 
     runs-on: ${{ matrix.runner }}
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        touch /etc/apt/apt-mirrors.txt
+        sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::By-Hash "yes";' >> /etc/apt/apt.conf.d/99retries
+
     - name: Add repositories
       timeout-minutes: 15
       run: |
@@ -62,17 +75,24 @@ jobs:
           timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
         timescaledb-tune --quiet --yes
 
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Get version of latest release
       id: versions
       run: |
-        version=$(wget -q --tries=6 --waitretry=15 https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
-        echo "version=${version}"
-        echo "version=${version}" >>$GITHUB_OUTPUT
+        retry_flags="--tries=9 --wait=20 --random-wait --retry-on-http-error=503,403"
+        version_url="https://api.github.com/repos/timescale/timescaledb/releases/latest"
+        version=$(wget -q ${retry_flags} --header="Authorization: token ${{ github.token }}" ${version_url} -O - | jq -r .tag_name)
+        if [ -z "$version" ]; then
+          echo "ERROR: Failed to get api version from github. This is a CI issue." >>$GITHUB_OUTPUT
+          false
+        else
+          echo "version=${version}"
+          echo "version=${version}" >>$GITHUB_OUTPUT
 
-        grep PRETTY_NAME /etc/os-release >> $GITHUB_OUTPUT
-        echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
+          grep PRETTY_NAME /etc/os-release >> $GITHUB_OUTPUT
+          echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
+        fi
 
     - name: Test Installation
       id: installation
@@ -84,6 +104,7 @@ jobs:
         installed_version=$(sudo -u postgres psql -X -t \
           -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
         if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
+          echo "ERROR: Version mismatch: ${{ steps.versions.outputs.version }} != $installed_version" >>$GITHUB_OUTPUT
           false
         fi
 
@@ -93,7 +114,7 @@ jobs:
         " | tee -a $GITHUB_OUTPUT
 
     - name: Checkout the sources for version ${{ steps.installation.outputs.commit_tag }}
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         ref: ${{ steps.installation.outputs.commit_hash }}
 
@@ -126,7 +147,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Installcheck logs ${{ matrix.runner }} ${{ matrix.image_friendly }} PG ${{ matrix.pg }}
+        name: Installcheck logs ${{ matrix.arch }} ${{ matrix.image_friendly }} PG ${{ matrix.pg }}
         path: |
             postmaster.*
             initdb.log

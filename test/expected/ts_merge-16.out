@@ -634,7 +634,7 @@ BEGIN
 	RETURN NULL;
 END;
 $$;
-SELECT * FROM target full outer join source on (sid = tid);
+SELECT * FROM target full outer join source on (sid = tid) ORDER BY tid, balance, sid, delta;
 create trigger merge_skip BEFORE INSERT OR UPDATE or DELETE
   ON target FOR EACH ROW EXECUTE FUNCTION skip_merge_op();
 DO $$
@@ -656,7 +656,7 @@ GET DIAGNOSTICS result := ROW_COUNT;
 RAISE NOTICE 'ROW_COUNT = %', result;
 END;
 $$;
-SELECT * FROM target FULL OUTER JOIN source ON (sid = tid);
+SELECT * FROM target FULL OUTER JOIN source ON (sid = tid) ORDER BY tid, balance, sid, delta;
 DROP TRIGGER merge_skip ON target;
 DROP FUNCTION skip_merge_op();
 -- test from PL/pgSQL
@@ -862,9 +862,10 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta);
-SELECT * from target;
+SELECT * from target ORDER BY tid;
 ROLLBACK;
 BEGIN;
+WITH m AS (
 MERGE INTO target t
 USING source s
 ON t.tid = s.sid
@@ -874,9 +875,10 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta)
-RETURNING merge_action(), t.*;
-psql:include/ts_merge_query.sql:811: ERROR:  syntax error at or near "RETURNING"
-LINE 10: RETURNING merge_action(), t.*;
+RETURNING merge_action() AS merge_action, t.*
+) SELECT * FROM m ORDER BY tid;
+psql:include/ts_merge_query.sql:813: ERROR:  syntax error at or near "RETURNING"
+LINE 11: RETURNING merge_action() AS merge_action, t.*
          ^
 ROLLBACK;
 -- Views
@@ -891,14 +893,15 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta);
-psql:include/ts_merge_query.sql:826: ERROR:  cannot execute MERGE on relation "tv"
+psql:include/ts_merge_query.sql:828: ERROR:  cannot execute MERGE on relation "tv"
 DETAIL:  This operation is not supported for views.
-SELECT * from tv;
-psql:include/ts_merge_query.sql:827: ERROR:  current transaction is aborted, commands ignored until end of transaction block
-SELECT * from target; -- should also update the underlying table
-psql:include/ts_merge_query.sql:828: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT * from tv ORDER BY tid;
+psql:include/ts_merge_query.sql:829: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT * from target ORDER BY tid; -- should also update the underlying table
+psql:include/ts_merge_query.sql:830: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 BEGIN;
+WITH m AS (
 MERGE INTO tv t
 USING source s
 ON t.tid = s.sid
@@ -908,9 +911,10 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta)
-RETURNING merge_action(), t.*;
-psql:include/ts_merge_query.sql:841: ERROR:  syntax error at or near "RETURNING"
-LINE 10: RETURNING merge_action(), t.*;
+RETURNING merge_action() AS merge_action, t.*
+) SELECT * FROM m ORDER BY tid;
+psql:include/ts_merge_query.sql:845: ERROR:  syntax error at or near "RETURNING"
+LINE 11: RETURNING merge_action() AS merge_action, t.*
          ^
 ROLLBACK;
 DROP VIEW tv;
@@ -1007,11 +1011,11 @@ ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
 WHEN MATCHED THEN
     UPDATE SET balance = 42
 RETURNING *;
-psql:include/ts_merge_query.sql:952: ERROR:  syntax error at or near "RETURNING"
+psql:include/ts_merge_query.sql:956: ERROR:  syntax error at or near "RETURNING"
 LINE 6: RETURNING *;
         ^
 SELECT * FROM sq_target WHERE tid = 1;
-psql:include/ts_merge_query.sql:953: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:include/ts_merge_query.sql:957: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 DROP TABLE sq_target CASCADE;
 DROP TABLE sq_source CASCADE;
@@ -1993,7 +1997,7 @@ BEGIN
 	RETURN NULL;
 END;
 $$;
-SELECT * FROM target full outer join source on (sid = tid);
+SELECT * FROM target full outer join source on (sid = tid) ORDER BY tid, balance, sid, delta;
 create trigger merge_skip BEFORE INSERT OR UPDATE or DELETE
   ON target FOR EACH ROW EXECUTE FUNCTION skip_merge_op();
 DO $$
@@ -2015,7 +2019,7 @@ GET DIAGNOSTICS result := ROW_COUNT;
 RAISE NOTICE 'ROW_COUNT = %', result;
 END;
 $$;
-SELECT * FROM target FULL OUTER JOIN source ON (sid = tid);
+SELECT * FROM target FULL OUTER JOIN source ON (sid = tid) ORDER BY tid, balance, sid, delta;
 DROP TRIGGER merge_skip ON target;
 DROP FUNCTION skip_merge_op();
 -- test from PL/pgSQL
@@ -2225,9 +2229,10 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta);
-SELECT * from target;
+SELECT * from target ORDER BY tid;
 ROLLBACK;
 BEGIN;
+WITH m AS (
 MERGE INTO target t
 USING source s
 ON t.tid = s.sid
@@ -2237,9 +2242,10 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta)
-RETURNING merge_action(), t.*;
-psql:include/ts_merge_query.sql:811: ERROR:  syntax error at or near "RETURNING"
-LINE 10: RETURNING merge_action(), t.*;
+RETURNING merge_action() AS merge_action, t.*
+) SELECT * FROM m ORDER BY tid;
+psql:include/ts_merge_query.sql:813: ERROR:  syntax error at or near "RETURNING"
+LINE 11: RETURNING merge_action() AS merge_action, t.*
          ^
 ROLLBACK;
 -- Views
@@ -2254,14 +2260,15 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta);
-psql:include/ts_merge_query.sql:826: ERROR:  cannot execute MERGE on relation "tv"
+psql:include/ts_merge_query.sql:828: ERROR:  cannot execute MERGE on relation "tv"
 DETAIL:  This operation is not supported for views.
-SELECT * from tv;
-psql:include/ts_merge_query.sql:827: ERROR:  current transaction is aborted, commands ignored until end of transaction block
-SELECT * from target; -- should also update the underlying table
-psql:include/ts_merge_query.sql:828: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT * from tv ORDER BY tid;
+psql:include/ts_merge_query.sql:829: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT * from target ORDER BY tid; -- should also update the underlying table
+psql:include/ts_merge_query.sql:830: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 BEGIN;
+WITH m AS (
 MERGE INTO tv t
 USING source s
 ON t.tid = s.sid
@@ -2271,9 +2278,10 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta)
-RETURNING merge_action(), t.*;
-psql:include/ts_merge_query.sql:841: ERROR:  syntax error at or near "RETURNING"
-LINE 10: RETURNING merge_action(), t.*;
+RETURNING merge_action() AS merge_action, t.*
+) SELECT * FROM m ORDER BY tid;
+psql:include/ts_merge_query.sql:845: ERROR:  syntax error at or near "RETURNING"
+LINE 11: RETURNING merge_action() AS merge_action, t.*
          ^
 ROLLBACK;
 DROP VIEW tv;
@@ -2370,11 +2378,11 @@ ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
 WHEN MATCHED THEN
     UPDATE SET balance = 42
 RETURNING *;
-psql:include/ts_merge_query.sql:952: ERROR:  syntax error at or near "RETURNING"
+psql:include/ts_merge_query.sql:956: ERROR:  syntax error at or near "RETURNING"
 LINE 6: RETURNING *;
         ^
 SELECT * FROM sq_target WHERE tid = 1;
-psql:include/ts_merge_query.sql:953: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:include/ts_merge_query.sql:957: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 DROP TABLE sq_target CASCADE;
 DROP TABLE sq_source CASCADE;

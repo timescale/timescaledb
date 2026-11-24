@@ -140,7 +140,7 @@ extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index 
 													   bool missing_ok);
 
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
-extern TSDLLEXPORT EquivalenceMember *ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
+extern TSDLLEXPORT List *ts_find_ems_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 extern TSDLLEXPORT bool ts_has_owner_privs(Oid userid, Oid ownerid);
@@ -171,16 +171,6 @@ ts_fetch_att(const void *T, bool attbyval, int attlen)
 	 * violations. */
 	Assert(!attbyval || (attlen > 0 && attlen <= 8));
 	return fetch_att(T, attbyval, attlen);
-}
-
-static inline int64
-int64_min(int64 a, int64 b)
-{
-	if (a <= b)
-	{
-		return a;
-	}
-	return b;
 }
 
 static inline int64
@@ -402,3 +392,14 @@ extern TSDLLEXPORT char *ts_list_to_string(List *list, append_cell_func append);
 extern TSDLLEXPORT List *ts_find_aggrefs(Node *node);
 extern TSDLLEXPORT bool ts_is_time_bucket_function(Expr *node);
 extern TSDLLEXPORT bool ts_get_attnotnull(Oid relid, AttrNumber attno);
+
+typedef struct TSSecurityContext
+{
+	Oid save_userid;
+	int save_sec_context;
+	int save_nestlevel;
+} TSSecurityContext;
+
+extern TSDLLEXPORT void ts_security_context_enter(Oid uid, int sec_flags, TSSecurityContext *ctx);
+extern TSDLLEXPORT void ts_security_context_exit(const TSSecurityContext *ctx);
+extern TSDLLEXPORT ObjectAddress ts_relation_define(CreateStmt *stmt, char relkind, Oid owner);

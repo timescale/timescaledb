@@ -226,6 +226,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	PolicyReorderData policy;
 
 	policy_reorder_read_and_validate_config(config, &policy);
+	ts_hypertable_permissions_check(policy.hypertable->main_table_relid, GetUserId());
 
 	/* Find a chunk to reorder in the selected hypertable */
 	chunk_id = get_chunk_id_to_reorder(job_id, policy.hypertable);
@@ -245,15 +246,32 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	 * chunk.
 	 */
 	chunk = ts_chunk_get_by_id(chunk_id, false);
-	elog(DEBUG1,
-		 "reordering chunk %s.%s",
-		 NameStr(chunk->fd.schema_name),
-		 NameStr(chunk->fd.table_name));
-	reorder_chunk(chunk->table_id, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
-	elog(DEBUG1,
-		 "completed reordering chunk %s.%s",
-		 NameStr(chunk->fd.schema_name),
-		 NameStr(chunk->fd.table_name));
+	const char *schema_name = ts_chunk_get_schema_name(chunk);
+	const char *table_name = ts_chunk_get_table_name(chunk);
+
+	/*
+	 * A chunk owned by another role, e.g., an attached table, cannot be
+	 * reordered by the job owner. Record the run for it anyway so the policy
+	 * moves on to the next chunk instead of failing on this one every time.
+	 */
+	if (!ts_chunk_has_privs_of(chunk->fd.relid, GetUserId()))
+	{
+		ereport(WARNING,
+				(errmsg("skipping reorder of chunk \"%s.%s\", which is owned by another role",
+						schema_name,
+						table_name)));
+	}
+	else
+	{
+		elog(DEBUG1, "reordering chunk %s.%s", schema_name, table_name);
+		reorder_chunk(chunk->fd.relid,
+					  policy.index_relid,
+					  false,
+					  InvalidOid,
+					  InvalidOid,
+					  InvalidOid);
+		elog(DEBUG1, "completed reordering chunk %s.%s", schema_name, table_name);
+	}
 
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
@@ -304,10 +322,10 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 		log_retention_boundary(LOG, &policy_data, "applying retention policy to hypertable");
 	}
 
-	chunk_invoke_drop_chunks(policy_data.object_relid,
-							 policy_data.boundary,
-							 policy_data.boundary_type,
-							 policy_data.use_creation_time);
+	ts_chunk_drop_chunks_by_boundary(policy_data.object_relid,
+									 policy_data.boundary,
+									 policy_data.boundary_type,
+									 policy_data.use_creation_time);
 
 	return true;
 }
@@ -409,6 +427,15 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	initStringInfo(&str);
 	JsonbToCStringIndent(&str, &config->root, VARSIZE(config));
 
+	/* This is called via a public function, so check CAgg ownership before performing any work such
+	 * as calculating the refresh window, or moving the invalidation threshold. */
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(
+		policy_continuous_aggregate_get_mat_hypertable_id(config), true);
+	if (cagg != NULL)
+	{
+		ts_cagg_permissions_check(cagg->relid, GetUserId());
+	}
+
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
 	bool extend_last_bucket = !policy_refresh_cagg_check_if_last_policy(&policy_data);
 
@@ -423,17 +450,17 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	}
 
 	ContinuousAggRefreshContext context = {
-		.callctx = CAGG_REFRESH_POLICY,
-		.job_id = job_id,
-		.buckets_per_batch = policy_data.buckets_per_batch,
-		.max_batches_per_execution = policy_data.max_batches_per_execution,
-		.refresh_newest_first = policy_data.refresh_newest_first,
+		.options = {
+			.callctx = CAGG_REFRESH_POLICY,
+			.job_id = job_id,
+			.buckets_per_batch = policy_data.buckets_per_batch,
+			.max_batches_per_execution = policy_data.max_batches_per_execution,
+			.refresh_newest_first = policy_data.refresh_newest_first,
+			.extend_last_bucket = extend_last_bucket,
+		},
 	};
 
-	continuous_agg_refresh_batched(policy_data.cagg,
-								   &policy_data.refresh_window,
-								   context,
-								   extend_last_bucket);
+	continuous_agg_refresh_batched(policy_data.cagg, &policy_data.refresh_window, &context);
 
 	if (!policy_data.include_tiered_data_isnull)
 	{
@@ -497,8 +524,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 
 				elog(DEBUG1,
 					 "compressed chunk \"%s.%s\" after continuous aggregate refresh",
-					 NameStr(chunk->fd.schema_name),
-					 NameStr(chunk->fd.table_name));
+					 ts_chunk_get_schema_name(chunk),
+					 ts_chunk_get_table_name(chunk));
 
 				PopActiveSnapshot();
 				CommitTransactionCommand();
@@ -639,6 +666,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	MemoryContext saved_cxt, multitxn_cxt;
 
 	policy_recompression_read_and_validate_config(config, &policy_data);
+	ts_hypertable_permissions_check(policy_data.hypertable->main_table_relid, GetUserId());
 	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
 	/* we want the chunk id list to survive across transactions. So alloc in
 	 * a different context
@@ -695,8 +723,8 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 
 		elog(LOG,
 			 "completed recompressing chunk \"%s.%s\"",
-			 NameStr(chunk->fd.schema_name),
-			 NameStr(chunk->fd.table_name));
+			 ts_chunk_get_schema_name(chunk),
+			 ts_chunk_get_table_name(chunk));
 	}
 
 	elog(DEBUG1, "job %d completed recompressing chunk", job_id);
@@ -719,24 +747,24 @@ job_execute_function(FuncExpr *funcexpr)
 }
 
 static void
-job_execute_procedure(FuncExpr *funcexpr)
+job_execute_procedure(FuncExpr *funcexpr, bool atomic)
 {
 	CallStmt *call = makeNode(CallStmt);
 	call->funcexpr = funcexpr;
 	DestReceiver *dest = CreateDestReceiver(DestNone);
 	/* we don't need to create proper param list cause we pass in all arguments as Const */
 	ParamListInfo params = makeParamList(0);
-	ExecuteCallStmt(call, params, false, dest);
+	ExecuteCallStmt(call, params, atomic, dest);
 }
 
 /*
  * Execute the job.
  *
  * This function can be called both from a portal and from a background
- * worker.
+ * worker. When atomic is true the job must not do transaction control.
  */
 bool
-job_execute(BgwJob *job)
+job_execute_in_context(BgwJob *job, bool atomic)
 {
 	Const *arg1, *arg2;
 	bool portal_created = false;
@@ -775,6 +803,7 @@ job_execute(BgwJob *job)
 		portal = CreatePortal("", true, true);
 		portal->visible = false;
 		portal->resowner = CurrentResourceOwner;
+		portal->status = PORTAL_ACTIVE;
 		ActivePortal = portal;
 		PortalContext = portal->portalContext;
 
@@ -850,7 +879,7 @@ job_execute(BgwJob *job)
 			job_execute_function(funcexpr);
 			break;
 		case PROKIND_PROCEDURE:
-			job_execute_procedure(funcexpr);
+			job_execute_procedure(funcexpr, atomic);
 			break;
 		default:
 			ereport(ERROR,
@@ -866,10 +895,17 @@ job_execute(BgwJob *job)
 			PopActiveSnapshot();
 		}
 		CommitTransactionCommand();
+		MarkPortalDone(portal);
 		PortalDrop(portal, false);
 		ActivePortal = NULL;
 		PortalContext = NULL;
 	}
 
 	return true;
+}
+
+bool
+job_execute(BgwJob *job)
+{
+	return job_execute_in_context(job, false);
 }

@@ -94,6 +94,21 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.uuid_compressor_finish(internal
    AS :MODULE_PATHNAME, 'ts_uuid_compressor_finish'
    LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.aic_append_bigint(internal, BIGINT)
+   RETURNS internal
+   AS :MODULE_PATHNAME, 'ts_aic_compressor_append'
+   LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.aic_append_timestamptz(internal, timestamptz)
+   RETURNS internal
+   AS :MODULE_PATHNAME, 'ts_aic_compressor_append'
+   LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.aic_finish(internal)
+   RETURNS _timescaledb_internal.compressed_data
+   AS :MODULE_PATHNAME, 'ts_aic_compressor_finish'
+   LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
 CREATE AGGREGATE _timescaledb_internal.compress_deltadelta(BIGINT) (
     STYPE = internal,
     SFUNC = _timescaledb_internal.deltadelta_compressor_append,
@@ -104,6 +119,18 @@ CREATE AGGREGATE _timescaledb_internal.compress_deltadelta(timestamptz) (
     STYPE = internal,
     SFUNC = _timescaledb_internal.compressor_append_timestamptz,
     FINALFUNC = _timescaledb_internal.timestamptz_compress_finish
+);
+
+CREATE AGGREGATE _timescaledb_internal.compress_aic(BIGINT) (
+    STYPE = internal,
+    SFUNC = _timescaledb_internal.aic_append_bigint,
+    FINALFUNC = _timescaledb_internal.aic_finish
+);
+
+CREATE AGGREGATE _timescaledb_internal.compress_aic(timestamptz) (
+    STYPE = internal,
+    SFUNC = _timescaledb_internal.aic_append_timestamptz,
+    FINALFUNC = _timescaledb_internal.aic_finish
 );
 
 CREATE AGGREGATE _timescaledb_internal.compress_gorilla(ANYELEMENT) (

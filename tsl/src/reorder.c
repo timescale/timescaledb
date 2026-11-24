@@ -63,7 +63,7 @@
 #include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable_cache.h"
-#include "import/heapswap.h"
+#include "import/commands/cluster.h"
 #include "indexing.h"
 #include "reorder.h"
 #include "ts_catalog/compression_settings.h"
@@ -167,6 +167,8 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
 	}
 
+	ts_chunk_permissions_check(chunk, GetUserId());
+
 	/* If chunk is compressed move it by altering tablespace on both chunks */
 	if (ts_chunk_is_compressed(chunk))
 	{
@@ -232,7 +234,7 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Our check gives better error messages, but keep the original one too. */
-	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+	ts_chunk_permissions_check(chunk, GetUserId());
 
 	if (!object_ownercheck(RelationRelationId, ht->main_table_relid, GetUserId()))
 	{
@@ -298,8 +300,8 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	 * because it expects indexes that need to be rechecked (due to new
 	 * transaction) to already have that mark set
 	 */
-	ts_chunk_index_mark_clustered(chunk->table_id, index_relid);
-	reorder_rel(chunk->table_id,
+	ts_chunk_index_mark_clustered(chunk->fd.relid, index_relid);
+	reorder_rel(chunk->fd.relid,
 				index_relid,
 				verbose,
 				wait_id,
@@ -345,14 +347,14 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 
 	if (OidIsValid(index_relid))
 	{
-		if (index_belongs_to_relation(chunk->table_id, index_relid))
+		if (index_belongs_to_relation(chunk->fd.relid, index_relid))
 		{
 			return index_relid;
 		}
 
 		if (index_belongs_to_relation(ht->main_table_relid, index_relid))
 		{
-			Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+			Relation chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
 			Oid chunk_index_oid =
 				ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, index_relid);
 			table_close(chunk_rel, NoLock);
@@ -362,7 +364,7 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 		return InvalidOid;
 	}
 
-	index_relid = ts_indexing_find_clustered_index(chunk->table_id);
+	index_relid = ts_indexing_find_clustered_index(chunk->fd.relid);
 	if (OidIsValid(index_relid))
 	{
 		return index_relid;
@@ -371,7 +373,7 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 	index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
 	if (OidIsValid(index_relid))
 	{
-		Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+		Relation chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
 		Oid chunk_index_oid = ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, index_relid);
 		table_close(chunk_rel, NoLock);
 		return chunk_index_oid;

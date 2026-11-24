@@ -115,3 +115,10 @@ SELECT decomp.*
 FROM (VALUES (NULL, NULL, NULL::_timescaledb_internal.compressed_data)) AS r(_ts_meta_count, a, b),
 LATERAL _timescaledb_functions.decompress_batch(r)
     AS decomp(a int, b text);
+
+-- Two record columns with the same name map to the same output column
+SELECT decomp.*
+FROM (SELECT 1 AS _ts_meta_count, 'AQBwZ19jYXRhbG9nAHRleHQAAAEAAAABAAAABHRlc3Q='::_timescaledb_internal.compressed_data AS a, NULL::_timescaledb_internal.compressed_data AS a) AS r,
+LATERAL _timescaledb_functions.decompress_batch(r)
+    AS decomp(a text);
+

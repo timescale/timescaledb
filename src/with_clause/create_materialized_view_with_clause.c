@@ -85,6 +85,9 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 			case AlterTableFlagGranularRefreshColumn:
 			case AlterTableFlagGranularRefreshStartOffset:
 			case AlterTableFlagGranularRefreshEndOffset:
+			case AlterTableFlagCaggEnableGranularRefresh:
+			case AlterTableFlagDirectCompress:
+			case AlterTableFlagDirectCompressScheduleInterval:
 				continue;
 				break;
 			case AlterTableFlagColumnstore:

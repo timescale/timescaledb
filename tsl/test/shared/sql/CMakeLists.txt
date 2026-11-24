@@ -5,20 +5,20 @@ set(TEST_FILES_SHARED
     compat.sql
     compress_bloom_sparse_compat.sql
     compress_unique_index.sql
-    compression_nulls_not_distinct.sql
     constraint_aware_append.sql
     decompress_join.sql
     decompress_placeholdervar.sql
-    decompress_tracking.sql
     gapfill_bug.sql
     generated_columns.sql
     lateral_subquery.sql
     osm_api.sql
-    parameterized_chunkappend.sql
     security_barrier.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
+    compression_dml.sql.in
+    decompress_tracking.sql.in
+    parameterized_chunkappend.sql.in
     gapfill.sql.in
     ordered_append_join.sql.in
     constify_timestamptz_op_interval.sql.in
@@ -26,17 +26,21 @@ set(TEST_TEMPLATES_SHARED
     space_constraint.sql.in
     transparent_decompress_chunk.sql.in)
 
-set(SOLO_TESTS cagg_compression.sql compression_dml.sql merge_dml.sql)
+set(SOLO_TESTS cagg_compression.sql compression_dml-${TEST_VERSION_SUFFIX}.sql
+               merge_dml.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
        with_clause_parser.sql)
   list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
+  # Checks that cached plans are reused. Catalog changes from parallel tests can
+  # reset the plan cache and cause a replan, so run it alone.
+  list(APPEND SOLO_TESTS constify_now-${TEST_VERSION_SUFFIX}.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   # Dependent on MergeAppend costs which are broken on earlier versions.
-  list(APPEND TEST_FILES_SHARED bulk_decompression_limit.sql)
+  list(APPEND TEST_TEMPLATES_SHARED bulk_decompression_limit.sql.in)
 
   # The costs are different on older versions.
   list(APPEND TEST_FILES_SHARED chunkwise_agg_cost.sql)
@@ -57,7 +61,7 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES_SHARED})
   list(APPEND TEST_FILES_SHARED ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
-if(DEFINED GIT_FOUND)
+if(GIT_COMMIT_INFO_FOUND)
   list(APPEND TEST_FILES_SHARED build_info.sql)
 endif()
 
@@ -74,12 +78,16 @@ endif()
 
 set(GROUP_MEMBERS 0)
 foreach(TEST_FILE ${TEST_FILES_SHARED})
-  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  if(GROUP_MEMBERS EQUAL 0)
-    file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
+  # Solo tests are scheduled separately below, skip them here so a templated
+  # solo test does not also end up in a parallel group.
+  if(NOT (${TEST_FILE} IN_LIST SOLO_TESTS))
+    string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
+    if(GROUP_MEMBERS EQUAL 0)
+      file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
+    endif()
+    file(APPEND ${TEST_SCHEDULE_SHARED} "${TESTS_TO_RUN} ")
+    math(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
   endif()
-  file(APPEND ${TEST_SCHEDULE_SHARED} "${TESTS_TO_RUN} ")
-  math(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
 endforeach(TEST_FILE)
 file(APPEND ${TEST_SCHEDULE_SHARED} "\n")
 

@@ -58,7 +58,7 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
   CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
   CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0)
-) WITH (user_catalog_table = true);
+);
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
 
@@ -129,7 +129,7 @@ CREATE TABLE _timescaledb_catalog.chunk (
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_relid_key UNIQUE (relid),
   CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
-) WITH (user_catalog_table = true);
+);
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
 CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
@@ -300,7 +300,7 @@ CREATE TABLE _timescaledb_internal.bgw_policy_chunk_stats (
   num_times_job_run integer,
   last_time_job_run timestamptz,
   -- table constraints
-  CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key UNIQUE (job_id, chunk_id),
+  CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key PRIMARY KEY (job_id, chunk_id),
   CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_catalog.bgw_job (id) ON DELETE CASCADE
 );
@@ -327,6 +327,7 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
   schema_change_timestamp bigint,
+  granular_refresh_enabled bool NOT NULL DEFAULT FALSE,
   -- table constraints
   CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
   CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),
@@ -391,7 +392,9 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 CREATE TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (
   hypertable_id integer NOT NULL,
   lowest_modified_value bigint NOT NULL,
-  greatest_modified_value bigint NOT NULL
+  greatest_modified_value bigint NOT NULL,
+  -- Granular sequence number. NULL when tenant tracking does not apply
+  seqnum integer
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log', '');
@@ -403,6 +406,8 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_l
   materialization_id integer,
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL,
+  -- Granular sequence number. NULL when tenant tracking does not apply
+  seqnum integer,
   -- table constraints
   CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
 );
@@ -415,9 +420,7 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx ON _timescaled
 CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
   materialization_id integer,
   lowest_modified_value bigint NOT NULL,
-  greatest_modified_value bigint NOT NULL,
-  -- table constraints
-  CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+  greatest_modified_value bigint NOT NULL
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_ranges', '');
@@ -439,6 +442,35 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_jobs_refresh_ranges', '');
 
 CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
+
+-- Per-tenant invalidation tracking, used in granular refresh of contiuous aggregates.
+CREATE TABLE _timescaledb_catalog.continuous_aggs_tenant_tracking (
+  hypertable_id integer NOT NULL,
+  tenant_id text,
+  min_timestamp bigint NOT NULL,
+  max_timestamp bigint NOT NULL,
+  seqnum integer NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_tenant_tracking_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_tenant_tracking', '');
+
+CREATE INDEX continuous_aggs_tenant_tracking_idx ON _timescaledb_catalog.continuous_aggs_tenant_tracking (hypertable_id, seqnum);
+
+-- Per-hypertable settings for granular refresh of continuous aggregates.
+-- Row existence means granular refresh is configured for the hypertable.
+CREATE TABLE _timescaledb_catalog.hypertable_cagg_settings (
+  hypertable_id integer NOT NULL,
+  granular_refresh_column name NOT NULL,
+  granular_refresh_start_offset text,
+  granular_refresh_end_offset text,
+  -- table constraints
+  CONSTRAINT hypertable_cagg_settings_pkey PRIMARY KEY (hypertable_id),
+  CONSTRAINT hypertable_cagg_settings_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_cagg_settings', '');
 
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.

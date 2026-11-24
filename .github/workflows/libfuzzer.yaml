@@ -21,6 +21,19 @@ jobs:
       PG_INSTALL_DIR: postgresql
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        sudo sh -c "echo 'Acquire::Retries \"10\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::http::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::https::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::By-Hash \"yes\";' >> /etc/apt/apt.conf.d/99retries"
+
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
@@ -31,7 +44,7 @@ jobs:
           libtest-most-perl tree jq
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Read configuration
       id: config
@@ -49,7 +62,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL
       id: cache-postgresql
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "postgresql-libfuzzer-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
@@ -118,10 +131,16 @@ jobs:
       fail-fast: false
       matrix:
         case: [
-            { algo: gorilla   , pgtype: float8, bulk: false, runs:   500000000 },
-            { algo: deltadelta, pgtype: int8  , bulk: false, runs:   500000000 },
-            { algo: gorilla   , pgtype: float8, bulk: true , runs:  1000000000 },
-            { algo: deltadelta, pgtype: int8  , bulk: true , runs:  1000000000 },
+            { algo: gorilla      , pgtype: float8, bulk: false, runs:   500000000 },
+            { algo: deltadelta   , pgtype: int8  , bulk: false, runs:   500000000 },
+            { algo: aic, pgtype: int8  , bulk: false, runs:   500000000 },
+            { algo: aic, pgtype: int4  , bulk: false, runs:   500000000 },
+            { algo: aic, pgtype: int2  , bulk: false, runs:   500000000 },
+            { algo: gorilla      , pgtype: float8, bulk: true , runs:  1000000000 },
+            { algo: deltadelta   , pgtype: int8  , bulk: true , runs:  1000000000 },
+            { algo: aic, pgtype: int8  , bulk: true , runs:  1000000000 },
+            { algo: aic, pgtype: int4  , bulk: true , runs:  1000000000 },
+            { algo: aic, pgtype: int2  , bulk: true , runs:  1000000000 },
             # array has a peculiar recv function that recompresses all input, so
             # fuzzing it is much slower. The dictionary recv also uses it.
             { algo: array     , pgtype: text  , bulk: false, runs:    10000000 },
@@ -152,7 +171,7 @@ jobs:
         sudo apt-get install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Download the installation directory
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -183,7 +202,7 @@ jobs:
 
     - name: Restore the cached fuzzing corpus (bulk)
       id: restore-corpus-cache-bulk
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
@@ -192,7 +211,7 @@ jobs:
     # they don't overwrite each other. Now we are going to combine them.
     - name: Restore the cached fuzzing corpus (rowbyrow)
       id: restore-corpus-cache-rowbyrow
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
@@ -256,6 +275,16 @@ jobs:
 
         find db/corpus -mindepth 1 -maxdepth 1 | wc -l
 
+        # Check that the server is still alive.
+        psql -c "select 1"
+
+        # End the background fuzzing processes before we inspect the resulting
+        # fuzzing corpus, otherwise there can be errors because of concurrent
+        # modifications.
+        pg_ctl stop
+        pg_ctl start
+        wait ||:
+
         fn="ts_read_compressed_data_directory('${{ matrix.case.algo }}',
                 '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')"
 
@@ -280,9 +309,6 @@ jobs:
 
         # Shouldn't have any WARNINGS in the log.
         if grep -F "] WARNING: " postmaster.log; then exit 1; fi
-
-        # Check that the server is still alive.
-        psql -c "select 1"
 
     - name: Collect the logs
       if: always()
@@ -339,7 +365,7 @@ jobs:
 
     - name: Save fuzzer corpus
       if: always()
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
         key: "${{ format('{0}-{1}-{2}-{3}',

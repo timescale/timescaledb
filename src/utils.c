@@ -47,9 +47,11 @@
 #include "chunk.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
+#include "func_cache.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "time_utils.h"
+#include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "utils.h"
 #include "uuid.h"
@@ -895,17 +897,18 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 }
 
 /*
- * Find an equivalence class member expression, all of whose Vars, come from
- * the indicated relation.
+ * Find equivalence class member expressions with all of their Vars
+ * coming from the indicated relation.
  *
  * This function has been copied from find_em_expr_for_rel in
  * contrib/postgres_fdw/postgres_fdw.c in postgres source.
  * This function was moved to postgres main in PG13 but was removed
  * again in PG15. So we use our own implementation for PG15+.
  */
-EquivalenceMember *
-ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
+List *
+ts_find_ems_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
+	List *ems = NULL;
 	EquivalenceMember *em;
 #if PG18_GE
 	/* Use specialized iterator to include child ems.
@@ -923,28 +926,38 @@ ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	foreach (lc_em, ec->ec_members)
 	{
 		em = lfirst(lc_em);
-#endif
 
+		/* Before PG18, equivalence members on all chunks were stored in a single list.
+		 * Stop traversing the list after we find all EMs from the given relation and see an EM from
+		 * a different relation */
+		if (ems && !bms_is_subset(em->em_relids, rel->relids))
+		{
+			return ems;
+		}
+#endif
 		if (bms_is_subset(em->em_relids, rel->relids) && !bms_is_empty(em->em_relids))
 		{
 			/*
 			 * If there is more than one equivalence member whose Vars are
-			 * taken entirely from this relation, we'll be content to choose
-			 * any one of those.
+			 * taken entirely from this relation, we'll return a list of those
 			 */
-			return em;
+			ems = lappend(ems, em);
 		}
 	}
 
-	/* We didn't find any suitable equivalence class member */
-	return NULL;
+	return ems;
 }
 
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
-	EquivalenceMember *em = ts_find_em_for_rel(ec, rel);
-	return em ? em->em_expr : NULL;
+	List *ems = ts_find_ems_for_rel(ec, rel);
+	if (ems)
+	{
+		EquivalenceMember *em = linitial(ems);
+		return (em ? em->em_expr : NULL);
+	}
+	return NULL;
 }
 
 /*
@@ -2186,10 +2199,13 @@ ts_find_aggrefs(Node *node)
 bool
 ts_is_time_bucket_function(Expr *node)
 {
-	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
+	if (IsA(node, FuncExpr))
 	{
-		return true;
+		FuncInfo *finfo = ts_func_cache_get_bucketing_func(castNode(FuncExpr, node)->funcid);
+		if (finfo != NULL && strncmp(finfo->funcname, "time_bucket", NAMEDATALEN) == 0)
+		{
+			return true;
+		}
 	}
 
 	return false;
@@ -2230,4 +2246,58 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 	ReleaseSysCache(tp);
 	return result;
 #endif
+}
+
+/*
+ * Create a relation as its owner. A relation in the internal schema is
+ * created as the catalog owner because users have no CREATE permission there.
+ */
+ObjectAddress
+ts_relation_define(CreateStmt *stmt, char relkind, Oid owner)
+{
+	const char *schema_name;
+	ObjectAddress address;
+	Oid uid = owner;
+	TSSecurityContext secctx;
+
+	/* Resolve the schema with the caller's search_path */
+	if (stmt->relation->schemaname == NULL)
+	{
+		stmt->relation->schemaname =
+			get_namespace_name(RangeVarGetCreationNamespace(stmt->relation));
+	}
+	schema_name = stmt->relation->schemaname;
+
+	if (strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
+	{
+		uid = ts_catalog_database_info_get()->owner_uid;
+	}
+
+	ts_security_context_enter(uid, 0, &secctx);
+	address = DefineRelation(stmt, relkind, owner, NULL, NULL);
+	ts_security_context_exit(&secctx);
+
+	return address;
+}
+
+/*
+ * Run as another user with a restricted search_path. All user switches go
+ * through this function.
+ */
+void
+ts_security_context_enter(Oid uid, int sec_flags, TSSecurityContext *ctx)
+{
+	GetUserIdAndSecContext(&ctx->save_userid, &ctx->save_sec_context);
+	SetUserIdAndSecContext(uid, ctx->save_sec_context | SECURITY_RESTRICTED_OPERATION | sec_flags);
+	ctx->save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+}
+
+void
+ts_security_context_exit(const TSSecurityContext *ctx)
+{
+	/* Roll back any GUC changes */
+	AtEOXact_GUC(false, ctx->save_nestlevel);
+	/* Restore the caller's identity and security context */
+	SetUserIdAndSecContext(ctx->save_userid, ctx->save_sec_context);
 }

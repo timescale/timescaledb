@@ -11,22 +11,18 @@ set(TEST_FILES
     cagg_ddl.sql
     cagg_direct_compress.sql
     cagg_errors.sql
-    cagg_granular_refresh_api.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
-    cagg_planning.sql
     cagg_policy.sql
     cagg_query.sql
     cagg_query_using_merge.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
-    cagg_rewrites.sql
     cagg_skip_invalidation.sql
     cagg_union_view.sql
     cagg_utils.sql
-    cagg_watermark.sql
+    chunk_permissions.sql
     chunk_publication_compression.sql
-    columnar_scan_cost.sql
     columnstore_aliases.sql
     compact_chunk.sql
     compaction_policy.sql
@@ -39,16 +35,17 @@ set(TEST_FILES
     compress_dml_aux.sql
     compress_dml_bitmap_rescan.sql
     compress_dml_copy.sql
+    compress_dml_vectorized.sql
     compress_explain.sql
     compress_firstlast_sparse.sql
     compress_float8_corrupt.sql
     compress_qualpushdown_complex.sql
     compress_qualpushdown_saop.sql
-    compress_sort_transform.sql
     compress_sparse_config.sql
     compress_stats.sql
     compress_unordered_sort.sql
     compressed_collation.sql
+    compressed_collation_icu.sql
     compressed_detoaster.sql
     compression.sql
     compression_allocation.sql
@@ -56,6 +53,7 @@ set(TEST_FILES
     compression_constraints.sql
     compression_create_compressed_table.sql
     compression_defaults.sql
+    compression_equivalent_sortkeys.sql
     compression_external.sql
     compression_fks.sql
     compression_indexcreate.sql
@@ -64,11 +62,13 @@ set(TEST_FILES
     compression_nulls_and_defaults.sql
     compression_policy.sql
     compression_qualpushdown.sql
+    compression_scan_uncompressed.sql
     compression_sequence_num_removal.sql
     compression_settings.sql
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_unordered.sql
+    compression_sorted_merge_segmentwise.sql
     compression_trigger.sql
     compression_uuid.sql
     create_table_with.sql
@@ -76,8 +76,10 @@ set(TEST_FILES
     decompress_index.sql
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
+    direct_compress_policy.sql
+    memoize.sql
     move.sql
-    plan_skip_scan_notnull.sql
+    move_to_columnstore.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
@@ -100,17 +102,24 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_hierarchical_realtime.sql.in
     cagg_permissions.sql.in
+    cagg_planning.sql.in
+    cagg_rewrites.sql.in
+    cagg_watermark.sql.in
     columnar_index_scan.sql.in
+    columnar_scan_cost.sql.in
+    columnar_scan_metadata_only.sql.in
+    compress_sort_transform.sql.in
     compress_bloom_sparse.sql.in
     compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
-    memoize.sql.in
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
     plan_skip_scan_dagg.sql.in
+    plan_skip_scan_notnull.sql.in
     vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
@@ -121,14 +130,32 @@ endif()
 
 if(NOT APPLE)
   list(APPEND TEST_FILES direct_compress_copy.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES direct_compress_debug.sql)
+  endif()
+endif()
+
+list(
+  APPEND
+  TEST_FILES
+  cagg_granular_refresh.sql
+  cagg_granular_refresh_api.sql
+  cagg_granular_refresh_coltypes.sql
+  cagg_granular_refresh_fallback.sql
+  cagg_granular_refresh_garbage_collector.sql
+  cagg_granular_refresh_hierarchical.sql)
+
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
+       cagg_granular_refresh_config.sql cagg_granular_refresh_policies.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
-    attach_chunk.sql
     bgw_custom.sql
+    bgw_tss_callbacks.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
     bgw_job_stat_history_errors.sql
@@ -161,6 +188,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_hypertable.sql
     compression_merge.sql
     compression_indexscan.sql
+    compression_aic.sql
     compression_segment_meta.sql
     compression_sorted_merge_columns.sql
     compression_sorted_merge_filter.sql
@@ -207,7 +235,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_qual_default.sql
     vacuum.sql)
 
-  list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
+  list(APPEND TEST_TEMPLATES attach_chunk.sql.in
+       compression_update_delete.sql.in deferredchunkappend.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
@@ -216,27 +245,34 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql
-       merge_append_partially_compressed.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql skip_scan_bugs.sql)
+  list(APPEND TEST_TEMPLATES merge_append_partially_compressed.sql.in)
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES vector_agg_expr_debug.sql)
   endif(CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES constraints_not_valid.sql)
-
-  # WAL numbers will differ on 32-bit platform so we only run on 64-bit only run
-  # on PG17+ since the test can be flaky at times
+if((${PG_VERSION_MAJOR} EQUAL "18"))
+  # WAL numbers will differ on 32-bit platform / PG versions so we only run on
+  # 64-bit PG18
   if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
     list(APPEND TEST_FILES explain_wal.sql)
   endif()
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
+  list(APPEND TEST_FILES constraints_not_valid.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
+  list(APPEND TEST_FILES upsert_do_select.sql repack.sql)
 endif()
 
 set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
     bgw_custom
+    bgw_tss_callbacks
     bgw_scheduler_control
     bgw_scheduler_restart
     bgw_db_scheduler

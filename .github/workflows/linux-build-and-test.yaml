@@ -14,14 +14,25 @@ name: Regression
       - prerelease_test
       - trigger/regression
   pull_request:
+  workflow_call:
+    inputs:
+      # Ref in timescale/timescaledb to test when called by release sanity,
+      # usually the release branch (e.g. 2.30.x).
+      timescaledb-ref:
+        required: true
+        type: string
 jobs:
   matrixbuilder:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix_advisory: ${{ steps.set-matrix.outputs.matrix_advisory }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
 
     - name: Build matrix
       id: set-matrix
@@ -39,11 +50,16 @@ jobs:
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
+          || inputs['timescaledb-ref'] != ''
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+          ref: ${{ inputs['timescaledb-ref'] || github.ref }}
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        if: inputs['timescaledb-ref'] == ''
         id: filter
         with:
           filters: .github/filters.yaml
@@ -51,13 +67,11 @@ jobs:
   regress:
     if: needs.check_paths.outputs.run_ci == 'true'
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+    name: ${{ !matrix.installcheck && 'Build-only ' || '' }}PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner || matrix.os }}
 
     env:
-      PG_SRC_DIR: pgbuild
-      PG_INSTALL_DIR: postgresql
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
@@ -69,7 +83,22 @@ jobs:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
 
-    steps:
+    steps: &regress_steps
+    - name: Replace unreliable Azure APT mirror
+      if: runner.os == 'Linux'
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
+    - name: Configure apt retries and timeout
+      if: runner.os == 'Linux'
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        sudo sh -c "echo 'Acquire::Retries \"10\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::http::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::https::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::By-Hash \"yes\";' >> /etc/apt/apt.conf.d/99retries"
+
     - name: Install Linux Dependencies
       if: runner.os == 'Linux'
       timeout-minutes: 15
@@ -102,7 +131,10 @@ jobs:
       run: sudo chmod 777 /cores
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -118,20 +150,21 @@ jobs:
       if: runner.os == 'macOS'
       run: echo "CACHE_SUFFIX=-${ImageVersion}" >> $GITHUB_ENV
 
-    # we cache the build directory instead of the install directory here
-    # because extension installation will write files to install directory
-    # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
-      id: cache-postgresql
+    - name: Restore PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
+      id: restore-postgresql-cache
       if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/${{ env.PG_SRC_DIR }}
+        path: |
+          install
+          pg
         key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       run: |
+        set -xeu
+
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
           wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
@@ -139,37 +172,51 @@ jobs:
           wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         fi
-        mkdir -p ~/$PG_SRC_DIR
-        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
-        cd ~/$PG_SRC_DIR
-        ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+        mkdir -p pg build-pg install
+        tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
+
+        cd build-pg
+
+        ../pg/configure --prefix="$(readlink -f ../install)" --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
         make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${{ matrix.pg_extensions }}; do
           make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
-    - name: Install PostgreSQL ${{ matrix.pg }}
-      run: |
-        cd ~/$PG_SRC_DIR
         make install
         for ext in ${{ matrix.pg_extensions }}; do
           make -C contrib/${ext} install
         done
-        echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
+        make install-tests
+
+    - name: Save PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
+      if: matrix.snapshot != 'snapshot' && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          install
+          pg
+        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Upload config.log
-      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+      if: always() && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: ~/${{ env.PG_SRC_DIR }}/config.log
+        path: build-pg/config.log
+
+    - name: Set up PATH
+      run: |
+        set -xeu
+
+        echo "$(readlink -f install/bin)" >> "${GITHUB_PATH}"
 
     - name: Test telemetry without OpenSSL
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
-          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$(readlink -f pg) \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(getconf _NPROCESSORS_ONLN) -C nossl
@@ -182,7 +229,7 @@ jobs:
         gcc -march=native -E -v - </dev/null 2>&1 | grep cc1
 
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
-          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$(readlink -f pg) \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DREQUIRE_ALL_TESTS=${{ matrix.installcheck && 'ON' || 'OFF' }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
@@ -202,19 +249,36 @@ jobs:
             build/compile_commands.json
 
     - name: Check exported symbols
+      background: true
       run: ./build/scripts/export_prefix_check.sh
+
+    - name: pginstallcheck
+      background: true
+      if: matrix.pginstallcheck
+      run: make -C build pginstallcheck
 
     - name: make installcheck
       if: matrix.installcheck
       run: |
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
+            SKIPS="${{ join(matrix.skipped_tests, ' ') }} ${{ contains(matrix.os, 'ubuntu') && 'net telemetry' || '' }}" \
+            ${{ matrix.installcheck_args }} \
             | tee installcheck.log
 
-    - name: pginstallcheck
-      if: matrix.pginstallcheck
-      run: make -C build pginstallcheck
+    # The net and telemetry tests check the certificates of real servers, and
+    # those look expired when the clock is moved ahead with faketime. They are
+    # skipped above and run here with the real time instead.
+    - name: Run network tests without faketime
+      if: >-
+        matrix.installcheck && matrix.build_type == 'Debug' && contains(matrix.os, 'ubuntu')
+        && !contains(matrix.ignored_tests, 'net')
+      run: |
+        set -o pipefail
+        FAKETIME= make -C build regresscheck TESTS="net telemetry" | tee -a installcheck.log
+
+    - name: Wait for checks to finish
+      wait-all:
 
     - name: coverage
       if: matrix.coverage
@@ -240,7 +304,7 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./build/coverage/timescaledb-coverage.info
@@ -258,6 +322,21 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
 
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
@@ -297,14 +376,8 @@ jobs:
           show debug-file-directory
           printf "'"'"query = '%s'\n\n"'"'", debug_query_string
           bt full
-
-          # We try to find ExceptionalCondition frame to print the failed condition
-          # for searching in logs.
           frame function ExceptionalCondition
           printf "'"'"condition = '%s'\n"'"'", conditionName
-
-          # Hopefully now we should be around the failed assertion, print where
-          # we are.
           up 1
           list
           info args
@@ -315,7 +388,7 @@ jobs:
     - name: Stack trace macOS
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
       run: |
-        ~/$PG_SRC_DIR/src/tools/ci/cores_backtrace.sh macos /cores
+        pg/src/tools/ci/cores_backtrace.sh macos /cores
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -362,7 +435,7 @@ jobs:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+        JOB_NAME: ${{ !matrix.installcheck && 'Build-only ' || '' }}PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
@@ -381,11 +454,37 @@ jobs:
         export GITHUB_PR_NUMBER
         scripts/upload_ci_stats.sh
 
+  # Some checks like Flaky Check are advisory and don't influence the summary.
+  # We run them in a separate kind of job here so that the summary doesn't have
+  # to wait for them.
+  regress_advisory:
+    if: >-
+      needs.check_paths.outputs.run_ci == 'true'
+      && fromJson(needs.matrixbuilder.outputs.matrix_advisory).include[0] != null
+    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+    needs: [matrixbuilder, check_paths]
+    runs-on: ${{ matrix.runner || matrix.os }}
+    continue-on-error: true
+
+    env:
+      CLANG: ${{ matrix.clang }}
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
+      FAKETIME: |
+        ${{ contains(matrix.os, 'ubuntu') && 'faketime -f +379d' || '' }}
+
+    strategy:
+      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix_advisory) }}
+      fail-fast: false
+
+    steps: *regress_steps
+
   report_status:
     name: Regression summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error
@@ -393,4 +492,3 @@ jobs:
             exit 1
           fi
           echo "All checks passed or were safely skipped."
-

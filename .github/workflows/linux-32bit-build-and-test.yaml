@@ -14,6 +14,13 @@ name: Regression Linux i386
       - prerelease_test
       - trigger/regression
   pull_request:
+  workflow_call:
+    inputs:
+      # Ref in timescale/timescaledb to test when called by release sanity,
+      # usually the release branch (e.g. 2.30.x).
+      timescaledb-ref:
+        required: true
+        type: string
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -21,7 +28,10 @@ jobs:
       pg_latest: ${{ github.event_name == 'pull_request' && steps.setter.outputs.PG_LATEST_ONLY || steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -31,11 +41,16 @@ jobs:
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
+          || inputs['timescaledb-ref'] != ''
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+          ref: ${{ inputs['timescaledb-ref'] || github.ref }}
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        if: inputs['timescaledb-ref'] == ''
         id: filter
         with:
           filters: .github/filters.yaml
@@ -65,7 +80,7 @@ jobs:
           append-*
           bgw_db_scheduler*
           chunkwise_agg_cost
-          columnar_scan_cost
+          columnar_scan_cost*
           compress_bloom
           compress_bloom_sparse_compat
           compress_bloom_sparse_debug
@@ -74,6 +89,8 @@ jobs:
           compress_qualpushdown_saop
           compress_sort_transform
           compression_allocation
+          compressed_collation_icu
+          hash_collation_icu
           merge_append_partially_compressed
           net
           pg_dump
@@ -99,6 +116,18 @@ jobs:
       fail-fast: false
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        touch /etc/apt/apt-mirrors.txt
+        sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::By-Hash "yes";' >> /etc/apt/apt.conf.d/99retries
 
     # /__e/node16/bin/node (used by actions/checkout@v4) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
@@ -117,7 +146,10 @@ jobs:
           icu-devtools
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] != '' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -131,7 +163,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "linux-32-bit-postgresql-${{ matrix.pg }}\
@@ -229,6 +261,21 @@ jobs:
       shell: bash
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
 
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
@@ -338,7 +385,7 @@ jobs:
     name: Regression Linux i386 summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error
@@ -346,4 +393,3 @@ jobs:
             exit 1
           fi
           echo "All checks passed or were safely skipped."
-

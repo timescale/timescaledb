@@ -55,7 +55,7 @@ typedef struct GroupingPolicyHash
 	GroupingPolicy funcs;
 
 	/*
-	 * Aggregate function definitions.
+	 * Aggregate transition state definitions.
 	 */
 	int num_agg_defs;
 	const VectorAggDef *restrict agg_defs;

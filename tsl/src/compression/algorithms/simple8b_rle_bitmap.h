@@ -48,8 +48,8 @@ simple8brle_bitmap_num_ones(const Simple8bRleBitmap *bitmap)
  * useful for gorilla decompression. Can be unused by other users of this
  * header.
  */
-static Simple8bRleBitmap simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
-	pg_attribute_unused();
+pg_attribute_unused() static Simple8bRleBitmap
+	simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed);
 
 static Simple8bRleBitmap
 simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
@@ -59,8 +59,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 
 	const uint32 num_elements = compressed->num_elements;
 
-	const uint32 num_selector_slots =
-		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
+	const uint32 num_selector_slots = SIMPLE8B_NUM_SELECTORS_FOR_NBLOCKS(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
 	/*
@@ -216,8 +215,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 
 	const uint32 num_elements = compressed->num_elements;
 
-	const uint32 num_selector_slots =
-		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
+	const uint32 num_selector_slots = SIMPLE8B_NUM_SELECTORS_FOR_NBLOCKS(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
 	/*

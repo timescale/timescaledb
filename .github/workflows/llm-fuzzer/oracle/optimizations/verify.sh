@@ -15,12 +15,19 @@
 #
 # Must not require superuser privileges.
 #
+# Must not interfere with stability checks performed by this oracle.
+#
 # The output of an admissible repro script:
 #
-# Must be sufficiently ordered to prevent false positives (i.e. ORDER BY, no
-# ties).
+# Must be sufficiently ordered to prevent false positives: use ORDER BY, avoid
+# ties in output, avoid non-deterministic constructs like LIMIT without ORDER BY,
+# and so on. A stable divergence is still not a bug if the query allows
+# multiple correct outputs.
 #
-# Must not depend on floating point precision or numeric stability.
+# Must not depend on floating point precision or numeric stability. It is always
+# possible to engineer a case where these issues accumulate to give an
+# arbitrarily large divirgence in the query results, but the underlying behavior
+# is still not admissible to this oracle.
 #
 # Must be independent from arbitrary environmental influence like the OID values
 # or chunk identifiers.
@@ -29,67 +36,67 @@
 # sequence.
 set -eu
 
-PGOPTIONS='-c client_min_messages=error'
-export PGOPTIONS
+psql <<<'alter database :"DBNAME" set client_min_messages to error'
+psql <<<'alter database :"DBNAME" set timescaledb.enable_optimizations to off'
 
-psql -q <<<'alter database :"DBNAME" set client_min_messages to error'
-psql -q <<<'alter database :"DBNAME" set timescaledb.enable_optimizations to off'
-
-if ! psql -q -f "$1" > result_noopt.txt
+if ! psql -f "$1" > result_noopt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_seqscan to off;" -f "$1" > result_noopt_noseq.txt
+if ! psql -c "set enable_seqscan to off;" -f "$1" > result_noopt_noseq.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_indexscan to off;" -f "$1" > result_noopt_noindex.txt
+if ! psql -c "set enable_indexscan to off;" -f "$1" > result_noopt_noindex.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_hashagg to off;" -f "$1" > result_noopt_nohashagg.txt
+if ! psql -c "set enable_hashagg to off;" -f "$1" > result_noopt_nohashagg.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "
-        set max_parallel_workers_per_gather = 8;
-        set parallel_setup_cost = 0;
-        set parallel_tuple_cost = 0;
-        set min_parallel_table_scan_size = 0;
-        set min_parallel_index_scan_size = 0;
-    " -f "$1" > result_noopt_para.txt
+for i in {1..5}
+do
+    if ! psql -c "
+            set max_parallel_workers_per_gather = 2;
+            set parallel_leader_participation = off;
+            set parallel_setup_cost = 0;
+            set parallel_tuple_cost = 0;
+            set min_parallel_table_scan_size = 0;
+            set min_parallel_index_scan_size = 0;
+        " -f "$1" > "result_noopt_para_${i}.txt"
+    then
+        echo "Repro errors out, not admissible"
+        exit 0
+    fi
+done
+
+if ! psql -c "set work_mem = '4GB'" -f "$1" > result_noopt_mem.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set work_mem = '4GB'" -f "$1" > result_noopt_mem.txt
-then
-    echo "Repro errors out, not admissible"
-    exit 0
-fi
+for variant in result_noopt_*.txt
+do
+    if ! diff -u result_noopt.txt "${variant}"
+    then
+        echo "Repro gives different results between runs, not admissible"
+        exit 0
+    fi
+done
 
-if ! diff -u result_noopt.txt result_noopt_noseq.txt \
-    || ! diff -u result_noopt.txt result_noopt_noindex.txt \
-    || ! diff -u result_noopt.txt result_noopt_nohashagg.txt \
-    || ! diff -u result_noopt.txt result_noopt_para.txt \
-    || ! diff -u result_noopt.txt result_noopt_mem.txt
-then
-    echo "Repro gives different results between runs, not admissible"
-    exit 0
-fi
+psql <<<'alter database :"DBNAME" set timescaledb.enable_optimizations to on'
 
-psql -q <<<'alter database :"DBNAME" set timescaledb.enable_optimizations to on'
-
-if ! psql -q -f "$1" > result_opt.txt
+if ! psql -f "$1" > result_opt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0

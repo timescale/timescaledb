@@ -111,9 +111,10 @@ $s1->query_safe("SET timescaledb.enable_recompress_waiting TO on;");
 # We use session 3 to set up debug waitpoints
 # Begin txns in all sessions
 
-$s1->query_safe("BEGIN;");
-$s2->query_safe("BEGIN;");
-$s3->query_safe("BEGIN;");
+# use SELECT to trigger extension load
+$s1->query_safe("BEGIN; SELECT;");
+$s2->query_safe("BEGIN; SELECT;");
+$s3->query_safe("BEGIN; SELECT;");
 
 # We enable the debug_waitpoint after the latch and release it after s2 aborts
 # This allows s1 to successfully acquire the lock the second time around
@@ -128,10 +129,11 @@ $result = $node->safe_psql('postgres',
 );
 is($result, '', "verify no locks exist on the chunk");
 
-# Session 2: Insert rows into the chunk
-# This blocks until session 2 releases its locks
-$s2->query_until(
-	'', q{
+# Session 2: Insert rows into the chunk and keep its lock until ABORT. Wait
+# for the insert to finish, or session 1 can lock the chunk first and the
+# insert blocks behind it.
+$s2->query_safe(
+	q{
     INSERT INTO sensor_data VALUES
     ('2022-01-05 12:00:00', 100, 0.5, 25.5),
     ('2022-01-05 13:00:00', 101, 0.6, 26.5);
@@ -143,12 +145,23 @@ $s1->query_until(
     SELECT compress_chunk(show_chunks('sensor_data'));
 });
 
+# Wait until session 1 is blocked by session 2 and waits at the waitpoint
+$node->poll_query_until('postgres',
+	"SELECT count(*) > 0 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted;"
+) or die "timed out waiting for session 1 to reach the waitpoint";
+
 # Session 2 immediately aborts, releasing the RowExclusiveLock on the table
 $s2->query_safe("ABORT");
 
 # Release the debug waitpoint so that recompression succeeds
 $s3->query_safe(
 	"SELECT debug_waitpoint_release('chunk_recompress_after_latch');");
+
+# Session 1 re-acquires the lock asynchronously after the waitpoint is
+# released, so poll until it shows up before asserting.
+$node->poll_query_until('postgres',
+	"SELECT count(*) > 0 FROM pg_locks WHERE relation::regclass::text LIKE '%hyper_1_%chunk' AND granted AND mode = 'ExclusiveLock';"
+) or die "timed out waiting for ExclusiveLock on uncompressed chunk";
 
 # Verify ExclusiveLock on uncompressed chunk
 $result = $node->safe_psql('postgres',

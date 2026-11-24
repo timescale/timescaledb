@@ -111,7 +111,6 @@ bgw_job_stat_history_insert(BgwJobStatHistoryContext *context, bool track_only_e
 							  ShareRowExclusiveLock);
 	TupleDesc desc = RelationGetDescr(rel);
 	NullableDatum values[Natts_bgw_job_stat_history] = { { 0 } };
-	CatalogSecurityContext sec_ctx;
 
 	ts_datum_set_int32(Anum_bgw_job_stat_history_job_id, values, context->job->fd.id, false);
 	ts_datum_set_timestamptz(Anum_bgw_job_stat_history_execution_start,
@@ -141,8 +140,6 @@ bgw_job_stat_history_insert(BgwJobStatHistoryContext *context, bool track_only_e
 					   values,
 					   ts_bgw_job_stat_history_build_data_info(context));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 	if (context->job->job_history.id == INVALID_BGW_JOB_STAT_HISTORY_ID)
 	{
 		/* We need to get a new job id to mark the end later */
@@ -152,7 +149,6 @@ bgw_job_stat_history_insert(BgwJobStatHistoryContext *context, bool track_only_e
 	ts_datum_set_int64(Anum_bgw_job_stat_history_id, values, context->job->job_history.id, false);
 
 	ts_catalog_insert_datums(rel, desc, values);
-	ts_catalog_restore_user(&sec_ctx);
 
 	table_close(rel, NoLock);
 }

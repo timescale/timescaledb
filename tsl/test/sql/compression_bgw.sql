@@ -331,30 +331,26 @@ INSERT INTO metrics2 SELECT '2000-01-01';
 ---- status should be 3
 SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
--- Capture relfilenode BEFORE the third run_job
-SELECT c.relfilenode AS "INDEX_RELFILENODE_BEFORE"
+-- REINDEX keeps the index OID but writes the index to a new relfilenode
+CREATE TEMP TABLE chunk_indexes_before AS
+SELECT c.oid, c.relfilenode
 FROM pg_index ix JOIN pg_class c ON c.oid = ix.indexrelid
-WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass
-ORDER BY c.relfilenode LIMIT 1 \gset
+WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass;
 
 -- should recompress
 CALL run_job(:JOB_COMPRESS);
 
--- Did REINDEX physically run? REINDEX changes relfilenode; VACUUM/ANALYZE don't.
-SELECT c.relfilenode != :INDEX_RELFILENODE_BEFORE AS reindex_ran
-FROM pg_index ix JOIN pg_class c ON c.oid = ix.indexrelid
-WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass
-ORDER BY c.relfilenode LIMIT 1;
-
--- Is the chunk's uncompressed heap empty?
+-- chunk should be fully compressed now (status = 1)
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 SELECT count(*) AS live_in_chunk_heap FROM ONLY :RECOMPRESS_CHUNK_NAME;
 
--- chunk should be fully compressed now (status = 1) so reindex can run
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
-
--- index size should decrease due to reindexing (8kB or 16kB)
-VACUUM ANALYZE metrics2;
-SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
+-- all chunk indexes should have been reindexed. Index size is not checked
+-- since rows deleted by recompression still go into the new index while
+-- another snapshot can see them.
+SELECT count(*) AS indexes,
+       count(*) FILTER (WHERE c.relfilenode <> b.relfilenode) AS reindexed
+FROM chunk_indexes_before b JOIN pg_class c ON c.oid = b.oid;
+DROP TABLE chunk_indexes_before;
 DROP TABLE metrics2;
 
 --TEST 8
@@ -492,3 +488,26 @@ WHERE h.table_name = 'test_recompress_unordered'
 GROUP BY c.status ORDER BY c.status;
 
 DROP TABLE test_recompress_unordered;
+
+-- compression policy must not resolve unqualified functions through the
+-- session search_path after its internal COMMITs
+CREATE FUNCTION public.format(text, name, name) RETURNS text LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'search_path leak';
+END
+$$;
+CREATE TABLE test_search_path(time timestamptz NOT NULL);
+CREATE INDEX ON test_search_path(time);
+SELECT FROM create_hypertable('test_search_path', 'time');
+ALTER TABLE test_search_path SET (timescaledb.compress);
+INSERT INTO test_search_path SELECT '2000-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(1, 100) i;
+SELECT add_compression_policy('test_search_path', '1 day'::interval) AS search_path_job \gset
+CALL run_job(:search_path_job);
+-- make the chunk partial so the policy recompresses and reindexes it
+INSERT INTO test_search_path VALUES ('2000-01-01 00:30');
+CALL run_job(:search_path_job);
+SELECT c.status FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id
+WHERE h.table_name = 'test_search_path';
+DROP FUNCTION public.format(text, name, name);
+DROP TABLE test_search_path;

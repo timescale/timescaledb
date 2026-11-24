@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Test creation of multiple refresh policies
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 SET timescaledb.current_timestamp_mock TO '2025-06-01 0:30:00+00';
 SELECT setseed(1);
  setseed 
@@ -22,7 +22,7 @@ SELECT create_hypertable('overlap_test_bigint', 'time', chunk_time_interval => 1
 
 CREATE OR REPLACE FUNCTION integer_now_overlap_test_bigint()
 RETURNS BIGINT LANGUAGE SQL STABLE AS
-$$ SELECT COALESCE(MAX(time), 0) FROM overlap_test_bigint $$;
+$$ SELECT COALESCE(MAX(time), 0) FROM public.overlap_test_bigint $$;
 SELECT set_integer_now_func('overlap_test_bigint', 'integer_now_overlap_test_bigint');
  set_integer_now_func 
 ----------------------
@@ -1424,7 +1424,7 @@ ORDER BY 1;
  Sun Jun 01 00:00:00 2025 UTC | t            | t
 
 /* Restore timezone and mock time */
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 DROP MATERIALIZED VIEW mat_m1_rollup;
 NOTICE:  drop cascades to 18 other objects
 DROP MATERIALIZED VIEW mat_m1;
@@ -1650,4 +1650,4 @@ DROP MATERIALIZED VIEW mat_3pol_m2;
 NOTICE:  drop cascades to 2 other objects
 DROP TABLE test_3pol_timestamptz CASCADE;
 --restore time zone settings
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';

@@ -161,7 +161,7 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 SELECT * FROM composite_filter_test WHERE device_id = 1 AND sensor_type = 'temp';
 
 -- Expected behavior:
--- - Filter should show: bloom1_contains(composite_bloom, ROW(1, 'temp'::text))
+-- - Filter should show: bloom1_contains_any_hashes(composite_bloom, '{<hash>}'::bigint[])
 -- - Should scan ~1000-1100 rows (segment 1 + maybe some from segment 4 due to false positives)
 -- - Should NOT scan segments 2 and 3 (different device_id/sensor_type)
 -- - Pruning: ~50-60% of segments

@@ -682,3 +682,75 @@ DROP TABLE tbl;
 DROP TABLE fk_tbl;
 
 DROP TABLESPACE IF EXISTS tablespace1;
+
+-- TRUNCATE CASCADE on a referenced hypertable keeps the foreign key
+CREATE TABLE trunc_fk_parent(time timestamptz NOT NULL, id int, UNIQUE(time, id)) WITH (tsdb.hypertable);
+CREATE TABLE trunc_fk_child(parent_time timestamptz, parent_id int, FOREIGN KEY(parent_time, parent_id) REFERENCES trunc_fk_parent(time, id));
+INSERT INTO trunc_fk_parent VALUES ('2025-01-01', 1), ('2025-01-02', 2);
+INSERT INTO trunc_fk_child VALUES ('2025-01-01', 1);
+TRUNCATE trunc_fk_parent CASCADE;
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+SELECT conname FROM pg_constraint WHERE conrelid = 'trunc_fk_child'::regclass AND contype = 'f' ORDER BY 1;
+\set ON_ERROR_STOP 0
+INSERT INTO trunc_fk_child VALUES ('2025-04-01', 10);
+\set ON_ERROR_STOP 1
+INSERT INTO trunc_fk_parent VALUES ('2025-04-01', 10);
+INSERT INTO trunc_fk_child VALUES ('2025-04-01', 10);
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+TRUNCATE trunc_fk_parent CASCADE;
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+SELECT count(*) FROM trunc_fk_child;
+
+-- TRUNCATE on a single referenced chunk
+INSERT INTO trunc_fk_parent VALUES ('2025-01-01', 1), ('2025-04-01', 10);
+INSERT INTO trunc_fk_child VALUES ('2025-01-01', 1), ('2025-04-01', 10);
+SELECT show_chunks('trunc_fk_parent') AS "TRUNC_CHUNK" ORDER BY 1 LIMIT 1 \gset
+\set ON_ERROR_STOP 0
+TRUNCATE :TRUNC_CHUNK;
+\set ON_ERROR_STOP 1
+TRUNCATE :TRUNC_CHUNK CASCADE;
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+SELECT count(*) FROM trunc_fk_parent;
+SELECT count(*) FROM trunc_fk_child;
+SELECT conname FROM pg_constraint WHERE conrelid = 'trunc_fk_child'::regclass AND contype = 'f' ORDER BY 1;
+\set ON_ERROR_STOP 0
+INSERT INTO trunc_fk_child VALUES ('2025-01-01', 1);
+\set ON_ERROR_STOP 1
+INSERT INTO trunc_fk_child VALUES ('2025-04-01', 10);
+DROP TABLE trunc_fk_child;
+DROP TABLE trunc_fk_parent;
+
+-- Foreign key on chunks created by a user that does not own the hypertable
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE fk_owner_parent(id int PRIMARY KEY);
+INSERT INTO fk_owner_parent VALUES (1);
+CREATE TABLE fk_owner_child(time timestamptz NOT NULL, id int REFERENCES fk_owner_parent(id));
+SELECT create_hypertable('fk_owner_child', 'time');
+GRANT INSERT ON fk_owner_child TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO fk_owner_child VALUES ('2025-01-01 00:00:00+00', 1);
+\set ON_ERROR_STOP 0
+INSERT INTO fk_owner_child VALUES ('2025-01-01 00:00:00+00', 2);
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT conname, convalidated FROM pg_constraint
+WHERE contype = 'f' AND conrelid IN (SELECT show_chunks('fk_owner_child'));
+DROP TABLE fk_owner_child;
+DROP TABLE fk_owner_parent;
+
+-- Dimension constraints do not use operators from the search_path
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA op_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE FUNCTION op_schema.op_true(timestamptz, timestamptz) RETURNS bool LANGUAGE sql IMMUTABLE AS 'SELECT true';
+CREATE OPERATOR op_schema.>= (LEFTARG = timestamptz, RIGHTARG = timestamptz, FUNCTION = op_schema.op_true);
+CREATE OPERATOR op_schema.< (LEFTARG = timestamptz, RIGHTARG = timestamptz, FUNCTION = op_schema.op_true);
+CREATE TABLE op_ht(time timestamptz NOT NULL, v int);
+SELECT create_hypertable('op_ht', 'time');
+SET search_path TO op_schema, pg_catalog, public;
+INSERT INTO op_ht VALUES ('2025-01-01 00:00:00+00', 1);
+RESET search_path;
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+WHERE contype = 'c' AND conrelid IN (SELECT show_chunks('op_ht'));
+DROP TABLE op_ht;
+DROP SCHEMA op_schema CASCADE;

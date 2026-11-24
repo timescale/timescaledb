@@ -126,7 +126,8 @@ SELECT ht.schema_name AS hypertable_schema,
   mat_ht.status & 4 = 4 AS compression_enabled,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
-  directview.viewdefinition AS view_definition
+  directview.viewdefinition AS view_definition,
+  cagg.granular_refresh_enabled
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (
@@ -265,7 +266,7 @@ SELECT
   NULL::bool AS orderby_asc,
   NULL::bool AS orderby_nullsfirst
 FROM _timescaledb_catalog.hypertable ht
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.segmentby IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = pg_catalog.format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.segmentby IS NOT NULL
 UNION ALL
 SELECT
 	schema_name AS hypertable_schema,
@@ -276,7 +277,7 @@ SELECT
   unnest(array_replace(array_replace(array_replace(cs.orderby_desc,false,NULL),true,false),NULL,true)) AS orderby_asc,
   unnest(cs.orderby_nullsfirst) AS orderby_nullsfirst
 FROM _timescaledb_catalog.hypertable ht
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.orderby IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = pg_catalog.format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.orderby IS NOT NULL
 ORDER BY hypertable_name,
   segmentby_column_index,
   orderby_column_index;
@@ -367,7 +368,7 @@ WHERE (pg_catalog.pg_has_role(current_user,
 
 CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings AS
 	SELECT
-		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
+		pg_catalog.format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
 		array_to_string(segmentby,',') AS segmentby,
 		un.orderby,
     d.compress_interval_length,
@@ -382,11 +383,11 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings A
       END AS compress_interval_length
     FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = ht.id ORDER BY id LIMIT 1
   ) d ON true
-  LEFT JOIN _timescaledb_catalog.compression_settings s ON format('%I.%I',ht.schema_name,ht.table_name)::regclass = s.relid
+  LEFT JOIN _timescaledb_catalog.compression_settings s ON pg_catalog.format('%I.%I',ht.schema_name,ht.table_name)::regclass = s.relid
 	LEFT JOIN LATERAL (
 		SELECT
 			string_agg(
-				format('%I%s%s',orderby,
+				pg_catalog.format('%I%s%s',orderby,
 					CASE WHEN "desc" THEN ' DESC' ELSE '' END,
 					CASE WHEN nullsfirst AND NOT "desc" THEN ' NULLS FIRST' WHEN NOT nullsfirst AND "desc" THEN ' NULLS LAST' ELSE '' END
 				)
@@ -396,7 +397,7 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings A
 
 CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 	SELECT
-		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
+		pg_catalog.format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
 		ch.relid AS chunk,
 		array_to_string(segmentby,',') AS segmentby,
 		un.orderby,
@@ -407,7 +408,7 @@ CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 	LEFT JOIN LATERAL (
 		SELECT
 			string_agg(
-				format('%I%s%s',orderby,
+				pg_catalog.format('%I%s%s',orderby,
 					CASE WHEN "desc" THEN ' DESC' ELSE '' END,
 					CASE WHEN nullsfirst AND NOT "desc" THEN ' NULLS FIRST' WHEN NOT nullsfirst AND "desc" THEN ' NULLS LAST' ELSE '' END
 				)
@@ -421,6 +422,16 @@ AS SELECT * FROM timescaledb_information.hypertable_compression_settings;
 
 CREATE OR REPLACE VIEW timescaledb_information.chunk_columnstore_settings AS
 SELECT * FROM timescaledb_information.chunk_compression_settings;
+
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_granular_refresh_settings AS
+	SELECT
+	    ht.schema_name AS hypertable_schema,
+		ht.table_name AS hypertable_name,
+		s.granular_refresh_column,
+		s.granular_refresh_start_offset,
+		s.granular_refresh_end_offset
+	FROM _timescaledb_catalog.hypertable ht
+	INNER JOIN _timescaledb_catalog.hypertable_cagg_settings s ON (s.hypertable_id = ht.id);
 
 -- chunk statistics view
 CREATE OR REPLACE VIEW timescaledb_information.stat_chunk_activity AS

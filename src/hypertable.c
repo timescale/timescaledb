@@ -55,6 +55,7 @@
 #include "error_utils.h"
 #include "errors.h"
 #include "extension.h"
+#include "foreign_key.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
@@ -70,6 +71,8 @@
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_tenant_tracking.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 #include "ts_catalog/metadata.h"
 #include "utils.h"
 
@@ -427,16 +430,13 @@ static void
 hypertable_update_catalog_tuple(ItemPointer tid, FormData_hypertable *update)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 	Catalog *catalog = ts_catalog_get();
 	Oid table = catalog_get_table_id(catalog, HYPERTABLE);
 	Relation hypertable_rel = relation_open(table, RowExclusiveLock);
 
 	new_tuple = hypertable_formdata_make_tuple(update, hypertable_rel->rd_att);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(hypertable_rel, tid, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	relation_close(hypertable_rel, NoLock);
 }
@@ -553,8 +553,7 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 	ObjectAddress root_trigger_addr;
 	List *chunks;
 	ListCell *lc;
-	int sec_ctx;
-	Oid saved_uid;
+	TSSecurityContext secctx;
 	Oid owner;
 
 	Assert(ht != NULL);
@@ -584,11 +583,7 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 	/* switch to the hypertable owner's role -- note that this logic must be the same as
 	 * `ts_trigger_create_all_on_chunk` */
 	owner = ts_rel_get_owner(ht->main_table_relid);
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
+	ts_security_context_enter(owner, 0, &secctx);
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
@@ -609,10 +604,7 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 		}
 	}
 
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-	}
+	ts_security_context_exit(&secctx);
 
 	return root_trigger_addr;
 }
@@ -654,11 +646,10 @@ ts_hypertable_drop_trigger(Oid relid, const char *trigger_name)
 static ScanTupleResult
 hypertable_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
 	bool isnull;
 	int hypertable_id = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_id, &isnull));
 
-	ts_tablespace_delete(hypertable_id, NULL, InvalidOid);
+	ts_tablespace_delete(hypertable_id, NULL);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
 	ts_dimension_delete_by_hypertable_id(hypertable_id, true);
 
@@ -670,6 +661,29 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	 */
 	ts_chunk_column_stats_delete_by_hypertable_id(hypertable_id);
 
+	/* Also remove the granular refresh settings and tracking rows, if any */
+	ts_hypertable_cagg_settings_delete(hypertable_id);
+	ts_cagg_tenant_tracking_delete_by_hypertable_id(hypertable_id);
+
+	/*
+	 * Release the hypertable's tenant tracker.
+	 * Queued for commit rather than freed here as shared mem free cannot be
+	 * rolled back if the DROP TABLE gets rolled back. We have an AccessExcl
+	 * lock, so there are no writers to shared mem and we can safely drop it
+	 */
+	Name schema_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_schema_name, &isnull));
+	Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_table_name, &isnull));
+
+	/*
+	 * The main table's relid is supplied by the caller, since it may already
+	 * be gone from pg_class by this point (a plain DROP TABLE removes the
+	 * relation before our sql_drop event trigger fires). It is only used to
+	 * identify which cached tracker entry to invalidate.
+	 */
+	Oid main_table_relid = *(Oid *) data;
+
+	ts_cm_functions->tenant_tracker_remove_at_commit(hypertable_id, main_table_relid);
+
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
 
@@ -677,22 +691,16 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	/* Invoke the OSM callback if set */
 	if (osm_htdrop_hook)
 	{
-		Name schema_name =
-			DatumGetName(slot_getattr(ti->slot, Anum_hypertable_schema_name, &isnull));
-		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_table_name, &isnull));
-
 		osm_htdrop_hook(NameStr(*schema_name), NameStr(*table_name));
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }
 
 int
-ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
+ts_hypertable_delete_by_name(const char *schema_name, const char *table_name, Oid relid)
 {
 	ScanKeyData scankey[2];
 
@@ -711,7 +719,7 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  2,
 										  HYPERTABLE_NAME_INDEX,
 										  hypertable_tuple_delete,
-										  NULL,
+										  &relid,
 										  0,
 										  RowExclusiveLock,
 										  CurrentMemoryContext,
@@ -719,7 +727,7 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 }
 
 int
-ts_hypertable_delete_by_id(int32 hypertable_id)
+ts_hypertable_delete_by_id(int32 hypertable_id, Oid relid)
 {
 	ScanKeyData scankey[1];
 
@@ -733,7 +741,7 @@ ts_hypertable_delete_by_id(int32 hypertable_id)
 										  1,
 										  HYPERTABLE_ID_INDEX,
 										  hypertable_tuple_delete,
-										  NULL,
+										  &relid,
 										  1,
 										  RowExclusiveLock,
 										  CurrentMemoryContext,
@@ -759,7 +767,8 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 
 	/* Clean up catalog */
 	ts_hypertable_delete_by_name(NameStr(hypertable->fd.schema_name),
-								 NameStr(hypertable->fd.table_name));
+								 NameStr(hypertable->fd.table_name),
+								 hypertable->main_table_relid);
 }
 
 static ScanTupleResult
@@ -767,14 +776,11 @@ reset_associated_tuple_found(TupleInfo *ti, void *data)
 {
 	HeapTuple new_tuple;
 	FormData_hypertable fd;
-	CatalogSecurityContext sec_ctx;
 
 	ts_hypertable_formdata_fill(&fd, ti);
 	namestrcpy(&fd.associated_schema_name, INTERNAL_SCHEMA_NAME);
 	new_tuple = hypertable_formdata_make_tuple(&fd, ts_scanner_get_tupledesc(ti));
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 
 	return SCAN_CONTINUE;
@@ -860,13 +866,10 @@ static void
 hypertable_insert_relation(Relation rel, FormData_hypertable *fd)
 {
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 
 	new_tuple = hypertable_formdata_make_tuple(fd, RelationGetDescr(rel));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 }
 
@@ -881,10 +884,7 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	fd.id = hypertable_id;
 	if (fd.id == INVALID_HYPERTABLE_ID)
 	{
-		CatalogSecurityContext sec_ctx;
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		fd.id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-		ts_catalog_restore_user(&sec_ctx);
 	}
 
 	namestrcpy(&fd.schema_name, NameStr(*schema_name));
@@ -1020,11 +1020,7 @@ ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point,
 {
 	Assert(ts_subspace_store_get(h->chunk_cache, point) == NULL);
 
-	Chunk *chunk = ts_chunk_create_for_point(h,
-											 point,
-											 NameStr(h->fd.associated_schema_name),
-											 NameStr(h->fd.associated_table_prefix),
-											 chunk_lockmode);
+	Chunk *chunk = ts_chunk_create_for_point(h, point, chunk_lockmode);
 
 	/* Also add the chunk to the hypertable's chunk store */
 	Chunk *cached_chunk = ts_hypertable_chunk_store_add(h, chunk);
@@ -1059,7 +1055,7 @@ ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, LOCK
 			chunk = ts_hypertable_chunk_store_add(h, chunk);
 		}
 	}
-	else if (!ts_chunk_lock_if_exists(chunk->table_id, lockmode))
+	else if (!ts_chunk_lock_if_exists(chunk->fd.relid, lockmode))
 	{
 		return NULL;
 	}
@@ -1067,7 +1063,7 @@ ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, LOCK
 #ifdef USE_ASSERT_CHECKING
 	if (chunk)
 	{
-		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Relation chunk_rel = RelationIdGetRelation(chunk->fd.relid);
 		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
 		RelationClose(chunk_rel);
 	}
@@ -1292,6 +1288,14 @@ ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode)
 	return find_inheritance_children(table_relid, lockmode) != NIL;
 }
 
+/* True when the hypertable has a tiered (OSM) chunk with a non-contiguous range. */
+bool
+ts_hypertable_has_noncontiguous_osm_chunk(const Hypertable *ht)
+{
+	return ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID &&
+		   ts_flags_are_set_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+}
+
 static void
 hypertable_create_schema(const char *schema_name)
 {
@@ -1493,10 +1497,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 
 		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
-			/* If the number of partitions isn't specified, default to setting it
-			 * to the number of data nodes */
-			int16 num_partitions = closed_dim_info->num_slices;
-			closed_dim_info->num_slices = num_partitions;
+			/* Keep the default number of partitions when unspecified. */
 			closed_dim_info->num_slices_is_set = true;
 		}
 
@@ -1962,6 +1963,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		timescaledb_move_from_table_to_chunks(ht, RowExclusiveLock);
 	}
 
+#if PG19_GE
+	/* Route pre-existing inbound foreign key checks through the hypertable. */
+	ts_fk_swap_referencing_check_triggers(table_relid);
+#endif
+
 	ts_cache_release(&hcache);
 
 	return true;
@@ -2028,21 +2034,6 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 	};
 
 	ts_scanner_scan(&scanctx);
-}
-
-bool
-ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
-{
-	uint16 i;
-
-	for (i = 0; i < ht->space->num_dimensions; i++)
-	{
-		if (column_attno == ht->space->dimensions[i].column_attno)
-		{
-			return true;
-		}
-	}
-	return false;
 }
 
 bool
@@ -2186,7 +2177,7 @@ ts_hypertable_set_compress_interval(Hypertable *ht, int64 compress_interval)
  * defined for the type so in that case the expression extracts the timestamp from the UUID.
  */
 static const char *
-get_expr_for_dim_max(const char *colname, Oid timetype)
+get_expr_for_dim_time(const char *colname, Oid timetype)
 {
 	if (timetype == UUIDOID)
 	{
@@ -2195,7 +2186,7 @@ get_expr_for_dim_max(const char *colname, Oid timetype)
 		initStringInfo(&expr);
 		appendStringInfo(&expr,
 						 "%s.uuid_timestamp(%s)",
-						 ts_extension_schema_name(),
+						 quote_identifier(ts_extension_schema_name()),
 						 quote_identifier(colname));
 		return expr.data;
 	}
@@ -2227,17 +2218,14 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 
 	/*
 	 * Query for the last bucket in the materialized hypertable.
-	 * Since this might be run as part of a parallel operation
-	 * we cannot use SET search_path here to lock down the
-	 * search_path and instead have to fully schema-qualify
-	 * everything.
 	 */
 	initStringInfo(&command);
 	appendStringInfo(&command,
-					 "SELECT pg_catalog.max(%s) FROM %s.%s",
-					 get_expr_for_dim_max(NameStr(dim->fd.column_name), timetype),
+					 "SELECT %s FROM %s.%s ORDER BY %s DESC LIMIT 1",
+					 get_expr_for_dim_time(NameStr(dim->fd.column_name), timetype),
 					 quote_identifier(NameStr(ht->fd.schema_name)),
-					 quote_identifier(NameStr(ht->fd.table_name)));
+					 quote_identifier(NameStr(ht->fd.table_name)),
+					 quote_identifier(NameStr(dim->fd.column_name)));
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 	{
@@ -2245,6 +2233,10 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	}
 
 	int64 max_value;
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	PG_TRY();
 	{
@@ -2262,19 +2254,32 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		 * first extract the timestamptz so the result type is timestamptz instead. */
 		Oid result_type = timetype == UUIDOID ? TIMESTAMPTZOID : timetype;
 
-		Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
-			   "partition types for result (%d) and dimension (%d) do not match",
-			   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-			   ts_dimension_get_partition_type(dim));
-		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
-
-		if (isnull)
+		/* An empty hypertable returns no rows, which we treat as a NULL result. */
+		if (SPI_processed == 0)
 		{
-			*isnull = max_isnull;
-		}
+			if (isnull)
+			{
+				*isnull = true;
+			}
 
-		max_value = max_isnull ? ts_time_get_min(result_type) :
-								 ts_time_value_to_internal(maxdat, result_type);
+			max_value = ts_time_get_min(result_type);
+		}
+		else
+		{
+			Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
+				   "partition types for result (%d) and dimension (%d) do not match",
+				   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
+				   ts_dimension_get_partition_type(dim));
+			maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
+
+			if (isnull)
+			{
+				*isnull = max_isnull;
+			}
+
+			max_value = max_isnull ? ts_time_get_min(result_type) :
+									 ts_time_value_to_internal(maxdat, result_type);
+		}
 	}
 	PG_CATCH();
 	{
@@ -2282,6 +2287,9 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
@@ -2409,8 +2417,17 @@ ts_hypertable_status_text(PG_FUNCTION_ARGS)
 								  CurrentMemoryContext);
 	}
 
+	if (status & HYPERTABLE_STATUS_DIRECT_COMPRESS)
+	{
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("DIRECT_COMPRESS"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+
 	if (status < 0 || status > (HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS |
-								HYPERTABLE_STATUS_COMPRESSION))
+								HYPERTABLE_STATUS_COMPRESSION | HYPERTABLE_STATUS_DIRECT_COMPRESS))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2418,6 +2435,20 @@ ts_hypertable_status_text(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
+}
+
+/* Mark the hypertable as having opted into direct compress. */
+bool
+ts_hypertable_set_direct_compress(Hypertable *ht)
+{
+	return ts_hypertable_add_status(ht, HYPERTABLE_STATUS_DIRECT_COMPRESS);
+}
+
+/* Clear the direct compress status flag on the hypertable. */
+bool
+ts_hypertable_unset_direct_compress(Hypertable *ht)
+{
+	return ts_hypertable_clear_status(ht, HYPERTABLE_STATUS_DIRECT_COMPRESS);
 }
 
 DimensionSlice *
@@ -2522,6 +2553,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
 	}
+
+	/* Only the hypertable owner may update the OSM chunk range */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -2685,6 +2719,9 @@ ts_lock_osm_chunk_dimension_slice(PG_FUNCTION_ARGS)
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
 	}
+
+	/* Only the hypertable owner may lock the OSM chunk dimension slice */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	/*
 	 * Lock the OSM chunk's dimension slice tuple FOR UPDATE. The row lock is

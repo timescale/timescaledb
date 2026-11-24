@@ -33,7 +33,7 @@ GROUP BY time_bucket(1, a), a WITH NO DATA;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 
@@ -111,7 +111,10 @@ ALTER materialized view mat_m1 set (timescaledb.compress = false);
 
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
+-- terse verbosity: the not-found message differs between PG versions
+\set VERBOSITY terse
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
 --start_interval < end_interval
 SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval);
@@ -132,7 +135,7 @@ SELECT hypertable_id as mat_id FROM _timescaledb_catalog.bgw_job where id = :job
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
@@ -351,7 +354,7 @@ WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
@@ -738,8 +741,18 @@ SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 
 CALL run_job(:job_id);
 SELECT count(*) FROM issue_6902;
 
--- test untyped interval error handling
+-- show_policies called for several caggs in the same target list
 CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
+CREATE MATERIALIZED VIEW cagg_show1 WITH (tsdb.continuous)
+AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW cagg_show2 WITH (tsdb.continuous)
+AS SELECT time_bucket('1 hour', time) FROM m GROUP BY 1 WITH NO DATA;
+SELECT timescaledb_experimental.add_policies('cagg_show1', refresh_start_offset => '10 days'::interval, refresh_end_offset => '1 day'::interval, drop_after => '30 days'::interval);
+SELECT timescaledb_experimental.add_policies('cagg_show2', refresh_start_offset => '10 days'::interval, refresh_end_offset => '1 day'::interval);
+SELECT timescaledb_experimental.show_policies('cagg_show1'), timescaledb_experimental.show_policies('cagg_show2');
+SELECT timescaledb_experimental.show_policies('cagg_show2'), timescaledb_experimental.show_policies('cagg_show1');
+
+-- test untyped interval error handling
 CREATE MATERIALIZED VIEW cagg_error WITH (tsdb.continuous)
 AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1;
 SELECT timescaledb_experimental.add_policies('cagg_error', drop_after => '20 days');

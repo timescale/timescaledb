@@ -32,8 +32,6 @@ typedef struct TimescaleDBPrivate
 	bool appends_ordered;
 	/* attno of the time dimension in the parent table if appends are ordered */
 	int order_attno;
-	List *nested_oids;
-	List *chunk_oids;
 
 	/* Cached chunk data for the chunk relinfo. */
 	Chunk *cached_chunk_struct;
@@ -44,6 +42,9 @@ typedef struct TimescaleDBPrivate
 	/* Cached transformed pathkeys */
 	List *transformed_sort_pathkeys;
 	bool transformed_sort_pathkeys_valid;
+
+	/* Use DeferredChunkAppend for this relation */
+	bool deferred_chunk_append;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);
@@ -51,6 +52,9 @@ extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte)
 extern TSDLLEXPORT void ts_rte_mark_compressed_relation(RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_contains_external_param(Node *node);
 extern TSDLLEXPORT bool ts_contains_join_param(Node *node);
+extern TSDLLEXPORT Plan *ts_add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path,
+											   List *pathkeys, const AttrNumber *reqColIdx,
+											   double limit_tuples);
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)
@@ -97,9 +101,12 @@ extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, 
 											 bool include_osm);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
 extern Expr *ts_transform_time_bucket_comparison(Expr *);
+extern Expr *ts_transform_nested_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
+extern Expr *ts_make_partition_hash_clause(PlannerInfo *root, List *rtable, Index relid,
+										   Expr *clause);
 
 extern TSDLLEXPORT void ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid,
 															 Hypertable *hypertable);
@@ -122,35 +129,48 @@ TsRelType TSDLLEXPORT ts_classify_relation(const PlannerInfo *root, const RelOpt
 static inline const Chunk *
 ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 {
-	TimescaleDBPrivate *rel_private;
+	Hypertable *ht;
+	TsRelType rel_type = ts_classify_relation(root, rel, &ht);
 
-	/* The rel can only be a chunk if it is part of a hypertable expansion
-	 * (RELOPT_OTHER_MEMBER_REL) or a directly query on the chunk
-	 * (RELOPT_BASEREL) */
-	if (rel->reloptkind != RELOPT_OTHER_MEMBER_REL && rel->reloptkind != RELOPT_BASEREL)
+	if (rel_type == TS_REL_HYPERTABLE || rel_type == TS_REL_HYPERTABLE_CHILD)
 	{
+		/* Hypertable relation, not a Chunk. */
 		return NULL;
 	}
 
-	/* The rel_private entry should have been created as part of classifying
-	 * the relation in timescaledb_get_relation_info_hook(). Therefore,
-	 * ts_get_private_reloptinfo() asserts that it is already set but falls
-	 * back to creating rel_private in release builds for safety. */
-	rel_private = ts_get_private_reloptinfo(rel);
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
+	if (rel_type == TS_REL_OTHER)
+	{
+		/*
+		 * This must be the OSM chunk. We have to look up the Chunk for it anew
+		 * because we don't manage its RelOptInfo and don't have anywhere to
+		 * cache it.
+		 * Theoretically, TS_REL_OTHER can be some other kind of relation, like
+		 * a plain Postgres table or a foreign table, but this function is not
+		 * supposed to be called for these cases. The chunk search will error
+		 * out.
+		 */
+		return ts_chunk_get_by_relid_locked(rte->relid,
+											AccessShareLock,
+											/* slice_lock = */ NULL,
+											/* fail_if_not_found = */ true);
+	}
+
+	/*
+	 * Normal chunk. Return the cached Chunk struct if we have one, otherwise
+	 * look it up. Do not use a slice tuple lock because that will assign a
+	 * transaction ID, which is not necessary for queries.
+	 */
+	TimescaleDBPrivate *rel_private = ts_get_private_reloptinfo(rel);
 	if (NULL == rel_private->cached_chunk_struct)
 	{
 		RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
-		/*
-		 * Get the chunk and cache it. Do not use a slice tuple lock because
-		 * that will assign a transaction ID, which is not necessary for
-		 * queries.
-		 */
 		rel_private->cached_chunk_struct =
 			ts_chunk_get_by_relid_locked(rte->relid,
 										 AccessShareLock,
-										 NULL,
+										 /* slice_lock = */ NULL,
 										 /* fail_if_not_found = */ true);
 	}
 

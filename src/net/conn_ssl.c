@@ -54,6 +54,26 @@ ssl_ctx_create(void)
 	{
 		SSL_CTX_set_options(ctx, options);
 		SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+
+		/* Verify the server certificate against the system CA store */
+		if (!SSL_CTX_set_default_verify_paths(ctx))
+		{
+			SSL_CTX_free(ctx);
+			return NULL;
+		}
+
+#if defined(WIN32) && (OPENSSL_VERSION_NUMBER >= 0x30200000L)
+		/*
+		 * OpenSSL on Windows usually has no CA files in its default paths,
+		 * so also trust the root certificates in the Windows store.
+		 */
+		if (!SSL_CTX_load_verify_store(ctx, "org.openssl.winstore://"))
+		{
+			ERR_clear_error();
+		}
+#endif
+
+		SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
 	}
 
 	return ctx;
@@ -96,6 +116,13 @@ ssl_setup(SSLConnection *conn, const char *host)
 	 * to connect to in case the server supports multiple hosts.
 	 */
 	if (!SSL_set_tlsext_host_name(conn->ssl, host))
+	{
+		ssl_set_error(conn, -1);
+		return -1;
+	}
+
+	/* Check that the server certificate matches the hostname */
+	if (!X509_VERIFY_PARAM_set1_host(SSL_get0_param(conn->ssl), host, 0))
 	{
 		ssl_set_error(conn, -1);
 		return -1;
@@ -231,7 +258,8 @@ ssl_errmsg(Connection *conn)
 						return "unknown SSL syscall error";
 					}
 				}
-				return "SSL error syscall";
+				/* ecode is set, report its reason below */
+				break;
 			default:
 				break;
 		}

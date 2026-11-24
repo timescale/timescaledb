@@ -1,0 +1,86 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- REJECT_LIMIT was introduced in PostgreSQL 18.
+CREATE TABLE copy_limit (time bigint NOT NULL, val int);
+SELECT create_hypertable('copy_limit', 'time', chunk_time_interval => 10);
+    create_hypertable    
+-------------------------
+ (1,public,copy_limit,t)
+
+-- Exactly the limit is allowed, including errors in the partition column.
+COPY copy_limit FROM STDIN WITH (FORMAT csv, ON_ERROR ignore, REJECT_LIMIT 2);
+NOTICE:  2 rows were skipped due to data type incompatibility
+SELECT * FROM copy_limit ORDER BY time;
+ time | val 
+------+-----
+    1 |   1
+   11 |   3
+   31 |   5
+
+-- The counter starts over for each COPY statement.
+COPY copy_limit FROM STDIN WITH (FORMAT csv, ON_ERROR ignore, REJECT_LIMIT 1);
+NOTICE:  1 row was skipped due to data type incompatibility
+SELECT * FROM copy_limit ORDER BY time;
+ time | val 
+------+-----
+    1 |   1
+   11 |   3
+   31 |   5
+   51 |   7
+
+-- Exceeding the limit aborts COPY and rolls back all of that statement's rows
+-- and chunk creation, preserving the rows from earlier successful statements.
+\set ON_ERROR_STOP 0
+\set VERBOSITY terse
+COPY copy_limit FROM STDIN WITH (FORMAT csv, ON_ERROR ignore, REJECT_LIMIT 1);
+ERROR:  skipped more than REJECT_LIMIT (1) rows due to data type incompatibility
+SELECT :'SQLSTATE' AS copy_sqlstate;
+ copy_sqlstate 
+---------------
+ 22P02
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY default
+SELECT * FROM copy_limit ORDER BY time;
+ time | val 
+------+-----
+    1 |   1
+   11 |   3
+   31 |   5
+   51 |   7
+
+SELECT count(*) AS chunks FROM show_chunks('copy_limit');
+ chunks 
+--------
+      4
+
+-- Also roll back rows already inserted via the unbuffered path. Silent logging
+-- suppresses notices, but must not suppress the rejection-limit error.
+SET timescaledb.enable_optimizations = off;
+\set ON_ERROR_STOP 0
+\set VERBOSITY terse
+COPY copy_limit FROM STDIN WITH (FORMAT csv, ON_ERROR ignore, REJECT_LIMIT 1, LOG_VERBOSITY silent);
+ERROR:  skipped more than REJECT_LIMIT (1) rows due to data type incompatibility
+SELECT :'SQLSTATE' AS copy_sqlstate;
+ copy_sqlstate 
+---------------
+ 22P02
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY default
+RESET timescaledb.enable_optimizations;
+SELECT * FROM copy_limit ORDER BY time;
+ time | val 
+------+-----
+    1 |   1
+   11 |   3
+   31 |   5
+   51 |   7
+
+SELECT count(*) AS chunks FROM show_chunks('copy_limit');
+ chunks 
+--------
+      4
+
+DROP TABLE copy_limit;

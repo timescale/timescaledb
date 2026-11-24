@@ -173,6 +173,16 @@ class SQLVisitor(Visitor):
     def visit_CreateFunctionStmt(
         self, ancestors, node
     ):  # pylint: disable=unused-argument
+        security = [option for option in node.options if option.defname == "security"]
+        if security and security[0].arg.boolval:
+            functype = "procedure" if node.is_procedure else "function"
+            self.error(
+                f"Attempting to create SECURITY DEFINER {functype} {node.funcname[-1].sval}",
+                "SECURITY DEFINER functions created by extension scripts execute "
+                "as postgres; "
+                "use SECURITY INVOKER and grant the required privileges explicitly",
+            )
+
         if args.latest:
             # C functions should only appear in actual function definition but not
             # in latest-dev.sql as that would introduce a dependency on the library.

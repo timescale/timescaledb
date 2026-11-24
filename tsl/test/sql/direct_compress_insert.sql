@@ -13,7 +13,6 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 ROLLBACK;
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- EXPLAIN with too small batch
@@ -44,28 +43,8 @@ SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, ti
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
 ROLLBACK;
 
-SET timescaledb.enable_direct_compress_insert_sort_batches = false;
--- simple test with compressed insert enabled and without batch sorting
-BEGIN;
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
--- since the chunks are new status should be COMPRESSED, UNORDERED
-SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
-ROLLBACK;
-
--- simple test with compressed insert enabled and reversed order and no batch sorting
-BEGIN;
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
--- since the chunks are new status should be COMPRESSED, UNORDERED
-SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
-ROLLBACK;
-
 -- test compressing into uncompressed chunk
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 BEGIN;
@@ -364,7 +343,6 @@ ROLLBACK;
 BEGIN;
 ALTER TABLE metrics SET (tsdb.segmentby = 'device');
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 SET timescaledb.direct_compress_insert_tuple_sort_limit = 50;
 INSERT INTO metrics
@@ -437,7 +415,7 @@ CREATE TABLE test_segmentby_stats (
 
 INSERT INTO test_segmentby_stats
 SELECT t, (i % 5), random()
-FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 second') t,
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 
 ANALYZE test_segmentby_stats;
@@ -449,7 +427,7 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COL
 SET timescaledb.enable_direct_compress_insert = true;
 INSERT INTO test_segmentby_stats
 SELECT t, (i % 5), random()
-FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
 -- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
@@ -467,7 +445,7 @@ CREATE TABLE test_segmentby_stats (
 SET timescaledb.enable_direct_compress_insert = true;
 INSERT INTO test_segmentby_stats
 SELECT t, (i % 5), random()
-FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
 -- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
@@ -551,3 +529,105 @@ RESET timescaledb.enable_direct_compress_insert;
 DROP VIEW metrics_view_pos;
 DROP TABLE metrics_view;
 
+-- Direct compress must be disabled when the table has an exclusion constraint
+CREATE TABLE dc_excl(time timestamptz NOT NULL, device text NOT NULL, value float,
+    EXCLUDE USING btree (time WITH =, device WITH =))
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+ALTER TABLE dc_excl SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SET timescaledb.enable_direct_compress_insert = true;
+-- insert warns, disables direct compress and falls back to a normal insert
+INSERT INTO dc_excl SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(1,100) i;
+-- chunk stays uncompressed since direct compress was disabled
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_excl') chunk;
+-- exclusion constraint is still enforced
+\set ON_ERROR_STOP 0
+INSERT INTO dc_excl VALUES ('2025-01-01'::timestamptz + INTERVAL '1 minute', 'd1', 99);
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM dc_excl;
+RESET timescaledb.enable_direct_compress_insert;
+DROP TABLE dc_excl;
+
+-- Direct compress must return rows for a RETURNING clause
+CREATE TABLE dc_ret(time timestamptz NOT NULL, device text NOT NULL, val int NOT NULL)
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+ALTER TABLE dc_ret SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SET timescaledb.enable_direct_compress_insert = true;
+-- confirm the direct compress path is used for this insert
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING val;
+-- RETURNING should return one row per inserted tuple
+WITH inserted AS (
+    INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+        FROM generate_series(1, 20) i RETURNING val, device
+)
+SELECT count(*), min(val), max(val), sum(val), count(DISTINCT device) FROM inserted;
+-- RETURNING with an expression referencing multiple columns
+WITH inserted AS (
+    INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 hour'), 'd' || (i % 2)::text, i
+        FROM generate_series(1, 20) i RETURNING device || ':' || val AS label
+)
+SELECT count(*), min(label), max(label) FROM inserted;
+-- RETURNING a system column falls back to the normal insert path, except
+-- tableoid which the returning projection sets explicitly.
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING ctid;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING xmin;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING cmin;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING xmax;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING cmax;
+-- tableoid stays on the direct compress path
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING tableoid;
+-- ctid falls back and returns real tuple ids
+WITH inserted AS (
+    INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 day'), 'd' || (i % 2)::text, i
+        FROM generate_series(1, 20) i RETURNING ctid AS c, val
+)
+SELECT count(*), bool_and(c IS NOT NULL), min(val), max(val) FROM inserted;
+-- tableoid on the direct compress path holds the target chunk (all 20 rows
+-- land in one chunk, so every RETURNING row reports the same chunk)
+INSERT INTO dc_ret SELECT '2025-06-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING tableoid::regclass AS chunk;
+-- rows were actually inserted
+SELECT count(*) FROM dc_ret;
+RESET timescaledb.enable_direct_compress_insert;
+DROP TABLE dc_ret;
+
+
+-- Test small batch size also does direct compress if enabled at a hypertable level
+CREATE TABLE dc_small (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.direct_compress);
+
+SHOW timescaledb.enable_direct_compress_insert;
+
+INSERT INTO dc_small SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,5) i;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_small') chunk;
+SELECT count(*) FROM dc_small;
+
+DROP TABLE dc_small;
+
+-- compressed chunk created by a user with only INSERT is owned by the hypertable owner
+CREATE TABLE dc_insert_only (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.direct_compress);
+GRANT INSERT ON dc_insert_only TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+INSERT INTO dc_insert_only SELECT '2025-01-01 00:00:00+00'::timestamptz, 'd1', i::float FROM generate_series(0,5) i;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_insert_only') chunk;
+SELECT pg_get_userbyid(c.relowner) = current_user AS owned_by_hypertable_owner, c.reloptions
+FROM show_chunks('dc_insert_only') chunk
+JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = chunk)
+JOIN pg_class c ON (c.oid = cs.compress_relid);
+
+DROP TABLE dc_insert_only;

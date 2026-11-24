@@ -183,6 +183,7 @@ CLUSTER test_table USING test_table_time_idx;
 --
 \set ON_ERROR_STOP 0
 COPY test_table (time, device) FROM STDIN DELIMITER ',';
+\.
 \set ON_ERROR_STOP 1
 
 -- COPY TO (expect to be working in read-only mode)

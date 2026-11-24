@@ -11,6 +11,7 @@
 \ir post.compression.sql
 \ir post.continuous_aggs.v2.sql
 \ir post.policies.sql
+\ir post.publication.sql
 \if :WITH_SUPERUSER
 \ir post.sequences.sql
 \endif

@@ -63,6 +63,8 @@ typedef struct DecompressResult
 typedef struct FormData_hypertable ChunkCompressionSettings;
 
 typedef struct Compressor Compressor;
+typedef struct CompressedColumnValues CompressedColumnValues;
+
 struct Compressor
 {
 	void (*append_null)(Compressor *compressord);
@@ -132,11 +134,6 @@ typedef struct PerCompressedColumn
 {
 	Oid decompressed_type;
 
-	/* the compressor to use for compressed columns, always NULL for segmenters
-	 * only use if is_compressed
-	 */
-	DecompressionIterator *iterator;
-
 	/* is this a compressed column or a segment-by column */
 	bool is_compressed;
 
@@ -155,6 +152,20 @@ typedef struct BulkWriter
 	CommandId mycid;
 	BulkInsertState bistate;
 	int insert_options; /* heap insert options */
+	/*
+	 * Use custom toaster which uses bulk inserts for toasting values.
+	 */
+	bool use_custom_toaster;
+	/*
+	 * Toast relation/indexes for compression_toast_save_datum_multi(),
+	 * opened lazily on first use and closed by
+	 * compression_toast_writer_close(). NULL/0 if never toasted.
+	 */
+	Relation toast_rel;
+	Relation *toast_indexes;
+	int num_toast_indexes;
+	int toast_valid_index;
+	BulkInsertState toast_bistate;
 } BulkWriter;
 
 typedef struct RowDecompressor
@@ -171,14 +182,33 @@ typedef struct RowDecompressor
 	Datum *decompressed_datums;
 	bool *decompressed_is_nulls;
 
+	/* parent of per_compressed_row_ctx and bulk_decompression_context */
+	MemoryContext row_decompressor_context;
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
 
 	TupleTableSlot **decompressed_slots;
 	int decompressed_slots_capacity;
-	int unprocessed_tuples;
 	AttrMap *attrmap;
+
+	/*
+	 * The column_values is a polymorphic construct that allows mixing bulk
+	 * and iterator based decompression in the same batch. In general, bulk
+	 * decompression is preferred, but there are situations where it is not
+	 * possible, not desired or explicitly disabled.
+	 */
+	CompressedColumnValues *column_values;
+
+	/*
+	 * The decompressors and in particular the bulk decompressors leave
+	 * memory allocation behind that we do not want to accumulate across
+	 * all columns of the batch. This memory context is used to throw away
+	 * the allocated scratch memory.
+	 */
+	MemoryContext bulk_decompression_context;
+
+	int current_batch_row_count;
 
 	Detoaster detoaster;
 
@@ -227,6 +257,7 @@ typedef enum CompressionAlgorithm
 	COMPRESSION_ALGORITHM_BOOL,
 	COMPRESSION_ALGORITHM_NULL,
 	COMPRESSION_ALGORITHM_UUID,
+	COMPRESSION_ALGORITHM_AIC,
 	COMPRESSION_ALGORITHM_EXTERNAL,
 
 	/* When adding an algorithm also add a static assert statement below */
@@ -257,6 +288,7 @@ typedef struct InvalidationSettings
 	int32 hypertable_id;
 	Oid chunk_relid;
 	AttrNumber invalidation_column_offset;
+	bool tenant_tracking_enabled;
 } InvalidationSettings;
 
 typedef struct RowCompressor
@@ -355,8 +387,7 @@ extern Datum tsl_compressed_data_column_size(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_to_array(PG_FUNCTION_ARGS);
 extern Datum tsl_decompress_batch(PG_FUNCTION_ARGS);
 
-static void
-pg_attribute_unused() assert_num_compression_algorithms_sane(void)
+pg_attribute_unused() static void assert_num_compression_algorithms_sane(void)
 {
 	/* make sure not too many compression algorithms   */
 	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS <= _MAX_NUM_COMPRESSION_ALGORITHMS,
@@ -371,14 +402,15 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(COMPRESSION_ALGORITHM_BOOL == 5, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_NULL == 6, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_UUID == 7, "algorithm index has changed");
-	StaticAssertStmt(COMPRESSION_ALGORITHM_EXTERNAL == 8, "algorithm index has changed");
+	StaticAssertStmt(COMPRESSION_ALGORITHM_AIC == 8, "algorithm index has changed");
+	StaticAssertStmt(COMPRESSION_ALGORITHM_EXTERNAL == 9, "algorithm index has changed");
 
 	/*
 	 * This should change when adding a new algorithm after adding the new
 	 * algorithm to the assert list above. This statement prevents adding a
 	 * new algorithm without updating the asserts above
 	 */
-	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 9,
+	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 10,
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
@@ -402,6 +434,7 @@ extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorith
 															 Oid type);
 
 typedef struct Chunk Chunk;
+extern bool move_to_columnstore_impl(Chunk *chunk);
 typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot);
 extern void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot);
@@ -452,14 +485,15 @@ extern void bulk_writer_close(BulkWriter *writer);
 extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc,
 										  Oid in_oid, Oid out_oid);
 
-extern void row_decompressor_reset(RowDecompressor *decompressor);
+extern void row_decompressor_set_compressed_tuple(RowDecompressor *decompressor,
+												  HeapTuple compressed_tuple);
 extern void row_decompressor_close(RowDecompressor *decompressor);
 extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compressed_relid,
 										Oid uncompressed_relid, CmdType cmd_type);
 extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
-extern int decompress_batch(RowDecompressor *decompressor);
-extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
-									  int num_attnos);
+extern int decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos);
+extern void row_decompressor_init_batch(RowDecompressor *decompressor, AttrNumber *attnos,
+										int num_attnos);
 extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
 											bool *single_value);
 /*

@@ -5,24 +5,21 @@
 #
 # $ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
-# formatting with pgindent
+# Formatting
 32c45b75b27e3f690236a9d1c8d13a025316ad2f
-# Fix formatting to comply with pgindent
 2ec065b53823e50dd1ac1d7cf925ae5f90e293ea
-# Fix formatting issues
 3e42150e3b0402ae865d9a827d8d178568a0d27e
-# Run clang-format on code
 34edba16a9385a4b0353e8e07a19dba98d7e3fb9
-# Run pg_format on SQL files
+20f223ca728a02a67578564496b0946b39cc401b
 3f5872ec61650519e2c5e6fe1dfb60d07696cac7
-# Fix various misspellings
 68aec9593c0f37dddbaa4f2e2b34a9ba3f5b11d9
-# Switch to clang-format-14
 7758f5959c8ed64499ab0e6bb66c30464b11dd81
-# Remove trailing whitespaces from test code
 a4356f342f1732857a1d8057f71219b50f1919b2
-# Cosmetic changes to create.c
-230f368f4e5d146ce5f919cc5999b236997befaf
+5c0939e0354055a5571bd5c9d1e03f9cc251467d
+
+# Test output normalization
+272ab4fe6a6f6e00ef7613ec99397a8de02c3282
+cdb815d92175949cf0d7c95d5c91accee3f35664
 
 # Adding python and yaml linters
 9133319081aef92705f1405087822fc281d215d4
@@ -36,4 +33,11 @@ f862212c8ca19b1af56c7608a68f22b7dd0c985e
 ecf34132c69e1709cd393eab43b5fcbfd7c201db
 e75274ee7c6eef1dafc9b4f4d9f71e8e88f76813
 a3ef0384655d57200e83ad7b13c91a31177b97c1
+fc827c154a14013e806ff650af9a2c5255a3d30d
 
+# Columnar Scan Rename
+11cfd275c355b47b791762e0b518d44f08e0cf43
+cb14558c990a38dccefce61f86bda6816e805a7e
+
+# pragma once
+cfd65680cd5ab8545ddcf8241239bc4f5fed0e71

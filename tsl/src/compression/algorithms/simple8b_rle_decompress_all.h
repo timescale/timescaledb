@@ -26,8 +26,7 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 	 */
 	Assert(n_buffer_elements >= n_total_values + 63);
 
-	const uint32 num_selector_slots =
-		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
+	const uint32 num_selector_slots = SIMPLE8B_NUM_SELECTORS_FOR_NBLOCKS(compressed->num_blocks);
 	const uint32 num_blocks = compressed->num_blocks;
 
 	/*
@@ -156,9 +155,8 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
  * an input. We mark it as possibly unused because it is used not for every
  * element type we have.
  */
-static ELEMENT_TYPE *FUNCTION_NAME(simple8brle_decompress_all,
-								   ELEMENT_TYPE)(Simple8bRleSerialized *compressed, uint32 *n_)
-	pg_attribute_unused();
+pg_attribute_unused() static ELEMENT_TYPE *FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(
+	Simple8bRleSerialized *compressed, uint32 *n_);
 
 static ELEMENT_TYPE *
 FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *compressed,

@@ -130,7 +130,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	NameData user_schnm, user_viewnm, partial_schnm, partial_viewnm, direct_schnm, direct_viewnm;
 	Datum values[Natts_continuous_agg];
 	bool nulls[Natts_continuous_agg] = { false };
-	CatalogSecurityContext sec_ctx;
 
 	namestrcpy(&user_schnm, user_schema);
 	namestrcpy(&user_viewnm, user_view);
@@ -172,9 +171,11 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 
 	nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] = true;
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	/* Granular refresh is disabled by default; enabled later via the API. */
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
+		BoolGetDatum(false);
+
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
 }
 
@@ -192,7 +193,6 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 	TupleDesc desc;
 	Datum values[Natts_continuous_aggs_bucket_function];
 	bool nulls[Natts_continuous_aggs_bucket_function] = { false };
-	CatalogSecurityContext sec_ctx;
 
 	Assert(OidIsValid(bucket_function));
 	Assert(bucket_width != NULL);
@@ -252,9 +252,7 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_fixed_width)] =
 		BoolGetDatum(bucket_fixed_width);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
 }
 
@@ -374,8 +372,6 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 							 bool create_addl_index, IntoClause *into, int64 matpartcol_interval,
 							 ObjectAddress *mataddress)
 {
-	Oid uid, saved_uid;
-	int sec_ctx;
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
 	Datum toast_options;
@@ -402,9 +398,27 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 	create->accessMethod = into->accessMethod;
 	create->if_not_exists = false;
 
+#if PG18_GE
+	/*
+	 * Since PG18 a NOT NULL column needs a pg_constraint row, which
+	 * DefineRelation only creates from nnconstraints. Parse analysis would
+	 * normally fill that list, but we bypass it.
+	 */
+	ListCell *lc;
+	foreach (lc, matcolinfo->matcollist)
+	{
+		ColumnDef *col = lfirst_node(ColumnDef, lc);
+
+		if (col->is_not_null)
+		{
+			create->nnconstraints =
+				lappend(create->nnconstraints, makeNotNullConstraint(makeString(col->colname)));
+		}
+	}
+#endif
+
 	/*  Create the materialization table.  */
-	SWITCH_TO_TS_USER(mat_rel->schemaname, uid, saved_uid, sec_ctx);
-	*mataddress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
+	*mataddress = ts_relation_define(create, RELKIND_RELATION, owner);
 	CommandCounterIncrement();
 	mat_relid = mataddress->objectId;
 
@@ -413,7 +427,6 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 		transformRelOptions(UnassignedDatum, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(mat_relid, toast_options);
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
@@ -463,8 +476,6 @@ get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo, Query 
 static ObjectAddress
 create_view_for_query(Query *selquery, RangeVar *viewrel)
 {
-	Oid uid, saved_uid;
-	int sec_ctx;
 	ObjectAddress address;
 	CreateStmt *create;
 	List *selcollist = NIL;
@@ -497,12 +508,10 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	/*
 	 * Create the view. Viewname is in viewrel.
 	 */
-	SWITCH_TO_TS_USER(viewrel->schemaname, uid, saved_uid, sec_ctx);
-	address = DefineRelation(create, RELKIND_VIEW, owner, NULL, NULL);
+	address = ts_relation_define(create, RELKIND_VIEW, owner);
 	CommandCounterIncrement();
 	StoreViewQuery(address.objectId, selquery, false);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 	return address;
 }
 
@@ -552,7 +561,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  * CREATE VIEW mcagg ...
  * AS  select a, min(b)+max(d) from foo group by a,timebucket(a);
  *
- * Step 1. create a materialiation table which stores the partials for the
+ * Step 1. create a materialization table which stores the partials for the
  * aggregates and the grouping columns + internal columns.
  * So we have a table like _materialization_hypertable
  * with columns:
@@ -575,7 +584,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  * group by <internal-columns> , a , timebucket(a);
  *
  * Notes: ViewStmt->query is the raw parse tree
- * panquery is the output of running parse_anlayze( ViewStmt->query)
+ * panquery is the output of running parse_analyze( ViewStmt->query)
 
  * Since 1.7, we support real time aggregation.
  * If real time aggregation is off i.e. materialized only, the mcagg view is as described in Step 2.
@@ -603,7 +612,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
 	FinalizeQueryInfo finalqinfo;
-	CatalogSecurityContext sec_ctx;
 	bool is_create_mattbl_index;
 
 	Query *final_selquery;
@@ -625,7 +633,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	{
 		matpartcol_interval = bucket_info->htpartcol_interval_len;
 
-		/* Apply the factor just for non-Hierachical CAggs */
+		/* Apply the factor just for non-Hierarchical CAggs */
 		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 		{
 			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
@@ -650,9 +658,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	/*
 	 * Step 1: create the materialization table.
 	 */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-	ts_catalog_restore_user(&sec_ctx);
 	makeMaterializedTableName(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	is_create_mattbl_index =
@@ -796,7 +802,12 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	ts_feature_flag_check(FEATURE_CAGG);
 
-	nspid = RangeVarGetCreationNamespace(stmt->into->rel);
+	/*
+	 * Check CREATE privilege on the target schema as the calling user. The
+	 * user view is created later as the catalog owner if it is placed in the
+	 * internal schema, which would otherwise bypass this check.
+	 */
+	nspid = RangeVarGetAndCheckCreationNamespace(stmt->into->rel, NoLock, NULL);
 	relid = get_relname_relid(stmt->into->rel->relname, nspid);
 
 	if (OidIsValid(relid))
@@ -897,15 +908,15 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
+		ContinuousAggRefreshContext context = { .options = { .callctx = CAGG_REFRESH_CREATION } };
 		refreshed = continuous_agg_refresh_internal(cagg,
 													&refresh_window,
-													context,
-													true, /* bucketing_refresh_window */
-													false /*extend_last_bucket*/);
+													&context,
+													false /* apply_extend */,
+													NULL /* mat_stats: not reported here */);
 		if (!refreshed)
 		{
-			emit_up_to_date_notice(cagg, context);
+			emit_up_to_date_notice(cagg, &context);
 		}
 	}
 
@@ -919,8 +930,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 void
 cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 {
-	int sec_ctx;
-	Oid uid, saved_uid;
 	Query *result_view_query;
 
 	/* User view query of the user defined CAGG. */
@@ -966,10 +975,8 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 											  mat_ht->fd.id);
 	}
 
-	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(user_view_oid, result_view_query, true);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 }
 
 /*
@@ -996,9 +1003,6 @@ sync_target_list_names(List *targetList, TupleDesc desc)
 void
 cagg_rename_view_columns(ContinuousAgg *agg)
 {
-	int sec_ctx;
-	Oid uid, saved_uid;
-
 	/*
 	 * This function is called from the process_rename start handler after
 	 * ExecRenameStmt has already been called on the user view, direct view,
@@ -1021,10 +1025,8 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 
 	sync_target_list_names(direct_query->targetList, RelationGetDescr(direct_view_rel));
 
-	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(direct_view_oid, direct_query, true);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	/*
 	 * Do not close the relation before StoreViewQuery since it can otherwise
@@ -1062,10 +1064,8 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 		}
 	}
 
-	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(user_view_oid, user_query, true);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	relation_close(user_view_rel, NoLock);
 }

@@ -36,5 +36,5 @@
 #endif
 
 #define TS_FUNCTION_INFO_V1(fn)                                                                    \
-	PGDLLEXPORT Datum fn(PG_FUNCTION_ARGS);                                     \
+	PGDLLEXPORT Datum fn(PG_FUNCTION_ARGS);                                                        \
 	PG_FUNCTION_INFO_V1(fn)

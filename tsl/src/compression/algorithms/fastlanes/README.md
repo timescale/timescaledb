@@ -151,7 +151,7 @@ The SIMD operations mandate certain alignment and padding of the data. This incl
 output buffers. For example, in case of the input buffer for the packing operation we may over-read the
 input data beyond the useful elements and it needs to be properly sized. For the output data, the encoder
 may overwrite adjacent memory if not properly sized. Similarly, during unpacking we must carefully size the
-output buffer and ensure that the input buffer is aligned and padded by zeros.
+output buffer and ensure that the input buffer is aligned and padded by zeros up to `fl_required_bytes`.
 
 The exact amount of alignment and padding depends on the FL tier. For example FL256 operates on 32 byte aligned
 data and it requires the tail padding to be 32 bytes as well. The other tiers have different (smaller)

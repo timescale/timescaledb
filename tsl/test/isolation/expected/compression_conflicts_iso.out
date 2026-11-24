@@ -19,7 +19,7 @@ step I1:
  <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -72,7 +72,7 @@ step I1:
  <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -125,7 +125,7 @@ step I1:
  <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -178,7 +178,7 @@ step Iu1:
  <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -236,7 +236,7 @@ step Iu1:
  <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -294,7 +294,7 @@ step Iu1:
  <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -348,7 +348,7 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -410,7 +410,7 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -472,7 +472,7 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -534,7 +534,7 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -596,7 +596,7 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -658,7 +658,7 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -708,7 +708,7 @@ status
 starting permutation: C1 Cc LockChunkTuple IB I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -764,7 +764,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBRR I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -820,7 +820,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBS I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -876,7 +876,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IB I1 INu1 UnlockChunkTuple Ic INc SChunkStat SU SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -937,7 +937,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBRR I1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -993,7 +993,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBS I1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -1049,7 +1049,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IB Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SU SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -1110,7 +1110,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBRR Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -1166,7 +1166,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBS Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -1222,7 +1222,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IB Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SU SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -1283,7 +1283,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBRR Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
@@ -1339,7 +1339,7 @@ time|device|location|value
 starting permutation: C1 Cc LockChunkTuple IBS Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress

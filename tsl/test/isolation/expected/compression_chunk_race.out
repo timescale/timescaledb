@@ -1,4 +1,4 @@
-Parsed test spec with 3 sessions
+Parsed test spec with 5 sessions
 
 starting permutation: s3_lock_compression s3_lock_decompression s1_compress s2_compress s3_unlock_compression s1_decompress s2_decompress s3_unlock_decompression
 step s3_lock_compression: 
@@ -115,3 +115,303 @@ Uncompressed
 
 step s2_decompress: <... completed>
 ERROR:  chunk "_hyper_X_X_chunk" is already decompressed
+
+starting permutation: s3_lock_compression s1_compress_first s4_drop s3_release_compression s4_show
+step s3_lock_compression: 
+    SELECT debug_waitpoint_enable('compress_chunk_impl_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compress_first: 
+   SELECT count(compress_chunk(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+ <waiting ...>
+step s4_drop: 
+   SELECT count(*) FROM drop_chunks('sensor_data', older_than => '2023-01-01'::timestamptz);
+ <waiting ...>
+step s3_release_compression: 
+    SELECT debug_waitpoint_release('compress_chunk_impl_start');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compress_first: <... completed>
+count
+-----
+    1
+
+step s4_drop: <... completed>
+count
+-----
+    2
+
+step s4_show: 
+   SELECT count(*) FROM show_chunks('sensor_data');
+
+count
+-----
+    0
+
+
+starting permutation: s1_compress_first s3_lock_decompression s1_decompress_first s4_drop s3_release_decompression s4_show
+step s1_compress_first: 
+   SELECT count(compress_chunk(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+
+count
+-----
+    1
+
+step s3_lock_decompression: 
+    SELECT debug_waitpoint_enable('decompress_chunk_impl_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_decompress_first: 
+   SELECT count(decompress_chunk(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+ <waiting ...>
+step s4_drop: 
+   SELECT count(*) FROM drop_chunks('sensor_data', older_than => '2023-01-01'::timestamptz);
+ <waiting ...>
+step s3_release_decompression: 
+    SELECT debug_waitpoint_release('decompress_chunk_impl_start');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_decompress_first: <... completed>
+count
+-----
+    1
+
+step s4_drop: <... completed>
+count
+-----
+    2
+
+step s4_show: 
+   SELECT count(*) FROM show_chunks('sensor_data');
+
+count
+-----
+    0
+
+
+starting permutation: s1_compress_first s3_lock_in_memory s1_recompress_first s4_drop s3_release_in_memory s4_show
+step s1_compress_first: 
+   SELECT count(compress_chunk(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+
+count
+-----
+    1
+
+step s3_lock_in_memory: 
+    SELECT debug_waitpoint_enable('recompress_in_memory_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_recompress_first: 
+   SELECT count(compress_chunk(i, recompress => true)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+ <waiting ...>
+step s4_drop: 
+   SELECT count(*) FROM drop_chunks('sensor_data', older_than => '2023-01-01'::timestamptz);
+ <waiting ...>
+step s3_release_in_memory: 
+    SELECT debug_waitpoint_release('recompress_in_memory_start');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_recompress_first: <... completed>
+count
+-----
+    1
+
+step s4_drop: <... completed>
+count
+-----
+    2
+
+step s4_show: 
+   SELECT count(*) FROM show_chunks('sensor_data');
+
+count
+-----
+    0
+
+
+starting permutation: s1_compress_first s1_insert_first s3_lock_segmentwise s1_compress_first s4_drop s3_release_segmentwise s4_show
+step s1_compress_first: 
+   SELECT count(compress_chunk(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+
+count
+-----
+    1
+
+step s1_insert_first: 
+   INSERT INTO sensor_data VALUES ('2022-01-02', 1, 0.5, 50);
+
+step s3_lock_segmentwise: 
+    SELECT debug_waitpoint_enable('recompress_segmentwise_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compress_first: 
+   SELECT count(compress_chunk(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+ <waiting ...>
+step s4_drop: 
+   SELECT count(*) FROM drop_chunks('sensor_data', older_than => '2023-01-01'::timestamptz);
+ <waiting ...>
+step s3_release_segmentwise: 
+    SELECT debug_waitpoint_release('recompress_segmentwise_start');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compress_first: <... completed>
+count
+-----
+    1
+
+step s4_drop: <... completed>
+count
+-----
+    2
+
+step s4_show: 
+   SELECT count(*) FROM show_chunks('sensor_data');
+
+count
+-----
+    0
+
+
+starting permutation: s3_lock_move s1_move_first s4_drop s3_release_move s4_show
+step s3_lock_move: 
+    SELECT debug_waitpoint_enable('move_to_columnstore_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_move_first: 
+   SELECT count(_timescaledb_functions.move_to_columnstore(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+ <waiting ...>
+step s4_drop: 
+   SELECT count(*) FROM drop_chunks('sensor_data', older_than => '2023-01-01'::timestamptz);
+ <waiting ...>
+step s3_release_move: 
+    SELECT debug_waitpoint_release('move_to_columnstore_start');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_move_first: <... completed>
+count
+-----
+    1
+
+step s4_drop: <... completed>
+count
+-----
+    2
+
+step s4_show: 
+   SELECT count(*) FROM show_chunks('sensor_data');
+
+count
+-----
+    0
+
+
+starting permutation: s3_lock_compression s1_compress_first s4_drop_created s3_release_compression s4_show
+step s3_lock_compression: 
+    SELECT debug_waitpoint_enable('compress_chunk_impl_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compress_first: 
+   SELECT count(compress_chunk(i)) FROM (SELECT i FROM show_chunks('sensor_data') i ORDER BY i LIMIT 1) s;
+ <waiting ...>
+step s4_drop_created: 
+   SELECT count(*) FROM drop_chunks('sensor_data', created_before => now());
+ <waiting ...>
+step s3_release_compression: 
+    SELECT debug_waitpoint_release('compress_chunk_impl_start');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compress_first: <... completed>
+count
+-----
+    1
+
+step s4_drop_created: <... completed>
+count
+-----
+    2
+
+step s4_show: 
+   SELECT count(*) FROM show_chunks('sensor_data');
+
+count
+-----
+    0
+
+
+starting permutation: s3_lock_drop s4_drop s5_policy s3_release_drop s4_show
+step s3_lock_drop: 
+    SELECT debug_waitpoint_enable('drop_chunks_chunks_found');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s4_drop: 
+   SELECT count(*) FROM drop_chunks('sensor_data', older_than => '2023-01-01'::timestamptz);
+ <waiting ...>
+step s5_policy: 
+   DO $$
+   DECLARE
+      job int;
+   BEGIN
+      SELECT job_id INTO job FROM timescaledb_information.jobs WHERE proc_name = 'policy_compression';
+      CALL run_job(job);
+   END
+   $$;
+ <waiting ...>
+step s3_release_drop: 
+    SELECT debug_waitpoint_release('drop_chunks_chunks_found');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s4_drop: <... completed>
+count
+-----
+    2
+
+step s5_policy: <... completed>
+step s4_show: 
+   SELECT count(*) FROM show_chunks('sensor_data');
+
+count
+-----
+    0
+

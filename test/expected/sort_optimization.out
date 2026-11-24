@@ -371,3 +371,59 @@ drop schema test_ops cascade;
 NOTICE:  drop cascades to 2 other objects
 drop table t10130 cascade;
 RESET enable_seqscan;
+-- Sort transform must not create a wrong join EC.
+create table a(ts timestamptz not null, k int);
+create table b(ts timestamptz not null, k int);
+select create_hypertable('a','ts', chunk_time_interval => interval '1 day');
+ create_hypertable 
+-------------------
+ (9,public,a,t)
+
+select create_hypertable('b','ts', chunk_time_interval => interval '1 day');
+ create_hypertable 
+-------------------
+ (10,public,b,t)
+
+insert into a select '2024-08-01'::timestamptz + (g * interval '1 hour'),   1 from generate_series(0, 23) g;
+insert into b select '2024-08-01'::timestamptz + (g * interval '30 minutes'), 1 from generate_series(0, 47) g;
+select sum(c)
+from
+  (select time_bucket('1 hour', a.ts) bb, count(*) c
+   from a
+   join b on time_bucket('1 hour', a.ts) = time_bucket('1 hour', b.ts)
+       and a.k = b.k
+   group by bb) z
+;
+ sum 
+-----
+  48
+
+drop table a;
+drop table b;
+-- The upper paths hook must not read input_rel->pathlist at the ORDERED
+-- stage, where add_path may have freed paths still in that list. Only a
+-- sanitizer build reports the use after free (#10948). The plan that
+-- reads the freed path needs the default random_page_cost.
+CREATE TABLE t10948(ts timestamptz NOT NULL, a text, b text, c text);
+SELECT create_hypertable('t10948', 'ts', chunk_time_interval => interval '7 days');
+  create_hypertable   
+----------------------
+ (11,public,t10948,t)
+
+INSERT INTO t10948(ts, a, b) VALUES ('2024-01-01', 'a', 'x'), ('2024-01-08', 'b', 'y');
+SET random_page_cost = 4;
+SET timescaledb.enable_chunk_append = off;
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size = 0;
+SELECT a, b FROM t10948 WHERE ts = (SELECT min(ts) FROM t10948) ORDER BY a COLLATE "C";
+ a | b 
+---+---
+ a | x
+
+RESET random_page_cost;
+RESET timescaledb.enable_chunk_append;
+RESET parallel_setup_cost;
+RESET parallel_tuple_cost;
+RESET min_parallel_table_scan_size;
+DROP TABLE t10948;

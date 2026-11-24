@@ -139,6 +139,12 @@ SELECT compress_chunk(show_chunks('test1'));
 
 -- Now this chunk is partial, this batch should match [1, NULL] batch instead of sorting after it
 INSERT INTO test1 SELECT 1, 1, g FROM generate_series(901,1400) g;
+--Same for a batch with NULL tuples:
+INSERT INTO test1 VALUES
+    (1, 1, NULL),
+    (1, 1, 903),
+    (1, 1, NULL),
+    (1, 1, 505);
 
 -- Should not see info about nullable order by
 SET timescaledb.debug_compression_path_info TO ON;
@@ -162,6 +168,12 @@ SELECT compress_chunk(show_chunks('test2'));
 
 -- Now this chunk is partial, recompress will be applied
 INSERT INTO test2 SELECT 1, g FROM generate_series(1300,1600) g;
+--batch with NULL tuples:
+INSERT INTO test2 VALUES
+    (1, NULL),
+    (1, 303),
+    (1, 1603),
+    (1, 1305);
 SELECT compress_chunk(show_chunks('test2'), if_not_compressed => true);
 
 -- Should return 0
@@ -180,6 +192,12 @@ SELECT compress_chunk(show_chunks('test3'));
 
 -- Now this chunk is partial, recompress will be applied
 INSERT INTO test3 SELECT 1, g FROM generate_series(400,600) g;
+--batch with NULL tuples:
+INSERT INTO test3 VALUES
+    (1, NULL),
+    (1, 503),
+    (1, 300),
+    (1, 1505);
 SELECT compress_chunk(show_chunks('test3'), if_not_compressed => true);
 
 -- Should return 0
@@ -201,6 +219,12 @@ SELECT compress_chunk(show_chunks('test4'));
 -- Now this chunk is partial, recompress will be applied
 -- This batch should match [NULL... 1001...1800] batch instead of going before it
 INSERT INTO test4 SELECT 1, 1, g FROM generate_series(500,900) g;
+--Same for a batch with NULL tuples:
+INSERT INTO test4 VALUES
+    (1, 1, NULL),
+    (1, 1, 503),
+    (1, 1, NULL),
+    (1, 1, 1803);
 SELECT compress_chunk(show_chunks('test4'), if_not_compressed => true);
 
 -- This query orders NULLS FIRST, so we can't have a non-NULL value before a NULL value.
@@ -213,6 +237,68 @@ drop table test1 cascade;
 drop table test2 cascade;
 drop table test3 cascade;
 drop table test4 cascade;
+
+-- Fix issue #10400: correctly match NULL tuple to NULL boundary with NULLS FIRST
+CREATE TABLE t_10400 (
+    time timestamptz NOT NULL,
+    seg int NOT NULL,
+    rank int,          -- nullable orderby column
+    val int NOT NULL
+);
+SELECT create_hypertable('t_10400', 'time', chunk_time_interval => interval '1 year');
+
+ALTER TABLE t_10400 SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'seg',
+    timescaledb.compress_orderby = 'rank DESC NULLS FIRST, time'
+);
+
+-- Compressed batch (NULL, 5)
+INSERT INTO t_10400 VALUES
+    ('2024-01-01 01:00:00+00', 1, NULL, 10),
+    ('2024-01-01 02:00:00+00', 1, NULL, 20),
+    ('2024-01-01 03:00:00+00', 1, 5, 30),
+    ('2024-01-01 04:00:00+00', 1, 3, 40),
+    ('2024-01-01 05:00:00+00', 1, 1, 50);
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10400') c;
+
+-- Delayed insert into the compressed chunk, then recompress -> second batch.
+INSERT INTO t_10400 VALUES
+    ('2024-01-01 01:30:00+00', 1, NULL, 15),
+    ('2024-01-01 03:30:00+00', 1, 4, 35),
+    ('2024-01-01 06:00:00+00', 1, NULL, 60),
+    ('2024-01-01 02:30:00+00', 1, 10, 25);
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10400') c;
+
+-- Should correctly merge NULL tuples into the batch (NULL, 5) with NULLS FIRST
+SELECT rank, time, val
+FROM t_10400
+WHERE seg = 1
+ORDER BY rank DESC NULLS FIRST, time;
+
+drop table t_10400 cascade;
+
+-- Correctly match non-null tuple with a batch with lower NULL boundary and DESC order
+CREATE TABLE t_10400 (time timestamptz NOT NULL, seg int NOT NULL, rank int, val int NOT NULL);
+SELECT count(*) FROM (SELECT create_hypertable('t_10400', 'time', chunk_time_interval => interval '1 year')) t;
+ALTER TABLE t_10400 SET (timescaledb.compress, timescaledb.compress_segmentby = 'seg', timescaledb.compress_orderby = 'rank DESC NULLS FIRST, time');
+
+INSERT INTO t_10400 VALUES
+    ('2024-01-01 01:00:00+00', 1, NULL, 10),
+    ('2024-01-01 02:00:00+00', 1, NULL, 20),
+    ('2024-01-01 03:00:00+00', 1, 5, 30),
+    ('2024-01-01 04:00:00+00', 1, 3, 40),
+    ('2024-01-01 05:00:00+00', 1, 1, 50);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10400') c;
+
+INSERT INTO t_10400 VALUES ('2024-01-01 03:30:00+00', 1, 4, 35);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10400') c;
+
+SELECT rank, val FROM t_10400 WHERE seg = 1 ORDER BY rank DESC NULLS FIRST, time;
+
+drop table t_10400 cascade;
 
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.batch_sorted_merge;

@@ -30,4 +30,13 @@
 			  (var = (type pointer) func(&var##__state.l->elements[var##__state.i]), true));       \
 			 var##__state.i++)
 #endif
+
+#ifndef foreach_node
+#define foreach_node(type, var, lst)                                                               \
+	for (type *var = 0, *var##__outerloop = (type *) 1; var##__outerloop; var##__outerloop = 0)    \
+		for (ForEachState var##__state = { (lst), 0 };                                             \
+			 (var##__state.l != NIL && var##__state.i < var##__state.l->length &&                  \
+			  (var = lfirst_node(type, &var##__state.l->elements[var##__state.i]), true));         \
+			 var##__state.i++)
+#endif
 #endif /* PG17_LT */

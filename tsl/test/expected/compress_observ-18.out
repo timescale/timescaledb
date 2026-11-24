@@ -98,21 +98,21 @@ compress_chunk | _timescaledb_internal._hyper_1_2_chunk
 compress_chunk | _timescaledb_internal._hyper_1_3_chunk
 
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 0
 total_tuples_decompressed             | 0
@@ -137,21 +137,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 0
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 0
 total_tuples_decompressed             | 0
@@ -176,21 +176,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 0
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 0
 total_tuples_decompressed             | 0
@@ -227,21 +227,21 @@ min   | Mon Jan 01 00:00:00 2024 PST
 max   | Wed Jan 03 00:00:00 2024 PST
 
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 8
 total_tuples_decompressed             | 1600
@@ -266,21 +266,21 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 0
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 12
 total_tuples_decompressed             | 2400
@@ -305,21 +305,21 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 0
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 4
 total_tuples_decompressed             | 900
@@ -350,21 +350,21 @@ BEGIN;
 DELETE FROM t WHERE a % 19 = 2;
 ROLLBACK;
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 10
 total_tuples_decompressed             | 3200
@@ -389,21 +389,21 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 1
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 15
 total_tuples_decompressed             | 4800
@@ -428,21 +428,21 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 1
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 5
 total_tuples_decompressed             | 1800
@@ -473,21 +473,21 @@ BEGIN;
 UPDATE t SET a = 42 WHERE a % 19 = 2;
 ROLLBACK;
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 12
 total_tuples_decompressed             | 4800
@@ -512,21 +512,21 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 1
 n_deletes                             | 1
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 18
 total_tuples_decompressed             | 7200
@@ -551,21 +551,21 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 1
 n_deletes                             | 1
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 6
 total_tuples_decompressed             | 2700
@@ -605,14 +605,14 @@ compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_avg             | 800
 compressed_batch_rows_stddev          | 200
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_avg            | 1824
-compressed_batch_bytes_stddev         | 412
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_avg            | 364
-compressed_block_bytes_stddev         | 180.681377014899
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_avg            | 1200
+compressed_batch_bytes_stddev         | 301.5
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_avg            | 240
+compressed_block_bytes_stddev         | 121.985613905903
 total_batches_deleted                 | 0
 total_batches_decompressed            | 12
 total_tuples_decompressed             | 4800
@@ -649,14 +649,14 @@ compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_avg             | 800
 compressed_batch_rows_stddev          | 282.842712474619
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_avg            | 1825
-compressed_batch_bytes_stddev         | 580.770369614551
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_avg            | 365
-compressed_block_bytes_stddev         | 202.38295931778
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_avg            | 1229
+compressed_batch_bytes_stddev         | 385.137493486273
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_avg            | 245
+compressed_block_bytes_stddev         | 135.292506156927
 total_batches_deleted                 | 0
 total_batches_decompressed            | 18
 total_tuples_decompressed             | 7200
@@ -693,14 +693,14 @@ compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_avg             | 900
 compressed_batch_rows_stddev          | 0
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_avg            | 2028
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_avg            | 1347
 compressed_batch_bytes_stddev         | 0
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_avg            | 405
-compressed_block_bytes_stddev         | 173.022079515881
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_avg            | 269
+compressed_block_bytes_stddev         | 116.333314231135
 total_batches_deleted                 | 0
 total_batches_decompressed            | 6
 total_tuples_decompressed             | 2700
@@ -756,13 +756,13 @@ compressed_batch_rows_max     | 1000
 compressed_batch_rows_avg     | 800
 compressed_batch_rows_stddev  | 200
 compressed_batch_bytes_min    | 0
-compressed_batch_bytes_max    | 748
-compressed_batch_bytes_avg    | 374
-compressed_batch_bytes_stddev | 374
-compressed_block_bytes_min    | 460
-compressed_block_bytes_max    | 748
-compressed_block_bytes_avg    | 604
-compressed_block_bytes_stddev | 144
+compressed_batch_bytes_max    | 306
+compressed_batch_bytes_avg    | 153
+compressed_batch_bytes_stddev | 153
+compressed_block_bytes_min    | 200
+compressed_block_bytes_max    | 306
+compressed_block_bytes_avg    | 253
+compressed_block_bytes_stddev | 53
 -[ RECORD 2 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_2_chunk
 compressed_chunk              | _timescaledb_internal._hyper_1_2_chunk_compressed
@@ -773,13 +773,13 @@ compressed_batch_rows_max     | 1000
 compressed_batch_rows_avg     | 800
 compressed_batch_rows_stddev  | 282.842712474619
 compressed_batch_bytes_min    | 0
-compressed_batch_bytes_max    | 748
-compressed_batch_bytes_avg    | 498
-compressed_batch_bytes_stddev | 352.610581551692
-compressed_block_bytes_min    | 324
-compressed_block_bytes_max    | 748
-compressed_block_bytes_avg    | 606
-compressed_block_bytes_stddev | 199.875516815398
+compressed_batch_bytes_max    | 306
+compressed_batch_bytes_avg    | 204
+compressed_batch_bytes_stddev | 144.249783362056
+compressed_block_bytes_min    | 157
+compressed_block_bytes_max    | 306
+compressed_block_bytes_avg    | 256
+compressed_block_bytes_stddev | 70.2392735978638
 -[ RECORD 3 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_3_chunk
 compressed_chunk              | _timescaledb_internal._hyper_1_3_chunk_compressed
@@ -793,9 +793,9 @@ compressed_batch_bytes_min    |
 compressed_batch_bytes_max    | 
 compressed_batch_bytes_avg    | 
 compressed_batch_bytes_stddev | 
-compressed_block_bytes_min    | 668
-compressed_block_bytes_max    | 668
-compressed_block_bytes_avg    | 668
+compressed_block_bytes_min    | 274
+compressed_block_bytes_max    | 274
+compressed_block_bytes_avg    | 274
 compressed_block_bytes_stddev | 0
 
 -- Select more and check how things change:
@@ -825,13 +825,13 @@ compressed_batch_rows_max     | 1000
 compressed_batch_rows_avg     | 800
 compressed_batch_rows_stddev  | 200
 compressed_batch_bytes_min    | 0
-compressed_batch_bytes_max    | 748
-compressed_batch_bytes_avg    | 374
-compressed_batch_bytes_stddev | 374
-compressed_block_bytes_min    | 188
-compressed_block_bytes_max    | 748
-compressed_block_bytes_avg    | 414
-compressed_block_bytes_stddev | 168.463645929916
+compressed_batch_bytes_max    | 306
+compressed_batch_bytes_avg    | 153
+compressed_batch_bytes_stddev | 153
+compressed_block_bytes_min    | 170
+compressed_block_bytes_max    | 440
+compressed_block_bytes_avg    | 286
+compressed_block_bytes_stddev | 89.2922694022276
 -[ RECORD 2 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_2_chunk
 compressed_chunk              | _timescaledb_internal._hyper_1_2_chunk_compressed
@@ -842,13 +842,13 @@ compressed_batch_rows_max     | 1000
 compressed_batch_rows_avg     | 800
 compressed_batch_rows_stddev  | 282.842712474619
 compressed_batch_bytes_min    | 0
-compressed_batch_bytes_max    | 748
-compressed_batch_bytes_avg    | 498
-compressed_batch_bytes_stddev | 352.610581551692
-compressed_block_bytes_min    | 132
-compressed_block_bytes_max    | 748
-compressed_block_bytes_avg    | 414
-compressed_block_bytes_stddev | 196.533288104925
+compressed_batch_bytes_max    | 306
+compressed_batch_bytes_avg    | 204
+compressed_batch_bytes_stddev | 144.249783362056
+compressed_block_bytes_min    | 144
+compressed_block_bytes_max    | 440
+compressed_block_bytes_avg    | 293
+compressed_block_bytes_stddev | 107.39992111522
 -[ RECORD 3 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_3_chunk
 compressed_chunk              | _timescaledb_internal._hyper_1_3_chunk_compressed
@@ -862,10 +862,10 @@ compressed_batch_bytes_min    |
 compressed_batch_bytes_max    | 
 compressed_batch_bytes_avg    | 
 compressed_batch_bytes_stddev | 
-compressed_block_bytes_min    | 260
-compressed_block_bytes_max    | 668
-compressed_block_bytes_avg    | 460
-compressed_block_bytes_stddev | 150.412765415705
+compressed_block_bytes_min    | 253
+compressed_block_bytes_max    | 392
+compressed_block_bytes_avg    | 321
+compressed_block_bytes_stddev | 58.9464799627594
 
 -- The stats should be evicted after we decompress and thus throwing away
 -- the compressed chunks.
@@ -903,21 +903,21 @@ BEGIN;
 DELETE FROM t WHERE a = 7 AND b = 2;
 ROLLBACK;
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 2
 total_tuples_decompressed             | 1600
@@ -942,21 +942,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 1
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 3
 total_tuples_decompressed             | 2400
@@ -981,21 +981,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 1
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 1
 total_tuples_decompressed             | 900
@@ -1026,21 +1026,21 @@ BEGIN;
 DELETE FROM t WHERE d = 200;
 ROLLBACK;
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 2
 total_tuples_decompressed             | 1600
@@ -1065,21 +1065,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 2
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 3
 total_tuples_decompressed             | 2400
@@ -1104,21 +1104,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 0
 n_deletes                             | 2
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 1
 total_tuples_decompressed             | 900
@@ -1149,21 +1149,21 @@ BEGIN;
 UPDATE t SET a = 42 WHERE a = 7 AND b = 2;
 ROLLBACK;
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 4
 total_tuples_decompressed             | 3200
@@ -1188,21 +1188,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 1
 n_deletes                             | 2
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 6
 total_tuples_decompressed             | 4800
@@ -1227,21 +1227,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 1
 n_deletes                             | 2
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 2
 total_tuples_decompressed             | 1800
@@ -1272,21 +1272,21 @@ BEGIN;
 UPDATE t SET a = 42 WHERE d = 200;
 ROLLBACK;
 SELECT * FROM observ; -- see view definition above
--[ RECORD 1 ]-------------------------+---------
+-[ RECORD 1 ]-------------------------+--------
 compressed_batch_count                | 2
 compressed_block_count                | 10
 compressed_batch_rows_min             | 600
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 1600
 compressed_batch_rows_sqsum           | 1360000
-compressed_batch_bytes_min            | 1412
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 3648
-compressed_batch_bytes_sqsum          | 6993440
-compressed_block_bytes_min            | 132
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 3648
-compressed_block_bytes_sqsum          | 1657248
+compressed_batch_bytes_min            | 899
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 2401
+compressed_batch_bytes_sqsum          | 3064205
+compressed_block_bytes_min            | 44
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 2401
+compressed_block_bytes_sqsum          | 725285
 total_batches_deleted                 | 0
 total_batches_decompressed            | 4
 total_tuples_decompressed             | 3200
@@ -1311,21 +1311,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 2
 n_deletes                             | 2
--[ RECORD 2 ]-------------------------+---------
+-[ RECORD 2 ]-------------------------+--------
 compressed_batch_count                | 3
 compressed_block_count                | 15
 compressed_batch_rows_min             | 400
 compressed_batch_rows_max             | 1000
 compressed_batch_rows_sum             | 2400
 compressed_batch_rows_sqsum           | 2160000
-compressed_batch_bytes_min            | 1004
-compressed_batch_bytes_max            | 2236
-compressed_batch_bytes_sum            | 5476
-compressed_batch_bytes_sqsum          | 11007408
-compressed_block_bytes_min            | 100
-compressed_block_bytes_max            | 748
-compressed_block_bytes_sum            | 5476
-compressed_block_bytes_sqsum          | 2613488
+compressed_batch_bytes_min            | 685
+compressed_batch_bytes_max            | 1502
+compressed_batch_bytes_sum            | 3689
+compressed_batch_bytes_sqsum          | 4981233
+compressed_block_bytes_min            | 32
+compressed_block_bytes_max            | 440
+compressed_block_bytes_sum            | 3689
+compressed_block_bytes_sqsum          | 1181809
 total_batches_deleted                 | 0
 total_batches_decompressed            | 6
 total_tuples_decompressed             | 4800
@@ -1350,21 +1350,21 @@ n_selects                             | 0
 n_inserts                             | 0
 n_updates                             | 2
 n_deletes                             | 2
--[ RECORD 3 ]-------------------------+---------
+-[ RECORD 3 ]-------------------------+--------
 compressed_batch_count                | 1
 compressed_block_count                | 5
 compressed_batch_rows_min             | 900
 compressed_batch_rows_max             | 900
 compressed_batch_rows_sum             | 900
 compressed_batch_rows_sqsum           | 810000
-compressed_batch_bytes_min            | 2028
-compressed_batch_bytes_max            | 2028
-compressed_batch_bytes_sum            | 2028
-compressed_batch_bytes_sqsum          | 4112784
-compressed_block_bytes_min            | 188
-compressed_block_bytes_max            | 668
-compressed_block_bytes_sum            | 2028
-compressed_block_bytes_sqsum          | 972240
+compressed_batch_bytes_min            | 1347
+compressed_batch_bytes_max            | 1347
+compressed_batch_bytes_sum            | 1347
+compressed_batch_bytes_sqsum          | 1814409
+compressed_block_bytes_min            | 62
+compressed_block_bytes_max            | 392
+compressed_block_bytes_sum            | 1347
+compressed_block_bytes_sqsum          | 430549
 total_batches_deleted                 | 0
 total_batches_decompressed            | 2
 total_tuples_decompressed             | 1800

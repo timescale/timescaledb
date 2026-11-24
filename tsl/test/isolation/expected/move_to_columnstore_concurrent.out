@@ -1,0 +1,322 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_wp_start_on s1_move s2_insert s2_select s3_wp_start_off s1_status s1_count
+step s3_wp_start_on: SELECT debug_waitpoint_enable('move_to_columnstore_start');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_insert: 
+    INSERT INTO metrics
+    SELECT '2025-01-02 00:00:30'::timestamptz + (i || ' second')::interval, 'd2', -1.0
+    FROM generate_series(1,20) i;
+
+step s2_select: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  120
+
+step s3_wp_start_off: SELECT debug_waitpoint_release('move_to_columnstore_start');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_move: <... completed>
+move_to_columnstore
+-------------------
+                   
+
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                
+----------------------
+{COMPRESSED,UNORDERED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  120
+
+
+starting permutation: s2_begin s2_update s1_move s2_commit s1_status s1_count
+step s2_begin: BEGIN;
+step s2_update: 
+    UPDATE metrics SET value = -2.0 WHERE value = 1.0;
+
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_commit: COMMIT;
+step s1_move: <... completed>
+ERROR:  aborting move to columnstore due to concurrent updates on uncompressed data.
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status
+------
+{}    
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  100
+
+
+starting permutation: s3_wp_delete_on s1_move s2_update s3_wp_delete_off s1_status s1_count
+step s3_wp_delete_on: SELECT debug_waitpoint_enable('move_to_columnstore_after_delete');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_update: 
+    UPDATE metrics SET value = -2.0 WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_delete_off: SELECT debug_waitpoint_release('move_to_columnstore_after_delete');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_move: <... completed>
+move_to_columnstore
+-------------------
+                   
+
+step s2_update: <... completed>
+ERROR:  could not modify row in chunk "_hyper_X_X_chunk" because it was concurrently moved to the columnstore
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  100
+
+
+starting permutation: s3_wp_insert_on s2_insert s1_move s3_wp_insert_off s1_status s1_count
+step s3_wp_insert_on: SELECT debug_waitpoint_enable('insert_create_compressed');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s2_insert: 
+    INSERT INTO metrics
+    SELECT '2025-01-02 00:00:30'::timestamptz + (i || ' second')::interval, 'd2', -1.0
+    FROM generate_series(1,20) i;
+ <waiting ...>
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+
+move_to_columnstore
+-------------------
+                   
+
+step s3_wp_insert_off: SELECT debug_waitpoint_release('insert_create_compressed');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s2_insert: <... completed>
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  120
+
+
+starting permutation: s3_wp_create_on s1_move s2_insert s3_wp_create_off s1_status s1_count
+step s3_wp_create_on: SELECT debug_waitpoint_enable('move_to_columnstore_after_create');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_insert: 
+    INSERT INTO metrics
+    SELECT '2025-01-02 00:00:30'::timestamptz + (i || ' second')::interval, 'd2', -1.0
+    FROM generate_series(1,20) i;
+ <waiting ...>
+step s3_wp_create_off: SELECT debug_waitpoint_release('move_to_columnstore_after_create');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_move: <... completed>
+move_to_columnstore
+-------------------
+                   
+
+step s2_insert: <... completed>
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  120
+
+
+starting permutation: s1_set_limit s3_wp_delete_on s1_move s2_update s3_wp_delete_off s1_status s1_count s1_reset_limit
+step s1_set_limit: 
+    SET timescaledb.move_to_columnstore_tuple_sort_limit = 10;
+
+step s3_wp_delete_on: SELECT debug_waitpoint_enable('move_to_columnstore_after_delete');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_update: 
+    UPDATE metrics SET value = -2.0 WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_delete_off: SELECT debug_waitpoint_release('move_to_columnstore_after_delete');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_move: <... completed>
+move_to_columnstore
+-------------------
+                   
+
+step s2_update: <... completed>
+ERROR:  could not modify row in chunk "_hyper_X_X_chunk" because it was concurrently moved to the columnstore
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  100
+
+step s1_reset_limit: 
+    RESET timescaledb.move_to_columnstore_tuple_sort_limit;
+
+
+starting permutation: s2_begin s2_insert_one s1_move s2_commit s1_status s1_count
+step s2_begin: BEGIN;
+step s2_insert_one: 
+    -- a plain rowstore insert; SET LOCAL keeps it scoped to this transaction
+    SET LOCAL timescaledb.enable_direct_compress_insert = false;
+    INSERT INTO metrics VALUES ('2025-01-02 00:00:45', 'd3', -3.0);
+
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+
+move_to_columnstore
+-------------------
+                   
+
+step s2_commit: COMMIT;
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  101
+
+
+starting permutation: s3_wp_commit_on s1_move s2_insert_one s3_wp_commit_off s1_status s1_count
+step s3_wp_commit_on: SELECT debug_waitpoint_enable('move_to_columnstore_before_commit');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_move: 
+    SELECT _timescaledb_functions.move_to_columnstore(chunk)
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_insert_one: 
+    -- a plain rowstore insert; SET LOCAL keeps it scoped to this transaction
+    SET LOCAL timescaledb.enable_direct_compress_insert = false;
+    INSERT INTO metrics VALUES ('2025-01-02 00:00:45', 'd3', -3.0);
+ <waiting ...>
+step s3_wp_commit_off: SELECT debug_waitpoint_release('move_to_columnstore_before_commit');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_move: <... completed>
+move_to_columnstore
+-------------------
+                   
+
+step s2_insert_one: <... completed>
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  101
+

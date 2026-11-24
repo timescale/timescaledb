@@ -16,7 +16,8 @@ lock_chunktable
 step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100); <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -59,7 +60,8 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -94,7 +96,8 @@ lock_chunktable
 step A1: BEGIN; ALTER TABLE ts_device_table SET ( fillfactor = 80); <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -125,7 +128,8 @@ lock_chunktable
 step A1: BEGIN; ALTER TABLE ts_device_table SET ( fillfactor = 80); <waiting ...>
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -158,7 +162,8 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -202,7 +207,8 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -243,7 +249,8 @@ lock_chunktable
 
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -272,7 +279,8 @@ step Cc: COMMIT;
 starting permutation: C1 Cc LockChunkTuple I1 IN1 UnlockChunkTuple Ic INc SChunkStat
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -311,7 +319,8 @@ status
 starting permutation: C1 Cc I1 Ic LockChunkTuple I1 IN1 UnlockChunkTuple INc Ic SChunkStat
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -350,7 +359,8 @@ status
 starting permutation: C1 Cc LockChunkTuple IR1 INR1 UnlockChunkTuple Ic INc SChunkStat
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress
@@ -397,7 +407,8 @@ status
 starting permutation: C1 Cc I1 Ic LockChunkTuple IR1 INR1 UnlockChunkTuple INc Ic SChunkStat
 step C1: 
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  -- Need a long lock_timeout because the CI on MacOS is very slow
+  SET LOCAL lock_timeout = '2500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     compress_chunk(ch.relid) IS NOT NULL AS compress

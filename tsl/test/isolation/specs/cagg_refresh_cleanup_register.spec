@@ -18,6 +18,16 @@ setup
     -- Table used to pass R1's backend PID to the terminator session
     CREATE TABLE cancelpid (pid int);
 
+    -- Terminate R1's backend. Wrapped in a void-returning procedure (as in
+    -- cagg_cancel_kill_refresh.spec) so isolationtester's native blocked-step
+    -- synchronization can be used instead of polling pg_stat_activity.
+    CREATE OR REPLACE PROCEDURE terminate_r1() AS
+    $$
+    BEGIN
+        PERFORM pg_terminate_backend(pid) FROM cancelpid;
+    END;
+    $$ LANGUAGE plpgsql;
+
     CREATE MATERIALIZED VIEW cond_daily
     WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
     SELECT time_bucket('1 day', time) AS bucket, avg(value) AS avg_val
@@ -59,7 +69,7 @@ setup {
     INSERT INTO cancelpid SELECT pg_backend_pid();
 }
 step "R1_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 # Session WP: enables / disables waitpoints
@@ -76,23 +86,12 @@ step "WP_after_register_enable"  { SELECT debug_waitpoint_enable('cagg_refresh_a
 step "WP_after_register_disable"  { SELECT debug_waitpoint_release('cagg_refresh_after_register'); }
 
 # Session K1: terminate R1's backend so its PID becomes dead in the
-# registration table, then wait until the process is gone.
+# registration table. Relies on isolationtester's native blocked-step
+# synchronization (see the "K1_terminate"("R1_refresh") annotation below)
+# rather than polling pg_stat_activity for the pid to disappear.
 session "K1"
 step "K1_terminate" {
-    DO $$
-    DECLARE
-        target_pid int;
-    BEGIN
-        SELECT pid INTO target_pid FROM cancelpid;
-        PERFORM pg_terminate_backend(target_pid);
-        LOOP
-            EXIT WHEN NOT EXISTS (
-                SELECT 1 FROM pg_stat_activity WHERE pid = target_pid
-            );
-            PERFORM pg_sleep(0.05);
-        END LOOP;
-    END;
-    $$;
+    CALL terminate_r1();
 }
 
 # Refresh sessions
@@ -102,7 +101,7 @@ setup {
     SET SESSION lock_timeout = '2s';
 }
 step "R2_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 session "R3"
@@ -111,7 +110,7 @@ setup {
     SET SESSION lock_timeout = '2s';
 }
 step "R3_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 session "R4"
@@ -120,10 +119,10 @@ setup {
     SET SESSION lock_timeout = '2s';
 }
 step "R4_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30', options => jsonb_build_object('buckets_per_batch', 0));
 }
 step "R4_overlapping_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 session "A1"
@@ -241,4 +240,4 @@ permutation "P1_add_policy" "WP_after_register_enable" "P1_run_policy" "check_jo
 # Stale registration cleanup by concurrent refreshes.
 # Kill a backend during refresh to end up with a pid left behind. Later two concurrent refreshes run, only one removes the stale pid.
 # backend R1 is killed, we can no longer use this for later permutations
-permutation "WP_before_txn2_commit_enable" "R1_refresh" "check_jobs" "K1_terminate"("check_jobs") "WP_before_txn2_commit_disable" "L1_lock" "R2_refresh"("L1_lock") "R3_refresh"("R2_refresh") "L1_unlock"(R2_refresh, R3_refresh) "check_jobs"
+permutation "WP_before_txn2_commit_enable" "R1_refresh" "check_jobs" "K1_terminate"("R1_refresh") "WP_before_txn2_commit_disable" "L1_lock" "R2_refresh"("L1_lock") "R3_refresh"("R2_refresh") "L1_unlock"(R2_refresh, R3_refresh) "check_jobs"

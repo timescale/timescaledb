@@ -6,10 +6,16 @@ set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in reorder_vs_select.spec.in
     decompression_chunk_and_parallel_query.in)
 
-# This one must go first because it is very dependent on chunk IDs in EXPLAIN.
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  set(TEST_FILES cagg_watermark_concurrent_update.spec)
+  set(TEST_TEMPLATES cagg_watermark_concurrent_update.spec.in)
 endif()
+
+foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
+  get_filename_component(TEMPLATE ${TEMPLATE_FILE} NAME_WE)
+  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.spec)
+  configure_file(${TEMPLATE_FILE} ${TEST_FILE} COPYONLY)
+  list(APPEND TEST_FILES "${TEST_FILE}")
+endforeach(TEMPLATE_FILE)
 
 list(
   APPEND
@@ -25,6 +31,7 @@ list(
   parallel_compression.spec
   osm_range_updates_iso.spec
   concurrent_decompress_update.spec
+  compression_read_committed_update.spec
   delete_job_deadlock.spec)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -47,12 +54,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_refresh_cleanup_register.spec
     compact_chunk_concurrent.spec
     compression_chunk_race.spec
+    compression_read_snapshot.spec
     direct_compress_copy.spec
     compression_freeze.spec
     compression_merge_race.spec
     compression_recompress.spec
+    recompress_concurrent_dml.spec
     decompression_chunk_and_parallel_query_wo_idx.spec
     merge_chunks_concurrent.spec
+    move_to_columnstore_concurrent.spec
     split_chunk_concurrent.spec
     freeze_chunk.spec
     compression_dml_iso.spec
@@ -65,6 +75,18 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_granular_refresh.spec
+    cagg_granular_refresh_batch_races.spec
+    cagg_granular_refresh_cleanup_races.spec
+    cagg_granular_refresh_disable_races.spec
+    cagg_granular_refresh_seqnum_race.spec
+    cagg_granular_refresh_precommit_abort.spec)
+endif()
+
 # need to generate MODULE name for the .spec files
 foreach(TEMP_FILE ${TEST_TEMPLATES_MODULE})
   get_filename_component(TEMPLATE ${TEMP_FILE} NAME_WE)
@@ -72,14 +94,6 @@ foreach(TEMP_FILE ${TEST_TEMPLATES_MODULE})
   configure_file(${TEMP_FILE} ${TEST_FILE})
   list(APPEND TEST_FILES "${TEST_FILE}")
 endforeach(TEMP_FILE)
-
-# generate PG version specific .spec file
-foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
-  get_filename_component(TEMPLATE ${TEMPLATE_FILE} NAME_WE)
-  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.spec)
-  configure_file(${TEMPLATE_FILE} ${TEST_FILE})
-  list(APPEND TEST_FILES "${TEST_FILE}")
-endforeach(TEMPLATE_FILE)
 
 file(REMOVE ${ISOLATION_TEST_SCHEDULE})
 

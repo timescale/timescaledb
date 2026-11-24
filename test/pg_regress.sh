@@ -28,7 +28,6 @@ IGNORES=${IGNORES:-}
 SKIPS=${SKIPS:-}
 # PG_BINDIR is passed from CMake via environment
 PSQL="${PSQL:-${PG_BINDIR}/psql} -X" # Prevent any .psqlrc files from being executed during the tests
-PG_VERSION_MAJOR=$(${PSQL} --version | awk '{split($3,v,"[.a-z]"); print v[1]}')
 
 # check if test matches any of the patterns in a list
 # $1 list of patterns or test names
@@ -54,21 +53,16 @@ fi
 # so as an workaround if we have any IGNORES entry then
 # we merge it together with SKIPS and cleanup the IGNORES
 # https://github.com/postgres/postgres/commit/bd8d453e9b5f8b632a400a9e796fc041aed76d82
-if [[ ${PG_VERSION_MAJOR} -ge 16 ]]; then
-  if [[ -n ${IGNORES} ]]; then
-    if [[ -n ${SKIPS} ]]; then
-      SKIPS="${SKIPS} ${IGNORES}"
-    else
-      SKIPS="${IGNORES}"
-    fi
-    IGNORES=""
+if [[ -n ${IGNORES} ]]; then
+  if [[ -n ${SKIPS} ]]; then
+    SKIPS="${SKIPS} ${IGNORES}"
+  else
+    SKIPS="${IGNORES}"
   fi
+  IGNORES=""
 fi
 
 echo "TESTS ${TESTS}"
-if [[ ${PG_VERSION_MAJOR} -lt 16 ]]; then
-  echo "IGNORES ${IGNORES}"
-fi
 echo "SKIPS ${SKIPS}"
 
 if [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -z ${IGNORES} ]]; then
@@ -115,8 +109,8 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
     for test_pattern in ${SKIPS}; do
       for test_name in ${ALL_TESTS}; do
         if [[ $test_name == $test_pattern ]]; then
-          sed -e "s!^test:\s*${test_name}\s*\$!!" -i.backup ${TEMP_SCHEDULE}
-          sed -e "s!\b${test_name}\b!!" -i.backup ${TEMP_SCHEDULE}
+          sed -e "s!^test:[[:space:]]*${test_name}[[:space:]]*\$!!" -i.backup ${TEMP_SCHEDULE}
+          sed -E -e "s!(^|[^A-Za-z0-9_])${test_name}([^A-Za-z0-9_]|\$)!\1\2!g" -i.backup ${TEMP_SCHEDULE}
         fi
       done
     done

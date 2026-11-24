@@ -4,7 +4,10 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/heapam.h>
 #include <access/multixact.h>
+#include <access/rewriteheap.h>
+#include <access/tupconvert.h>
 #include <access/xact.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
@@ -34,12 +37,15 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "compression/api.h"
 #include "debug_point.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
-#include "import/heapswap.h"
+#include "import/commands/cluster.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_rewrite.h"
 #include "ts_catalog/compression_chunk_size.h"
@@ -55,6 +61,8 @@ typedef struct RelationMergeInfo
 	char relpersistence;
 	bool isresult;
 	bool iscompressed_rel;
+	bool isunordered;
+	bool rebuild_compressed;
 	ItemPointerData chunk_rewrite_tid;
 	List *ind_oids_old;
 	List *ind_oids_new;
@@ -187,6 +195,12 @@ merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
 	if (ItemPointerIsValid(&result_minfo->chunk_rewrite_tid))
 	{
 		ts_chunk_rewrite_delete_by_tid(&result_minfo->chunk_rewrite_tid);
+	}
+
+	/* Batches from merged chunks may overlap, set result as UNORDERED */
+	if (result_minfo->isunordered)
+	{
+		ts_chunk_set_unordered(result_minfo->chunk);
 	}
 
 	/* Don't need to drop objects for internal compressed relations, they are
@@ -427,7 +441,7 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		 * pattern. */
 		char old_check_name[NAMEDATALEN];
 		snprintf(old_check_name, NAMEDATALEN, "constraint_%d", old_slice_id);
-		Oid old_check_oid = get_relation_constraint_oid(chunk->table_id, old_check_name, true);
+		Oid old_check_oid = get_relation_constraint_oid(chunk->fd.relid, old_check_name, true);
 		if (OidIsValid(old_check_oid))
 		{
 			ObjectAddress constrobj = {
@@ -441,7 +455,8 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		snprintf(new_check_name, NAMEDATALEN, "constraint_%d", new_slice->fd.id);
 		const Dimension *dim =
 			ts_hyperspace_get_dimension_by_id(ht->space, old_slice->fd.dimension_id);
-		Constraint *constr = ts_chunk_constraint_dimensional_create(dim, new_slice, new_check_name);
+		Constraint *constr =
+			ts_chunk_constraint_dimensional_create(chunk->fd.relid, dim, new_slice, new_check_name);
 		if (constr != NULL)
 		{
 			new_constraints = lappend(new_constraints, constr);
@@ -453,7 +468,7 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 	{
 		/* Adding a constraint should require AccessExclusivelock. It should
 		 * already be taken at this point, but specify it to be sure. */
-		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Relation rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 		AddRelationNewConstraints(rel,
 								  NIL /* List *newColDefaults */,
 								  new_constraints,
@@ -510,119 +525,6 @@ merge_chunks_multidim_allowed(void)
 			pg_strcasecmp("true", multidim_merge_enabled) == 0);
 }
 
-#if (PG_VERSION_NUM >= 170000 && PG_VERSION_NUM <= 170002)
-/*
- * Workaround for changed behavior in the relation rewrite code that appeared
- * in PostgreSQL 17.0, but was fixed in 17.3.
- *
- * Merge chunks uses the relation rewrite functionality from CLUSTER and
- * VACUUM FULL. This works for merge because, when writing into a non-empty
- * relation, new pages are appended while the existing pages remain the
- * same. In PG17.0, however, that changed so that existing pages in the
- * relation were zeroed out. The changed behavior was introduced as part of
- * this commit:
- *
- * https://github.com/postgres/postgres/commit/8af256524893987a3e534c6578dd60edfb782a77
- *
- * Fortunately, this was fixed in a follow up commit:
- *
- * https://github.com/postgres/postgres/commit/9695835538c2c8e9cd0048028b8c85e1bbf5c79c
- *
- * The fix is part of PG 17.3. Howevever, this still leaves PG 17.0 - 17.2
- * with different behavior.
- *
- * To make the merge chunks code work for the "broken" versions we make PG
- * believe the first rewrite operation is the size of the fully merged
- * relation so that we reserve the full space needed and then "append"
- * backwards into the zeroed space (see illustration below). By doing this, we
- * ensure that no valid data is zeroed out. The downside of this approach is
- * that there will be a lot of unnecessary writing of zero pages. Below is an
- * example of what the rewrite would look like for merging three relations
- * with one page each. When writing the first relation, PG believes the merged
- * relation already contains two pages when starting the rewrite. These two
- * existing pages will be zeroed. When writing the next relation we tell PG
- * that there is only one existing page in the merged relation, and so forth.
- *
- *  _____________
- *  |_0_|_0_|_x_|
- *  _________
- *  |_0_|_x_|
- *  _____
- *  |_x_|
- *
- *  Result:
- *  _____________
- *  |_x_|_x_|_x_|
- *
- */
-static BlockNumber merge_rel_nblocks = 0;
-static BlockNumber *blockoff = NULL;
-static const TableAmRoutine *old_routine = NULL;
-static TableAmRoutine routine = {};
-
-/*
- * TAM relation size function to make PG believe that the merged relation
- * contains as specific amount of existing data.
- */
-static uint64
-pq17_workaround_merge_relation_size(Relation rel, ForkNumber forkNumber)
-{
-	uint64 nblocks = merge_rel_nblocks;
-
-	if (forkNumber == MAIN_FORKNUM)
-	{
-		return nblocks * BLCKSZ;
-	}
-
-	return old_routine->relation_size(rel, forkNumber);
-}
-
-static inline void
-pg17_workaround_init(Relation rel, RelationMergeInfo *relinfos, int nrelids)
-{
-	routine = *rel->rd_tableam;
-	routine.relation_size = pq17_workaround_merge_relation_size;
-	old_routine = rel->rd_tableam;
-	rel->rd_tableam = &routine;
-	blockoff = palloc(sizeof(BlockNumber) * nrelids);
-	uint64 totalblocks = 0;
-
-	for (int i = 0; i < nrelids; i++)
-	{
-		blockoff[i] = (BlockNumber) totalblocks;
-
-		if (relinfos[i].rel)
-		{
-			totalblocks += smgrnblocks(RelationGetSmgr(relinfos[i].rel), MAIN_FORKNUM);
-
-			/* Ensure the offsets don't overflow. For the merge itself, it is
-			 * assumed that the write will fail when writing too many blocks */
-			Ensure(totalblocks <= MaxBlockNumber, "max number of blocks exceeded for merge");
-		}
-	}
-}
-
-static inline void
-pg17_workaround_cleanup(Relation rel)
-{
-	pfree(blockoff);
-	rel->rd_tableam = old_routine;
-}
-
-static inline RelationMergeInfo *
-get_relmergeinfo(RelationMergeInfo *relinfos, int nrelids, int i)
-{
-	RelationMergeInfo *relinfo = &relinfos[nrelids - i - 1];
-	merge_rel_nblocks = blockoff[nrelids - i - 1];
-	return relinfo;
-}
-
-#else
-#define pg17_workaround_init(rel, relinfos, nrelids)
-#define pg17_workaround_cleanup(rel)
-#define get_relmergeinfo(relinfos, nrelids, i) &(relinfos)[i]
-#endif
-
 /* Update table stats */
 
 void
@@ -641,6 +543,101 @@ update_relstats(Relation catrel, Oid relid, BlockNumber num_pages, double ntuple
 	heap_freetuple(reltup);
 }
 
+/*
+ * Copy tuples between relations with different attribute layouts, e.g.,
+ * when one chunk was created before a column was dropped and the other
+ * after. Loop adapted from heapam_relation_copy_for_cluster().
+ */
+static void
+copy_table_data_with_map(Relation fromrel, Relation torel, TupleConversionMap *map,
+						 struct VacuumCutoffs *cutoffs, double *num_tuples, double *tups_vacuumed,
+						 double *tups_recently_dead)
+{
+	RewriteState rwstate = begin_heap_rewrite(fromrel,
+											  torel,
+											  cutoffs->OldestXmin,
+											  cutoffs->FreezeLimit,
+											  cutoffs->MultiXactCutoff);
+	TableScanDesc scan = table_beginscan_compat(fromrel, SnapshotAny, 0, NULL, 0);
+	TupleTableSlot *slot = table_slot_create(fromrel, NULL);
+	BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) slot;
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		HeapTuple tuple;
+		HeapTuple newtuple;
+		Buffer buf = hslot->buffer;
+		bool isdead = false;
+
+		CHECK_FOR_INTERRUPTS();
+
+		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+
+		/* PG19+ only sets hint bits, which the rewrite needs, under exclusive lock */
+#if PG19_GE
+		LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
+#else
+		LockBuffer(buf, BUFFER_LOCK_SHARE);
+#endif
+
+		switch (HeapTupleSatisfiesVacuum(tuple, cutoffs->OldestXmin, buf))
+		{
+			case HEAPTUPLE_DEAD:
+				isdead = true;
+				break;
+			case HEAPTUPLE_RECENTLY_DEAD:
+				*tups_recently_dead += 1;
+				break;
+			case HEAPTUPLE_LIVE:
+				break;
+			case HEAPTUPLE_INSERT_IN_PROGRESS:
+				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
+				{
+					elog(WARNING,
+						 "concurrent insert in progress within table \"%s\"",
+						 RelationGetRelationName(fromrel));
+				}
+				break;
+			case HEAPTUPLE_DELETE_IN_PROGRESS:
+				if (!TransactionIdIsCurrentTransactionId(
+						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
+				{
+					elog(WARNING,
+						 "concurrent delete in progress within table \"%s\"",
+						 RelationGetRelationName(fromrel));
+				}
+				*tups_recently_dead += 1;
+				break;
+			default:
+				elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
+				break;
+		}
+
+		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+
+		if (isdead)
+		{
+			*tups_vacuumed += 1;
+			/* The rewrite module still needs to see dead tuples */
+			if (rewrite_heap_dead_tuple(rwstate, tuple))
+			{
+				*tups_vacuumed += 1;
+				*tups_recently_dead -= 1;
+			}
+			continue;
+		}
+
+		*num_tuples += 1;
+		newtuple = execute_attr_map_tuple(tuple, map);
+		rewrite_heap_tuple(rwstate, tuple, newtuple);
+		heap_freetuple(newtuple);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	table_endscan(scan);
+	end_heap_rewrite(rwstate);
+}
+
 static double
 copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 				struct VacuumCutoffs *merged_cutoffs)
@@ -648,20 +645,36 @@ copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 	double num_tuples = 0.0;
 	double tups_vacuumed = 0.0;
 	double tups_recently_dead = 0.0;
+	TupleConversionMap *map =
+		convert_tuples_by_name(RelationGetDescr(fromrel), RelationGetDescr(torel));
 
-	table_relation_copy_for_cluster(fromrel,
-									torel,
-									NULL,
-									false,
-									cutoffs->OldestXmin,
+	if (map != NULL)
+	{
+		copy_table_data_with_map(fromrel,
+								 torel,
+								 map,
+								 cutoffs,
+								 &num_tuples,
+								 &tups_vacuumed,
+								 &tups_recently_dead);
+		free_conversion_map(map);
+	}
+	else
+	{
+		table_relation_copy_for_cluster(fromrel,
+										torel,
+										NULL,
+										false,
+										cutoffs->OldestXmin,
 #if PG19_GE
-									NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
+										NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
 #endif
-									&cutoffs->FreezeLimit,
-									&cutoffs->MultiXactCutoff,
-									&num_tuples,
-									&tups_vacuumed,
-									&tups_recently_dead);
+										&cutoffs->FreezeLimit,
+										&cutoffs->MultiXactCutoff,
+										&num_tuples,
+										&tups_vacuumed,
+										&tups_recently_dead);
+	}
 
 	elog(LOG,
 		 "merged rows from \"%s\" into \"%s\": tuples %lf vacuumed %lf recently dead %lf",
@@ -736,12 +749,10 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex, LOCKMOD
 
 	*rellocks = append_rellock(*rellocks, new_rel, AccessExclusiveLock, merge_mcxt);
 
-	pg17_workaround_init(new_rel, relinfos, nrelids);
-
 	/* Step 3: write the data from all the rels into a new merged heap */
 	for (int i = 0; i < nrelids; i++)
 	{
-		RelationMergeInfo *relinfo = get_relmergeinfo(relinfos, nrelids, i);
+		RelationMergeInfo *relinfo = &relinfos[i];
 		struct VacuumCutoffs *cutoffs_i = &relinfo->cutoffs;
 		double num_tuples = 0.0;
 
@@ -803,12 +814,11 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex, LOCKMOD
 	}
 
 	stats->num_pages = RelationGetNumberOfBlocks(new_rel);
-	pg17_workaround_cleanup(new_rel);
 
 	/* Now close all relations */
 	for (int i = 0; i < nrelids; i++)
 	{
-		RelationMergeInfo *relinfo = get_relmergeinfo(relinfos, nrelids, i);
+		RelationMergeInfo *relinfo = &relinfos[i];
 
 		/*
 		 * Close the relations before the heap swap, but keep the locks until
@@ -1166,8 +1176,8 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot merge frozen chunk \"%s.%s\" scheduled for tiering",
-							NameStr(chunk->fd.schema_name),
-							NameStr(chunk->fd.table_name)),
+							ts_chunk_get_schema_name(chunk),
+							ts_chunk_get_table_name(chunk)),
 					 errhint("Untier the chunk before merging.")));
 		}
 
@@ -1240,10 +1250,19 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 */
 		if (ts_chunk_is_compressed(chunk))
 		{
-			Oid crelid = ts_relation_get_compressed_relid(chunk->table_id);
-			Relation crel = table_open(crelid, lockmode);
-			rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
-			table_close(crel, NoLock);
+			/*
+			 * The merge clears stored column defaults, so compressed data
+			 * that relies on them is rebuilt once the merge is validated.
+			 */
+			relinfo->rebuild_compressed = compressed_chunk_uses_missing_values(rel);
+
+			if (!relinfo->rebuild_compressed)
+			{
+				Oid crelid = ts_relation_get_compressed_relid(chunk->fd.relid);
+				Relation crel = table_open(crelid, lockmode);
+				rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
+				table_close(crel, NoLock);
+			}
 
 			if (mergeindex == -1)
 			{
@@ -1257,7 +1276,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			{
 				elog(WARNING,
 					 "missing compression chunk size stats for compressed chunk \"%s\"",
-					 NameStr(chunk->fd.table_name));
+					 ts_chunk_get_table_name(chunk));
 			}
 		}
 
@@ -1276,9 +1295,9 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 					 errmsg("cannot merge chunks across different hypertables"),
 					 errdetail("Chunk \"%s\" is part of hypertable \"%s\" while chunk \"%s\" is "
 							   "part of hypertable \"%s\"",
-							   get_rel_name(chunk->table_id),
+							   get_rel_name(chunk->fd.relid),
 							   get_rel_name(chunk->hypertable_relid),
-							   get_rel_name(relinfos[i - 1].chunk->table_id),
+							   get_rel_name(relinfos[i - 1].chunk->fd.relid),
 							   get_rel_name(relinfos[i - 1].chunk->hypertable_relid))));
 		}
 
@@ -1355,6 +1374,37 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		prev_cube = chunk->cube;
 		compute_rel_vacuum_cutoffs(relinfos[i].rel, &relinfos[i].cutoffs);
 
+		/* Need to update the index of the result (merged) relation after
+		 * resort */
+		if (relinfos[i].isresult)
+		{
+			mergeindex = i;
+		}
+	}
+
+	/* Rebuild compressed data that relies on stored column defaults */
+	for (int i = 0; i < nrelids; i++)
+	{
+		RelationMergeInfo *relinfo = &relinfos[i];
+
+		if (!relinfo->rebuild_compressed)
+		{
+			continue;
+		}
+
+		rebuild_compressed_chunk(relinfo->chunk);
+
+		MemoryContext old_mcxt = MemoryContextSwitchTo(merge_cxt);
+		relinfo->chunk = ts_chunk_get_by_relid(relinfo->relid, true);
+		MemoryContextSwitchTo(old_mcxt);
+
+		compute_rel_vacuum_cutoffs(relinfo->rel, &relinfo->cutoffs);
+	}
+
+	for (int i = 0; i < nrelids; i++)
+	{
+		const Chunk *chunk = relinfos[i].chunk;
+
 		/*
 		 * Fill in the compressed mergerelinfo array here after final sort of
 		 * rels so that the two arrays have the same order.
@@ -1364,20 +1414,13 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			RelationMergeInfo *crelinfo = &crelinfos[i];
 			/* Merging the compressed relation only needs its relid, not a full Chunk. */
 			crelinfo->chunk = NULL;
-			crelinfo->relid = ts_relation_get_compressed_relid(chunk->table_id);
+			crelinfo->relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 			crelinfo->rel = table_open(crelinfo->relid, lockmode);
 			crelinfo->isresult = relinfos[i].isresult;
 			crelinfo->iscompressed_rel = true;
 			crelinfo->relpersistence = crelinfo->rel->rd_rel->relpersistence;
 			compute_rel_vacuum_cutoffs(crelinfos[i].rel, &crelinfos[i].cutoffs);
 			rellocks = append_rellock(rellocks, crelinfo->rel, lockmode, merge_cxt);
-		}
-
-		/* Need to update the index of the result (merged) relation after
-		 * resort */
-		if (relinfos[i].isresult)
-		{
-			mergeindex = i;
 		}
 	}
 
@@ -1392,9 +1435,11 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		const CompressionSettings *result_settings = NULL;
 		const Chunk *result_chunk = relinfos[mergeindex].chunk;
 
+		int nrelids_compressed = 0;
 		if (ts_chunk_is_compressed(result_chunk))
 		{
-			result_settings = ts_compression_settings_get(result_chunk->table_id);
+			result_settings = ts_compression_settings_get(result_chunk->fd.relid);
+			nrelids_compressed++;
 		}
 
 		for (int i = 0; i < nrelids; i++)
@@ -1407,7 +1452,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 				continue;
 			}
 
-			settings = ts_compression_settings_get(chunk->table_id);
+			settings = ts_compression_settings_get(chunk->fd.relid);
 
 			if (result_settings == NULL ||
 				!ts_compression_settings_equal(result_settings, settings))
@@ -1418,11 +1463,50 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 								"compression settings"),
 						 errdetail("Chunk \"%s\" was compressed with different "
 								   "settings than chunk \"%s\".",
-								   get_rel_name(chunk->table_id),
-								   get_rel_name(result_chunk->table_id)),
+								   get_rel_name(chunk->fd.relid),
+								   get_rel_name(result_chunk->fd.relid)),
 						 errhint("Decompress the affected chunks and recompress them "
 								 "with the current compression settings before merging.")));
 			}
+			nrelids_compressed++;
+			/* If we merge unordered chunks into the result chunk, set result as UNORDERED */
+			if (ts_chunk_is_unordered(chunk))
+			{
+				relinfos[mergeindex].isunordered = true;
+			}
+		}
+
+		/* Do we need to set compressed chunk result as UNORDERED because of possibly overlapping
+		 * batches in merged chunks? */
+		if (!relinfos[mergeindex].isunordered && nrelids_compressed > 1 &&
+			result_settings->fd.orderby)
+		{
+			Cache *hcache;
+			Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(result_chunk->hypertable_relid,
+																	 CACHE_FLAG_NONE,
+																	 &hcache);
+			/* If multidimensional merge is allowed and we have multiple dimensions, need to set
+			 * result as UNORDERED */
+			if (ht->fd.num_dimensions > 1)
+			{
+				relinfos[mergeindex].isunordered = true;
+			}
+			/* If 1st orderby column in compression settings is a non-time-partition column, need to
+			 * set result as UNORDERED */
+			else
+			{
+				/* We have only 1 dimension and it is time dimension */
+				const Dimension *time_dim =
+					ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+				/* Is the 1st orderby column a time dimension column? */
+				const int16 orderby_pos = ts_array_position(result_settings->fd.orderby,
+															NameStr(time_dim->fd.column_name));
+				if (orderby_pos != 1)
+				{
+					relinfos[mergeindex].isunordered = true;
+				}
+			}
+			ts_cache_release(&hcache);
 		}
 	}
 

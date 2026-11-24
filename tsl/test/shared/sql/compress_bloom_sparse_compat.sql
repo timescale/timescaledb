@@ -4,8 +4,8 @@
 
 -- Test binary compatibility. The hash values might change if the UMASH custom
 -- hashing is not built on this platform, we had this problem before.
-select _timescaledb_functions.bloom1_contains(
+select _timescaledb_functions.bloom1_contains_any_hashes(
 	'\xd098c885f08468eb8916751d947f248ed2843a88c02b1dea6228591c588b8068'::_timescaledb_internal.bloom1,
-	'1y.yield'::text)
+	array[_timescaledb_functions.bloom1_hash('1y.yield'::text)])
 ;
 

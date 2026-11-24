@@ -172,7 +172,7 @@ do
 done
 
 # Save a snippet of logs where a backend was terminated by signal.
-grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
+grep -C100 "was terminated by signal" postmaster.log > postgres-failure.log ||:
 
 # Find internal program errors and resource owner leak warnings in the sever log.
 # We do the same thing in Flaky Check and error out if we find any, not to
@@ -186,9 +186,10 @@ jq 'select(
 
 # Upload the logs.
 # Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".
-for x in sanitizer_logs/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff ~/llm-fuzzer-repro.sql
+for x in sanitizer_logs/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log \
+    *.diff ~/llm-fuzzer-repro.sql ~/{repro-result,fuzzer-summary}.txt
 do
-    if ! [ -f "$x" ]; then continue ; fi
+    if [ ! -f "$x" ] || [ ! -s "$x" ]; then continue ; fi
     "${PSQL[@]}" <<<"
         \set contents \`cat $x\`
         insert into log values ('$JOB_DATE', '$(basename "$x" .diff)', :'contents');

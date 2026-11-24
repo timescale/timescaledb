@@ -716,6 +716,63 @@ FROM
 ----------
  f
 
+------------------------------------------------------------------------------------------
+-- #10221: an invalidation whose greatest_modified_value lands EXACTLY on a bucket
+-- start must not lose its last bucket when the refresh window is split into batches.
+------------------------------------------------------------------------------------------
+SET timezone TO 'UTC';
+CREATE TABLE boundary_data (
+    time    TIMESTAMPTZ NOT NULL,
+    device  INTEGER,
+    value   FLOAT
+);
+SELECT FROM create_hypertable('boundary_data', 'time');
+--
+
+-- device 1: mid-bucket rows only, 2025-03-01 .. 2025-03-10
+INSERT INTO boundary_data
+SELECT time, 1, 1.0
+FROM generate_series('2025-03-01 12:00:00+00'::timestamptz,
+                     '2025-03-10 12:00:00+00'::timestamptz,
+                     '1 day'::interval) AS time;
+CREATE MATERIALIZED VIEW boundary_cagg
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, device, count(*) AS cnt
+FROM boundary_data
+GROUP BY 1, 2
+WITH NO DATA;
+-- Full refresh advances the watermark to 2025-03-11
+CALL refresh_continuous_aggregate('boundary_cagg', NULL, NULL);
+-- device 2: single row EXACTLY at a bucket start below the watermark. The
+-- hypertable invalidation entry for it is [2025-03-05, 2025-03-05] -- both
+-- bounds precisely on the bucket boundary.
+INSERT INTO boundary_data VALUES ('2025-03-05 00:00:00+00', 2, 1.0);
+-- Batched refresh over a finite window: bucket [2025-03-05, 2025-03-06) must
+-- get its own batch.
+CALL refresh_continuous_aggregate(
+    'boundary_cagg', '2025-03-01'::timestamptz, '2025-04-01'::timestamptz,
+    options => '{"buckets_per_batch": 1}'::jsonb);
+-- The 2025-03-05 bucket must be materialized for device 2
+SELECT * FROM boundary_cagg WHERE device = 2 ORDER BY bucket;
+            bucket            | device | cnt 
+------------------------------+--------+-----
+ Wed Mar 05 00:00:00 2025 UTC |      2 |   1
+
+-- No stranded invalidation may remain
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS stranded_low,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS stranded_high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                            WHERE user_view_name = 'boundary_cagg')
+  AND lowest_modified_value  > -210866803200000000
+  AND greatest_modified_value < 9223372036854775807;
+ stranded_low | stranded_high 
+--------------+---------------
+
+DROP TABLE boundary_data CASCADE;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_97_chunk
+RESET timezone;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_manual_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_manual_user;

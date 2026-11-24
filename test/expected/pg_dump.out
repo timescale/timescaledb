@@ -392,8 +392,8 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
         ORDER BY objid::regclass::text COLLATE "C";
-                          objid                          
----------------------------------------------------------
+                            objid                             
+--------------------------------------------------------------
  _timescaledb_cache.cache_inval_bgw_job
  _timescaledb_cache.cache_inval_extension
  _timescaledb_cache.cache_inval_hypertable
@@ -417,6 +417,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  timescaledb_information.dimensions
  timescaledb_information.hypertable_columnstore_settings
  timescaledb_information.hypertable_compression_settings
+ timescaledb_information.hypertable_granular_refresh_settings
  timescaledb_information.hypertables
  timescaledb_information.job_errors
  timescaledb_information.job_history

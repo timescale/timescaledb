@@ -14,20 +14,31 @@ jobs:
       LLVM_CONFIG: llvm-config-19
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        sudo sh -c "echo 'Acquire::Retries \"10\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::http::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::https::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::By-Hash \"yes\";' >> /etc/apt/apt.conf.d/99retries"
 
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get purge llvm-16 llvm-17 llvm-18 clang-16 clang-17 clang-18
         sudo apt-get install llvm-19 llvm-19-dev clang-19 libclang-19-dev clang-tidy-19 libcurl4-openssl-dev
         sudo ln -sf /usr/bin/clang-tidy-19 /usr/bin/clang-tidy
 
     - name: Checkout timescaledb
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Checkout pg_ladybug
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: 'timescale/pg_ladybug'
         path: 'pg_ladybug'
@@ -36,7 +47,7 @@ jobs:
     - name: build pg_ladybug
       run:  |
         cd pg_ladybug
-        cmake -S . -B build -DLLVM_ROOT=/usr/lib/llvm-19
+        cmake -S . -B build -DLLVM_ROOT=/usr/lib/llvm-19 -DClang_DIR=/usr/lib/llvm-19/lib/cmake/clang
         make -C build -j $(getconf _NPROCESSORS_ONLN)
         sudo make -C build install
 
@@ -47,8 +58,10 @@ jobs:
     - name: Configure timescaledb
       timeout-minutes: 15
       run: |
-        # installing postgres headers pulls in llvm-17 which confuses pg_ladybug build process so we install this here instead of at beginning
-        sudo apt-get install postgresql-server-dev-16
+        # installing postgres headers pulls in another llvm version which confuses pg_ladybug build process so we install this here instead of at beginning
+        sudo apt-get install postgresql-common
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+        sudo apt-get install postgresql-server-dev-18
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DLINTER=ON -DCLANG_TIDY_EXTRA_OPTS=",-*,postgres-*;--load=/usr/local/lib/libPostgresCheck.so"
 
     - name: Build timescaledb

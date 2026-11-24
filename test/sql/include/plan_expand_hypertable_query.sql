@@ -149,7 +149,11 @@ SELECT * FROM cte ORDER BY value;
 \qecho joins
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.id=1) and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.id=1) or (time < to_timestamp(10) and device_id = 'dev1') ORDER BY value;
+-- Disabling nested loop join to keep the test cross-version stable
+-- between pg16.15/17.11/18.6 and newer
+SET enable_nestloop = off;
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.name='tag1') and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
+RESET enable_nestloop;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE tag.name = 'tag1' and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 
@@ -327,6 +331,11 @@ DEALLOCATE P8;
 
 \qecho no transformation
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10 + floor(random())::int, time) > 10 AND time_bucket(10 + floor(random())::int, time) < 100 AND time < 150 ORDER BY time;
+
+\qecho user-defined function named time_bucket should not trigger internal error
+CREATE FUNCTION time_bucket(int, text) RETURNS text AS $$ BEGIN RETURN left($2, $1); END $$ LANGUAGE plpgsql;
+SELECT count(*) FROM hyper WHERE time_bucket(1, 'foo') < 'z';
+DROP FUNCTION time_bucket(int, text);
 
 \qecho exclude chunks based on time column with partitioning function. This
 \qecho transparently applies the time partitioning function on the time

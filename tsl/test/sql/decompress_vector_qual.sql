@@ -330,11 +330,9 @@ select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and me
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
 
 
--- On versions >= 14, the Postgres planner chooses to build a hash table for
--- large arrays. We currently don't vectorize in this case.
-select 1 from set_config('timescaledb.debug_require_vector_qual',
-    case when current_setting('server_version_num')::int >= 140000 then 'forbid' else 'require' end,
-    false);
+-- Postgres planner chooses to build a hash table for large arrays. We
+-- currently don't vectorize in this case.
+select 1 from set_config('timescaledb.debug_require_vector_qual', 'forbid', false);
 
 select count(*) from singlebatch where metric2 = any(array[
  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -847,7 +845,7 @@ select * from int_table where b is null or b is not null order by 1;
 select * from int_table where b is null and b is not null order by 1;
 
 -- check the compression algorithm for the compressed chunks
-set timescaledb.enable_columnarscan='off';
+set timescaledb.debug_enable_columnarscan='off';
 DO $$
 DECLARE
 	comp_regclass REGCLASS;
@@ -880,7 +878,7 @@ BEGIN
 END;
 $$;
 
-reset timescaledb.enable_columnarscan;
+reset timescaledb.debug_enable_columnarscan;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;
 

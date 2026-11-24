@@ -103,3 +103,89 @@ BEGIN
     END LOOP;
 END
 $$ LANGUAGE PLPGSQL;
+
+-- Dump the invalidation log rows of the inval_log_test fixture so they
+-- are part of the baseline/updated/restored comparison. The seqnum
+-- column only exists from 2.30; this runs on the post-update version,
+-- which is the same for all three databases, so the branch taken is
+-- identical and the outputs stay comparable.
+SELECT EXISTS (
+    SELECT FROM information_schema.columns
+    WHERE table_schema = '_timescaledb_catalog'
+      AND table_name = 'continuous_aggs_hypertable_invalidation_log'
+      AND column_name = 'seqnum') AS has_inval_log_seqnum \gset
+
+-- Collect the live rows in the same shape as inval_log_snapshot so both
+-- the dumps below and the verification compare like with like. This is
+-- the only place that has to know whether seqnum exists.
+CREATE TEMP VIEW inval_log_live AS
+SELECT 'hypertable'::text AS log, h.table_name AS name,
+       l.lowest_modified_value, l.greatest_modified_value,
+\if :has_inval_log_seqnum
+       l.seqnum
+\else
+       NULL::integer AS seqnum
+\endif
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+WHERE h.table_name = 'inval_log_test'
+UNION ALL
+SELECT 'materialization', ca.user_view_name,
+       l.lowest_modified_value, l.greatest_modified_value,
+\if :has_inval_log_seqnum
+       l.seqnum
+\else
+       NULL::integer
+\endif
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+WHERE ca.user_view_name IN ('mat_invallog_1', 'mat_invallog_2');
+
+SELECT name AS hypertable, lowest_modified_value, greatest_modified_value, seqnum
+FROM inval_log_live
+WHERE log = 'hypertable'
+ORDER BY 1, 2, 3, 4;
+
+SELECT name AS cagg, lowest_modified_value, greatest_modified_value, seqnum
+FROM inval_log_live
+WHERE log = 'materialization'
+ORDER BY 1, 2, 3, 4;
+
+-- Verify the live invalidation logs still hold exactly the rows
+-- snapshotted at the end of setup, i.e. an update script that rebuilds
+-- the log catalogs neither lost nor invented rows. seqnum is part of the
+-- comparison: EXCEPT ALL compares rows with NULL treated as equal to
+-- NULL, so on versions without the column both sides are NULL and only
+-- the other values decide, while from 2.30 on a changed seqnum shows up
+-- as a row that is both missing and unexpected.
+DO $$
+DECLARE
+    difference TEXT;
+BEGIN
+    SELECT string_agg(format('%s [%s]: (%s, %s, %s, seqnum %s)', src, diff.log, diff.name,
+                             diff.lowest_modified_value, diff.greatest_modified_value,
+                             coalesce(diff.seqnum::text, 'NULL')), E'\n')
+    INTO difference
+    FROM (
+        SELECT 'missing after update' AS src, *
+        FROM (SELECT * FROM inval_log_snapshot
+              EXCEPT ALL
+              SELECT * FROM inval_log_live) missing
+        UNION ALL
+        SELECT 'unexpected after update', *
+        FROM (SELECT * FROM inval_log_live
+              EXCEPT ALL
+              SELECT * FROM inval_log_snapshot) unexpected
+    ) diff (src, log, name, lowest_modified_value, greatest_modified_value, seqnum);
+
+    IF difference IS NOT NULL THEN
+        RAISE EXCEPTION 'invalidation log content changed across the update'
+              USING DETAIL = difference;
+    END IF;
+
+    IF NOT EXISTS (SELECT FROM inval_log_snapshot WHERE log = 'hypertable') OR
+       NOT EXISTS (SELECT FROM inval_log_snapshot WHERE log = 'materialization') THEN
+        RAISE EXCEPTION 'invalidation log snapshot is missing the expected pending rows';
+    END IF;
+END
+$$ LANGUAGE PLPGSQL;

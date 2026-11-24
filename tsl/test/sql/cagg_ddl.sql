@@ -1212,7 +1212,9 @@ WHERE user_view_name = 'cashflows'
 -- references are correct in the view as well.
 \d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
 \d+ "_timescaledb_internal".:"PART_VIEW_NAME"
-\d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
+-- Show the materialized hypertable columns via a helper since the \d child
+-- table listing format changed in PG19.
+SELECT * FROM test.show_columns(('_timescaledb_internal.' || :'MAT_TABLE_NAME')::regclass);
 \d+ 'cashflows'
 
 SELECT * FROM cashflows ORDER BY cashflows;
@@ -1540,3 +1542,98 @@ CREATE MATERIALIZED VIEW cagg_sensordata WITH (tsdb.continuous) AS
 SELECT s.id, s.name,time_bucket('15 minutes', sd.time) as bucket, avg(sd.value) FROM sensordata sd JOIN sensor s USING(id) GROUP BY s.id, bucket WITH NO DATA;
 
 SELECT * FROM cagg_sensordata;
+
+-- CREATE INDEX on a continuous aggregate checks tablespace permissions
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE idx_tblspc(time timestamptz NOT NULL, value float) WITH (timescaledb.hypertable);
+CREATE MATERIALIZED VIEW cagg_idx_tblspc WITH (tsdb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, avg(value) FROM idx_tblspc GROUP BY bucket WITH NO DATA;
+\set ON_ERROR_STOP 0
+CREATE INDEX cagg_idx_tblspc_idx ON cagg_idx_tblspc(bucket) TABLESPACE tablespace1;
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- PG 16.6 releases the wrong tuple lock in GRANT ON TABLESPACE when it is the
+-- first tablespace lookup in the session (fixed in 16.7), so look it up first.
+SELECT has_tablespace_privilege(:'ROLE_DEFAULT_PERM_USER', 'tablespace1', 'CREATE');
+GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE INDEX cagg_idx_tblspc_idx ON cagg_idx_tblspc(bucket) TABLESPACE tablespace1;
+DROP MATERIALIZED VIEW cagg_idx_tblspc;
+DROP TABLE idx_tblspc;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLESPACE tablespace1;
+
+-- TEST that chunks of the materialization hypertable inherit NOT NULL of the
+-- time bucket columns (issue #11020). Selecting the bucket twice gives two
+-- NOT NULL columns of which only one is the time dimension.
+CREATE TABLE notnull_ht(time timestamptz NOT NULL, value float) WITH (timescaledb.hypertable);
+INSERT INTO notnull_ht VALUES ('2026-01-01', 1), ('2026-03-01', 2);
+CREATE MATERIALIZED VIEW notnull_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, time_bucket('1 day', time) AS bucket2, avg(value)
+FROM notnull_ht GROUP BY 1;
+
+SELECT count(*) AS chunk_columns, bool_and(a.attnotnull) AS all_notnull
+FROM show_chunks('notnull_cagg') ch
+JOIN pg_attribute a ON a.attrelid = ch AND a.attname IN ('bucket', 'bucket2');
+
+-- since PG18 NOT NULL is a pg_constraint row, which must exist on the
+-- materialization hypertable and be inherited by its chunks
+SELECT count(*) AS relation_columns,
+       current_setting('server_version_num')::int < 180000 OR bool_and(c.oid IS NOT NULL) AS has_constraint,
+       current_setting('server_version_num')::int < 180000 OR bool_and(c.convalidated) AS is_valid
+FROM (
+  SELECT format('%I.%I', h.schema_name, h.table_name)::regclass AS rel
+  FROM _timescaledb_catalog.continuous_agg ca
+  JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'notnull_cagg'
+  UNION ALL
+  SELECT show_chunks('notnull_cagg')
+) r
+JOIN pg_attribute a ON a.attrelid = r.rel AND a.attname IN ('bucket', 'bucket2')
+LEFT JOIN pg_constraint c ON c.conrelid = a.attrelid AND c.contype = 'n' AND c.conkey = ARRAY[a.attnum];
+
+-- SET/DROP NOT NULL is allowed on materialization hypertables
+CREATE TABLE alter_notnull_ht(time timestamptz NOT NULL, device int, value float) WITH (timescaledb.hypertable);
+INSERT INTO alter_notnull_ht VALUES ('2025-01-01', 1, 1.0), ('2025-01-02', 2, 2.0);
+CREATE MATERIALIZED VIEW alter_notnull_cagg WITH (tsdb.continuous, tsdb.materialized_only = true) AS
+SELECT time_bucket('1 day', time) AS bucket, device, avg(value) AS avg_value
+FROM alter_notnull_ht GROUP BY 1, 2 WITH DATA;
+SELECT format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name) AS alter_notnull_mat
+FROM timescaledb_information.continuous_aggregates WHERE view_name = 'alter_notnull_cagg' \gset
+
+CREATE VIEW alter_notnull_cols AS
+SELECT c.relname, a.attname, a.attnotnull
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+WHERE (a.attrelid = :'alter_notnull_mat'::regclass OR a.attrelid IN (SELECT show_chunks(:'alter_notnull_mat')))
+  AND a.attname IN ('device', 'avg_value');
+
+ALTER TABLE :alter_notnull_mat ALTER COLUMN device SET NOT NULL;
+-- the constraint is propagated to the chunks
+SELECT * FROM alter_notnull_cols ORDER BY 1, 2;
+
+-- a refresh that produces a NULL for the constrained column fails
+INSERT INTO alter_notnull_ht VALUES ('2025-01-03', NULL, 3.0);
+\set VERBOSITY terse
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('alter_notnull_cagg', NULL, NULL);
+-- cannot drop NOT NULL from the time column
+ALTER TABLE :alter_notnull_mat ALTER COLUMN bucket DROP NOT NULL;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE :alter_notnull_mat ALTER COLUMN device DROP NOT NULL;
+SELECT * FROM alter_notnull_cols ORDER BY 1, 2;
+CALL refresh_continuous_aggregate('alter_notnull_cagg', NULL, NULL);
+SELECT * FROM alter_notnull_cagg ORDER BY 1, 2;
+
+-- existing NULLs are detected
+\set ON_ERROR_STOP 0
+ALTER TABLE :alter_notnull_mat ALTER COLUMN device SET NOT NULL;
+\set ON_ERROR_STOP 1
+\set VERBOSITY default
+
+DROP VIEW alter_notnull_cols;
+DROP MATERIALIZED VIEW alter_notnull_cagg;
+DROP TABLE alter_notnull_ht;

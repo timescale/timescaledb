@@ -18,6 +18,8 @@ SELECT create_hypertable('n',NULL::_timescaledb_internal.dimension_info);
 ERROR:  dimension cannot be NULL
 SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
 ERROR:  dimension cannot be NULL
+SELECT add_dimension(NULL, by_range('id'));
+ERROR:  hypertable cannot be NULL
 \set ON_ERROR_STOP 1
 -- test int types
 SELECT by_range('id',2::int2);
@@ -393,11 +395,6 @@ NOTICE:  table "test_table_int" is already a hypertable, skipping
  create_hypertable 
 -------------------
  (9,f)
-
-SELECT * FROM _timescaledb_functions.get_create_command('test_table_int');
-                                                 get_create_command                                                 
---------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('public.test_table_int', 'id', chunk_time_interval => 10, create_default_indexes=>FALSE);
 
 \set ON_ERROR_STOP 0
 -- Should throw an error when if_not_exists is not set

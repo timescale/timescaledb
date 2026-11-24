@@ -5,7 +5,7 @@
 \set ON_ERROR_STOP 0
 SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 -- START OF USAGE TEST --
 --First create your hypertable
 CREATE TABLE device_readings (
@@ -83,6 +83,7 @@ view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, ob
                                   |     (max(metric) - min(metric)) AS metric_spread                            +
                                   |    FROM device_readings                                                     +
                                   |   GROUP BY (time_bucket('@ 1 hour'::interval, observation_time)), device_id;
+granular_refresh_enabled          | f
 
 \x
 -- Refresh interval

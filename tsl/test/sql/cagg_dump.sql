@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TYPE custom_type AS (high int, low int);
 
@@ -136,7 +136,7 @@ SELECT _timescaledb_functions.stop_background_workers();
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 --make sure the appropriate DROP are still blocked.
 \set ON_ERROR_STOP 0

@@ -6,7 +6,7 @@
 \set ON_ERROR_STOP 0
 SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 -- START OF USAGE TEST --
 

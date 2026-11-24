@@ -60,8 +60,8 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
+#include "import/optimizer/inherit.h"
 #include "import/planner.h"
-#include "import/ts_inherit.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 #include "time_utils.h"
@@ -732,6 +732,32 @@ ts_transform_time_bucket_comparison(Expr *node)
 }
 
 /*
+ * Fully unwrap a (possibly nested) time_bucket() comparison by applying the
+ * single-level transform repeatedly until the bound reaches the raw column.
+ *
+ * ts_transform_time_bucket_comparison() only strips the outermost time_bucket().
+ * In hierarchical continuous aggregates the time_bucket() input column can be
+ * itself another time_bucket() call.
+ *
+ * Used both during hypertable expansion and from the chunk-append executor's
+ * runtime constification.
+ */
+Expr *
+ts_transform_nested_time_bucket_comparison(Expr *qual)
+{
+	Expr *nested = ts_transform_time_bucket_comparison(qual);
+	Expr *transformed = NULL;
+
+	while (nested != NULL)
+	{
+		transformed = nested;
+		nested = ts_transform_time_bucket_comparison(transformed);
+	}
+
+	return transformed;
+}
+
+/*
  * Since baserestrictinfo is not yet set by the planner, we have to derive
  * it ourselves. It's safe for us to miss some restrict info clauses (this
  * will just result in more chunks being included) so this does not need
@@ -784,7 +810,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 				 * check for time_bucket comparisons
 				 * time_bucket(Const, time_colum) > Const
 				 */
-				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 				if (transformed != NULL)
 				{
 					/*
@@ -835,7 +861,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 		 * check for time_bucket comparisons
 		 * time_bucket(Const, time_colum) > Const
 		 */
-		Expr *transformed = ts_transform_time_bucket_comparison(qual);
+		Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 		if (transformed != NULL)
 		{
 			/*
@@ -954,8 +980,8 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 static int
 chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 {
-	Oid lhs = (*(Chunk **) c1)->table_id;
-	Oid rhs = (*(Chunk **) c2)->table_id;
+	Oid lhs = (*(Chunk **) c1)->fd.relid;
+	Oid rhs = (*(Chunk **) c2)->fd.relid;
 
 	if (lhs < rhs)
 	{
@@ -1054,7 +1080,7 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
 				 * check for time_bucket comparisons
 				 * time_bucket(Const, time_colum) > Const
 				 */
-				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 				if (transformed != NULL)
 				{
 					/*
@@ -1077,8 +1103,6 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  * If appends are returned in order appends_ordered on rel->fdw_private is set to true.
  * To make verifying pathkeys easier in set_rel_pathlist the hypertable attno of the column
  * ordered by is stored in rel->fdw_private.
- * If the hypertable uses space partitioning the nested oids are stored in nested_oids
- * on rel->fdw_private when appends are ordered.
  */
 static Chunk **
 get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
@@ -1088,7 +1112,7 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	bool reverse;
 	int order_attno;
 
-	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
+	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(ht);
 
 	/*
 	 * This is where the magic happens: use our HypertableRestrictInfo
@@ -1129,26 +1153,15 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	if (rel->fdw_private != NULL && should_order_append(root, rel, ht, &order_attno, &reverse))
 	{
 		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
-		List **nested_oids = NULL;
 
 		priv->appends_ordered = true;
 		priv->order_attno = order_attno;
-
-		/*
-		 * for space partitioning we need extra information about the
-		 * time slices of the chunks
-		 */
-		if (ht->space->num_dimensions > 1)
-		{
-			nested_oids = &priv->nested_oids;
-		}
 
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
 															  include_osm,
 															  NULL,
 															  reverse,
-															  nested_oids,
 															  num_chunks);
 	}
 
@@ -1221,7 +1234,7 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 	}
 
 	/*
-	 * DimensionRetrictInfo strategy should only be one BTGreaterStrategyNumber
+	 * DimensionRestrictInfo strategy should only be one BTGreaterStrategyNumber
 	 * or BTGreaterEqualStrategyNumber on the lower boundary and
 	 * BTLessStrategyNumber or BTLessEqualStrategyNumber on the upper boundary.
 	 *
@@ -1294,9 +1307,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	};
 	Index first_chunk_index = 0;
 
-	/* double check our permissions are valid */
-	Assert(ht_relindex != (Index) parse->resultRelation);
-
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 	/* check join_level bookkeeping is balanced */
@@ -1343,7 +1353,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Add the information about chunks to the baserel info cache for
 		 * classify_relation().
 		 */
-		ts_add_baserel_cache_entry_for_chunk(chunks[i]->table_id, ht);
+		ts_add_baserel_cache_entry_for_chunk(chunks[i]->fd.relid, ht);
 	}
 
 	oldrelation = table_open(parent_oid, NoLock);
@@ -1357,7 +1367,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
 		Chunk *chunk = chunks[i];
-		Oid child_oid = chunk->table_id;
+		Oid child_oid = chunk->fd.relid;
 		Relation newrelation;
 		RangeTblEntry *childrte;
 		Index child_rtindex;
@@ -1379,14 +1389,19 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
-		/*
-		 * For compatibility with the old planner code that didn't create
-		 * per-chunk aliases, use the parent aliases. These aliases have only a
-		 * cosmetic function, and changing them would lead to EXPLAIN changes in
-		 * basically every test.
-		 */
-		childrte->alias = copyObject(ht_rte->alias);
-		childrte->eref = copyObject(ht_rte->eref);
+
+		if (!bms_is_member(ht_relindex, root->all_result_relids))
+		{
+			/*
+			 * For compatibility with the old planner code that didn't create
+			 * per-chunk aliases, use the parent aliases. These aliases have only a
+			 * cosmetic function, and changing them would lead to EXPLAIN changes in
+			 * basically every test.
+			 */
+
+			childrte->alias = copyObject(ht_rte->alias);
+			childrte->eref = copyObject(ht_rte->eref);
+		}
 
 		childrte->ctename = NULL;
 		if (first_chunk_index == 0)
@@ -1522,7 +1537,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 */
 		if (!IS_OSM_CHUNK(chunk))
 		{
-			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);
+			Assert(chunk->fd.relid == root->simple_rte_array[child_rtindex]->relid);
 			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunk;
 		}
 	}

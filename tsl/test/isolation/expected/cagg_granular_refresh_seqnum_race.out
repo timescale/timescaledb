@@ -1,0 +1,105 @@
+Parsed test spec with 7 sessions
+
+starting permutation: p_prime_insert p_prime_refresh s1_insert_a wp_enable r_refresh s2_insert_b wp_release s3_insert_c v_refresh v_check_cagg v_check_truth v_force v_recheck
+step p_prime_insert: INSERT INTO conditions VALUES ('2020-03-01 00:00+00', 'sensor_prime', 9);
+step p_prime_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+step s1_insert_a: INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+step wp_enable: SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0)); <waiting ...>
+step s2_insert_b: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
+step wp_release: SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: <... completed>
+step s3_insert_c: INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_c', 3);
+step v_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b    |Thu Jan 02 00:00:00 2020 UTC|  2
+sensor_c    |Fri Jan 03 00:00:00 2020 UTC|  3
+sensor_prime|Sun Mar 01 00:00:00 2020 UTC|  9
+
+step v_check_truth: 
+    SELECT sensor_id, time_bucket('1 day', time) AS bucket, avg(value)
+    FROM conditions GROUP BY sensor_id, bucket ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b    |Thu Jan 02 00:00:00 2020 UTC|  2
+sensor_c    |Fri Jan 03 00:00:00 2020 UTC|  3
+sensor_prime|Sun Mar 01 00:00:00 2020 UTC|  9
+
+step v_force: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', force => true, options => jsonb_build_object('buckets_per_batch', 0));
+step v_recheck: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b    |Thu Jan 02 00:00:00 2020 UTC|  2
+sensor_c    |Fri Jan 03 00:00:00 2020 UTC|  3
+sensor_prime|Sun Mar 01 00:00:00 2020 UTC|  9
+
+
+starting permutation: p_prime_insert p_prime_refresh s1_insert_a wp_pc_enable s2_insert_b r_refresh wp_pc_release s3_insert_c v_refresh v_check_cagg v_check_truth v_force v_recheck
+step p_prime_insert: INSERT INTO conditions VALUES ('2020-03-01 00:00+00', 'sensor_prime', 9);
+step p_prime_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+step s1_insert_a: INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+step wp_pc_enable: SELECT debug_waitpoint_enable('tenant_tracker_after_precommit_drain');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s2_insert_b: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2); <waiting ...>
+step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+step wp_pc_release: SELECT debug_waitpoint_release('tenant_tracker_after_precommit_drain');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s2_insert_b: <... completed>
+step s3_insert_c: INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_c', 3);
+step v_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b    |Thu Jan 02 00:00:00 2020 UTC|  2
+sensor_c    |Fri Jan 03 00:00:00 2020 UTC|  3
+sensor_prime|Sun Mar 01 00:00:00 2020 UTC|  9
+
+step v_check_truth: 
+    SELECT sensor_id, time_bucket('1 day', time) AS bucket, avg(value)
+    FROM conditions GROUP BY sensor_id, bucket ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b    |Thu Jan 02 00:00:00 2020 UTC|  2
+sensor_c    |Fri Jan 03 00:00:00 2020 UTC|  3
+sensor_prime|Sun Mar 01 00:00:00 2020 UTC|  9
+
+step v_force: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', force => true, options => jsonb_build_object('buckets_per_batch', 0));
+step v_recheck: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b    |Thu Jan 02 00:00:00 2020 UTC|  2
+sensor_c    |Fri Jan 03 00:00:00 2020 UTC|  3
+sensor_prime|Sun Mar 01 00:00:00 2020 UTC|  9
+

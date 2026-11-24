@@ -1,0 +1,149 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Test INSERT ... ON CONFLICT DO SELECT on hypertables (PG19+ feature)
+
+CREATE TABLE ht_ocs(
+    time timestamptz NOT NULL,
+    device int NOT NULL,
+    value float,
+    label text,
+    PRIMARY KEY (time)
+) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
+
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 10.0, 'a');
+INSERT INTO ht_ocs VALUES ('2024-01-02 01:00', 2, 20.0, 'b');
+
+-- Get-or-create: conflicting row is returned unchanged, no new tuple written
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 99, 99.0, 'x')
+ON CONFLICT (time) DO SELECT RETURNING *;
+
+-- No conflict: the freshly inserted row is returned
+INSERT INTO ht_ocs VALUES ('2024-01-03 01:00', 3, 30.0, 'c')
+ON CONFLICT (time) DO SELECT RETURNING *;
+
+-- Multi-value insert mixing new rows and conflicts, spanning several chunks
+INSERT INTO ht_ocs VALUES
+    ('2024-01-01 01:00', 1, 11.0, 'a2'),
+    ('2024-01-04 01:00', 4, 40.0, 'd'),
+    ('2024-01-02 01:00', 2, 22.0, 'b2')
+ON CONFLICT (time) DO SELECT RETURNING time, device, value;
+
+SELECT * FROM ht_ocs ORDER BY time;
+
+-- Projected RETURNING list
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z')
+ON CONFLICT (time) DO SELECT RETURNING device, value * 2 AS double_value;
+
+-- WHERE clause: returns the row only when the qual matches
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z')
+ON CONFLICT (time) DO SELECT WHERE ht_ocs.device = 1 RETURNING device;
+
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z')
+ON CONFLICT (time) DO SELECT WHERE ht_ocs.device = 12345 RETURNING device;
+
+-- Lock the conflicting row FOR UPDATE / FOR SHARE
+INSERT INTO ht_ocs VALUES ('2024-01-02 01:00', 2, 0, 'z')
+ON CONFLICT (time) DO SELECT FOR UPDATE RETURNING time, device;
+
+INSERT INTO ht_ocs VALUES ('2024-01-02 01:00', 2, 0, 'z')
+ON CONFLICT (time) DO SELECT FOR SHARE RETURNING time, device;
+
+-- RETURNING is mandatory for DO SELECT
+\set ON_ERROR_STOP 0
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z') ON CONFLICT (time) DO SELECT;
+\set ON_ERROR_STOP 1
+
+-- Chunk tuple descriptor differs from the hypertable root (dropped column).
+-- The column is dropped after the first chunk exists, so the new chunk below
+-- exercises the attribute-remapping path in the per-chunk ON CONFLICT setup.
+ALTER TABLE ht_ocs DROP COLUMN label;
+INSERT INTO ht_ocs VALUES ('2024-02-01 01:00', 5, 50.0);
+INSERT INTO ht_ocs VALUES ('2024-02-01 01:00', 6, 60.0)
+ON CONFLICT (time) DO SELECT RETURNING *;
+
+-- DO SELECT against a compressed chunk decompresses the conflicting batch so
+-- the existing row can be fetched and returned.
+ALTER TABLE ht_ocs SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('ht_ocs') c;
+
+SELECT ch AS "CHUNK" FROM show_chunks('ht_ocs', newer_than => '2024-01-01 00:00+00'::timestamptz, older_than => '2024-01-02 00:00+00'::timestamptz) ch \gset
+
+-- fully compressed: the uncompressed chunk is empty
+SELECT count(*) FROM ONLY :CHUNK;
+
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0)
+ON CONFLICT (time) DO SELECT RETURNING time, device, value;
+
+-- the conflicting batch was decompressed into the uncompressed chunk
+SELECT count(*) FROM ONLY :CHUNK;
+
+-- The conflicting compressed row must be returned unchanged, not duplicated
+SELECT count(*), min(value) FROM ht_ocs WHERE time = '2024-01-01 01:00';
+
+-- With enable_dml_decompression off the required decompression is refused
+SET timescaledb.enable_dml_decompression = off;
+\set ON_ERROR_STOP 0
+INSERT INTO ht_ocs VALUES ('2024-02-01 01:00', 6, 0)
+ON CONFLICT (time) DO SELECT RETURNING time, device;
+\set ON_ERROR_STOP 1
+RESET timescaledb.enable_dml_decompression;
+
+DROP TABLE ht_ocs;
+
+-- DO SELECT honors max_tuples_decompressed_per_dml_transaction: a conflict that
+-- needs to decompress a batch larger than the limit is refused.
+CREATE TABLE ocs_limit(
+    time timestamptz NOT NULL,
+    device int NOT NULL,
+    value float,
+    PRIMARY KEY (time, device)
+) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
+
+INSERT INTO ocs_limit
+SELECT '2024-01-01 01:00'::timestamptz + (g || ' second')::interval, 1, g
+FROM generate_series(1, 10) g;
+
+ALTER TABLE ocs_limit SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('ocs_limit') c;
+
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5;
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+INSERT INTO ocs_limit VALUES ('2024-01-01 01:00:01', 1, 0)
+ON CONFLICT (time, device) DO SELECT RETURNING device;
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
+
+DROP TABLE ocs_limit;
+
+-- Only the batch matching the insert's segmentby value is decompressed, not
+-- every batch in the chunk.
+CREATE TABLE ocs_batch(
+    time timestamptz NOT NULL,
+    device int NOT NULL,
+    value float,
+    PRIMARY KEY (time, device)
+) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
+
+-- three device segments, five rows each, all in one chunk -> three batches
+INSERT INTO ocs_batch
+SELECT '2024-01-01 01:00'::timestamptz + (g || ' second')::interval, d, g
+FROM generate_series(1, 5) g, generate_series(1, 3) d;
+
+ALTER TABLE ocs_batch SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('ocs_batch') c;
+SELECT ch AS "CHUNK" FROM show_chunks('ocs_batch') ch \gset
+
+-- fully compressed: the uncompressed chunk is empty
+SELECT count(*) FROM ONLY :CHUNK;
+
+-- conflict on device 1 only decompresses that segment's batch (5 of 15 rows)
+INSERT INTO ocs_batch VALUES ('2024-01-01 01:00:01', 1, 0)
+ON CONFLICT (time, device) DO SELECT RETURNING device;
+
+SELECT count(*) FROM ONLY :CHUNK;
+
+DROP TABLE ocs_batch;

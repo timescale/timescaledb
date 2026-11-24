@@ -216,7 +216,7 @@ step "WP_after_materialization_release"
 session "R1"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     INSERT INTO cancelpid VALUES (pg_backend_pid())
     ON CONFLICT (pid) DO NOTHING;
@@ -236,6 +236,10 @@ step "R1_refresh3"
 step "R1_drop"
 {
     DROP MATERIALIZED VIEW cond_10;
+}
+step "R1_done"
+{
+    SELECT 1 AS done;
 }
 
 ## generate invalidation that has overlaps for R1_refresh and R2_refresh
@@ -519,8 +523,11 @@ permutation "WP_after_materialization_enable" "R1_refresh"("WP_after_materializa
 # Refresh [60, 70) is expected to materialize its own range without touching new materialization logs for the same range.
 permutation "WP_after_enable" "R6_materialization_logs" "R1_refresh3" "R6_materialization_logs" "RI2_invalidation" "R2_refresh_left" "R6_materialization_logs" "WP_after_release" "R6_materialization_logs"
 
-# Adjacent ranges [50, 60) and [60, 70) can proceed concurrently without blocking each other
-permutation "WP_before_enable" "R6_materialization_logs" "R1_refresh3" "R3_refresh_adjacent" "R6_materialization_logs" "WP_before_release" "S1_select" "R6_materialization_logs"
+# Adjacent ranges [50, 60) and [60, 70) can be refreshed concurrently. Both
+# refreshes update the watermark at the end, so R1 can briefly wait for R3
+# there. Run R1_done in R1's session so that both refreshes are reported before
+# S1_select, and report R3 after R1 to keep the output order stable.
+permutation "WP_before_enable" "R6_materialization_logs" "R1_refresh3" "R3_refresh_adjacent"("R1_refresh3") "R6_materialization_logs" "WP_before_release" "R1_done" "S1_select" "R6_materialization_logs"
 
 # Block R1 refresh [60, 70) at Txn3 and R2 refresh [15, 55) at Txn2, right before both tries to read materialization invalidations of the same CAgg
 # They should run concurrently after releasing the lock on continuous_aggs_materialization_invalidation_log table

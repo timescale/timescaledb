@@ -10,19 +10,14 @@ name: LLM fuzzer
     branches:
       - main
       - trigger/llm-fuzzer
-  pull_request:
 
 env:
   PG_SRC_DIR: "pgbuild"
   PG_INSTALL_DIR: "postgresql"
-  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
-  CC: "clang-15"
-  # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
-  # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
-  # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
-  # clang CFLAGS
-  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
-  CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  extra_packages: "clang-19 llvm-19 llvm-19-dev llvm-19-tools"
+  CC: "clang-19"
+  CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
 
   # We do not link libasan dynamically to avoid problems with libdl and our libraries.
   # clang does this by default, but we need to explicitly state that for gcc.
@@ -43,29 +38,38 @@ env:
     print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
+  # These extensions can be used by the fuzzer to simulate OSM chunks and test
+  # logical decoding.
   EXTENSIONS: "postgres_fdw test_decoding"
 
 jobs:
   config:
     runs-on: ubuntu-latest
-    env:
-        key: ${{ secrets.ANTHROPIC_API_KEY }}
     outputs:
-      pg_latest: ${{ steps.setter.outputs.PG18_LATEST
-        && fromJson(steps.setter.outputs.PG18_LATEST)
-        || '' }}
+      have_key: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
+      should_run: >-
+        ${{ github.event_name != 'pull_request'
+          || (!contains(github.event.pull_request.labels.*.name, 'skip-ci')
+            && steps.filter.outputs.src == 'true') }}
+
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
     - name: Read configuration
-      if: env.key
       id: setter
       run: python .github/gh_config_reader.py
 
+    - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      id: filter
+      with:
+        filters: .github/filters.yaml
+
   fuzzer:
-    if: needs.config.outputs.pg_latest
+    if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     needs: config
     permissions:
       contents: read
@@ -79,17 +83,32 @@ jobs:
             display_name: "Internal Program Errors"
           - oracle: "optimizations"
             display_name: "Optimizations ON-OFF"
+          - oracle: "hypertable"
+            display_name: "Hypertable ON-OFF"
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        sudo sh -c "echo 'Acquire::Retries \"10\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::http::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::https::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::By-Hash \"yes\";' >> /etc/apt/apt.conf.d/99retries"
+
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get install ccache cmake flex bison systemd-coredump gdb \
-          jq postgresql-client ${{ env.extra_packages }}
+        sudo apt-get install ccache cmake flex bison icu-devtools systemd-coredump \
+          gdb jq postgresql-client ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 200
 
@@ -118,7 +137,7 @@ jobs:
     # leading to a tainted cache
     - name: Restore PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       id: cache-postgresql
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "llm-fuzzer-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
@@ -149,7 +168,7 @@ jobs:
 
     - name: Save PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
@@ -179,7 +198,7 @@ jobs:
         make -C build install
 
     - name: Install Claude Code
-      run: npm install -g @anthropic-ai/claude-code@2.1.104
+      run: npm install -g @anthropic-ai/claude-code@2.1.215
 
     - name: LLM Fuzzing
       id: llm-fuzzing
@@ -199,7 +218,7 @@ jobs:
         rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 15.00 --dangerously-skip-permissions \
-          --model opus[1m] --effort high \
+          --model claude-opus-4-6[1m] --effort high \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
 
@@ -222,8 +241,8 @@ jobs:
         jq -r 'select(.type == "result") | "## ${{ matrix.display_name }} Fuzzer\n\n"
           + (.result // "No result produced.")
           + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
-          ${{ runner.temp }}/claude-execution-output.json \
-          >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          ${{ runner.temp }}/claude-execution-output.json 2>/dev/null \
+            | tee -a ~/fuzzer-summary.txt >> "$GITHUB_STEP_SUMMARY" || true
 
         if [ -f ~/llm-fuzzer-repro.sql ]; then
           printf '\n## Reproducer\n\n```sql\n' >> "$GITHUB_STEP_SUMMARY"
@@ -258,7 +277,7 @@ jobs:
 
     - name: Restore clean PostgreSQL build
       if: steps.repro.outputs.found == 'true'
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
@@ -267,9 +286,17 @@ jobs:
       if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
-        cd ~/$PG_SRC_DIR && make install
+
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in ${EXTENSIONS}; do
+          make -C contrib/${ext} install
+        done
+        ~/$PG_INSTALL_DIR/bin/pg_config --version
+
         cd $GITHUB_WORKSPACE
         git checkout -f ${{ github.sha }}
+        git reset --hard
         git clean -fd
         make -j$(getconf _NPROCESSORS_ONLN) -C build install
 
@@ -308,13 +335,28 @@ jobs:
         psql -c "create database repro_database owner repro_user"
 
         export PGDATABASE=repro_database
+        psql -c "create extension postgres_fdw"
+        psql -c "grant usage on foreign data wrapper postgres_fdw to repro_user"
+
         export PGUSER=repro_user
-        psql -c "create extension timescaledb;"
+        psql -c "create extension timescaledb"
 
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
+        sed -E -i \
+            -e '/^[[:space:]]*(set|reset)[[:space:]].*parallel/Id' \
+            -e '/^[[:space:]]*reset[[:space:]]+all[[:space:]]*;/Id' \
+            restricted-repro.sql
 
-        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql &> repro_result.txt
+        PSQLRC=oracle-psqlrc
+        export PSQLRC
+        echo "
+          \set QUIET on
+          \set ON_ERROR_STOP on
+          set client_min_messages = error;
+        " > "${PSQLRC}"
+
+        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql &> ~/repro-result.txt
 
         psql -c "select 1;"
 
@@ -323,10 +365,10 @@ jobs:
     - name: Add repro result to summary
       if: always() && steps.repro.outputs.found == 'true'
       run: |
-        if [ -s repro_result.txt ]
+        if [ -s ~/repro-result.txt ]
         then
             printf '\n## Result\n\n' >> "$GITHUB_STEP_SUMMARY"
-            head -100 repro_result.txt >> "$GITHUB_STEP_SUMMARY"
+            head -100 ~/repro-result.txt >> "$GITHUB_STEP_SUMMARY"
         fi
 
     # The jq --exit-code option is broken with select() on jq-1.6 which we see
@@ -421,11 +463,11 @@ jobs:
         name: ${{ matrix.display_name }} Reproduction Details
         path: |
           result*
-          repro_result.txt
+          ~/repro-result.txt
         if-no-files-found: ignore
 
     - name: Upload results to the database
-      if: always() && steps.repro.outputs.found == 'true'
+      if: always()
       env:
         JOB_NAME: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}

@@ -97,7 +97,7 @@ TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark);
  * materialized data and real-time data in the UNION query.
  *
  * The watermark is stored into `_timescaledb_catalog.continuous_aggs_watermark`
- * catalog table by the `refresh_continuous_agregate` procedure. It is defined
+ * catalog table by the `refresh_continuous_aggregate` procedure. It is defined
  * as the end of the last (highest) bucket in the materialized hypertable of a
  * continuous aggregate.
  *
@@ -205,7 +205,6 @@ ts_cagg_watermark_insert(Hypertable *mat_ht, int64 watermark, bool watermark_isn
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_continuous_aggs_watermark];
 	bool nulls[Natts_continuous_aggs_watermark] = { false };
-	CatalogSecurityContext sec_ctx;
 
 	/* if trying to insert a NULL watermark then get the MIN value for the time dimension */
 	if (watermark_isnull)
@@ -225,9 +224,7 @@ ts_cagg_watermark_insert(Hypertable *mat_ht, int64 watermark, bool watermark_isn
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_watermark_watermark)] =
 		Int64GetDatum(watermark);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	table_close(rel, NoLock);
 }

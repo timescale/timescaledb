@@ -65,7 +65,8 @@ ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
 			ts_array_equal(ht->fd.orderby_desc, chunk->fd.orderby_desc)) &&
 		   (ht->fd.orderby_nullsfirst == NULL ||
 			ts_array_equal(ht->fd.orderby_nullsfirst, chunk->fd.orderby_nullsfirst)) &&
-		   (ht->fd.index == NULL || ts_sparse_index_equal(ht->fd.index, chunk->fd.index)) &&
+		   (ts_can_set_default_sparse_index(ht) ||
+			ts_sparse_index_equal(ht->fd.index, chunk->fd.index)) &&
 		   (ht->fd.codec_column == NULL ||
 			(ts_array_equal(ht->fd.codec_column, chunk->fd.codec_column) &&
 			 ts_array_equal(ht->fd.codec_opclass, chunk->fd.codec_opclass)));
@@ -256,7 +257,6 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 							   ArrayType *codec_column, ArrayType *codec_opclass)
 {
 	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
 	Relation rel;
 	FormData_compression_settings fd;
 
@@ -286,9 +286,7 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_SETTINGS), RowExclusiveLock);
 
 	HeapTuple new_tuple = compression_settings_formdata_make_tuple(&fd, RelationGetDescr(rel));
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 
 	table_close(rel, RowExclusiveLock);
@@ -1004,14 +1002,11 @@ compression_settings_tuple_update(TupleInfo *ti, void *data)
 {
 	CompressionSettings *settings = data;
 	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
 
 	new_tuple =
 		compression_settings_formdata_make_tuple(&settings->fd, ts_scanner_get_tupledesc(ti));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	return SCAN_DONE;
 }
@@ -1206,9 +1201,10 @@ ts_accept_for_segmentby(CompressionSettings *settings, Form_pg_attribute attr)
 
 	return false;
 }
+
 /* Sparse indexes are only set by default when no user configuration exists */
 bool
-ts_can_set_default_sparse_index(CompressionSettings *settings)
+ts_can_set_default_sparse_index(const CompressionSettings *settings)
 {
 	return (settings->fd.index == NULL) ||
 		   !ts_jsonb_has_key_value_str_field(settings->fd.index,

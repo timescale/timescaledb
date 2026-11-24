@@ -118,6 +118,24 @@ ts_hyperspace_get_dimension_by_name(const Hyperspace *hs, DimensionType type, co
 	return ts_hyperspace_get_mutable_dimension_by_name((Hyperspace *) hs, type, name);
 }
 
+const Dimension *
+ts_hyperspace_get_dimension_by_attno(const Hyperspace *hs, DimensionType type, AttrNumber attno)
+{
+	int i;
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		const Dimension *dim = &hs->dimensions[i];
+
+		if ((type == DIMENSION_TYPE_ANY || dim->type == type) && dim->column_attno == attno)
+		{
+			return dim;
+		}
+	}
+
+	return NULL;
+}
+
 Dimension *
 ts_hyperspace_get_mutable_dimension(Hyperspace *hs, DimensionType type, Index n)
 {
@@ -669,7 +687,6 @@ dimension_scan_update(int32 dimension_id, tuple_found_func tuple_found, void *da
 static ScanTupleResult
 dimension_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
 	bool isnull;
 	Datum dimension_id = slot_getattr(ti->slot, Anum_dimension_id, &isnull);
 	bool *delete_slices = data;
@@ -682,9 +699,7 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 		ts_dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id));
 	}
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }
@@ -717,7 +732,6 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 	Dimension *dim = data;
 	Datum values[Natts_dimension];
 	bool nulls[Natts_dimension];
-	CatalogSecurityContext sec_ctx;
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	HeapTuple new_tuple;
@@ -771,9 +785,7 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 	}
 
 	new_tuple = heap_form_tuple(ts_scanner_get_tupledesc(ti), values, nulls);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 
 	if (should_free)
@@ -791,7 +803,6 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_dimension];
 	bool nulls[Natts_dimension] = { false };
-	CatalogSecurityContext sec_ctx;
 	int32 dimension_id;
 
 	values[AttrNumberGetAttrOffset(Anum_dimension_hypertable_id)] = Int32GetDatum(hypertable_id);
@@ -838,11 +849,9 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	/* no compress interval length by default */
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = true;
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	dimension_id = Int32GetDatum(ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION));
 	values[AttrNumberGetAttrOffset(Anum_dimension_id)] = dimension_id;
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return dimension_id;
 }
@@ -1697,6 +1706,14 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 
 	info->ht = ts_hypertable_cache_get_cache_and_entry(info->table_relid, CACHE_FLAG_NONE, &hcache);
 
+	if (ts_chunk_get_osm_chunk_id(info->ht->fd.id) != INVALID_CHUNK_ID)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("multiple dimensions not supported for hypertables with data tiering "
+						"enabled")));
+	}
+
 	if (info->num_slices_is_set && OidIsValid(info->chunk_interval.type))
 	{
 		ereport(ERROR,
@@ -1948,7 +1965,7 @@ ts_dimension_add_general(PG_FUNCTION_ARGS)
 {
 	DimensionInfo *info = NULL;
 	GETARG_NOTNULL_POINTER(info, 1, "dimension", DimensionInfo);
-	info->table_relid = PG_GETARG_OID(0);
+	GETARG_NOTNULL_OID(info->table_relid, 0, "hypertable");
 	if (PG_GETARG_BOOL(2))
 	{
 		info->if_not_exists = true;

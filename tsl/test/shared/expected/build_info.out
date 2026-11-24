@@ -11,6 +11,13 @@ SELECT pg_typeof(commit_tag) AS commit_tag_type,
 -----------------+------------------+--------------------+--------------------------
  text            | text             |                 40 | timestamp with time zone
 
+-- Test that the old version of this function gives deprecation warning.
+SELECT pg_typeof(_timescaledb_internal.get_git_commit());
+WARNING:  function _timescaledb_internal.get_git_commit() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
+ pg_typeof 
+-----------
+ record
+
 SELECT extname, obj_description(oid, 'pg_extension') FROM pg_extension WHERE extname = 'timescaledb';
    extname   |                                    obj_description                                    
 -------------+---------------------------------------------------------------------------------------

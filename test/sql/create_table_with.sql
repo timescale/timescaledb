@@ -230,5 +230,19 @@ SELECT hypertable_name, time_interval
   WHERE hypertable_name = 't_guc_uuid';
 ROLLBACK;
 
+-- explicitly disabling the hypertable option creates a plain postgres table
+-- other timescaledb options are ignored when the hypertable option is disabled
+BEGIN;
+
+CREATE TABLE t_plain(time timestamptz NOT NULL, device text, value float)
+    WITH (tsdb.hypertable = false, tsdb.partition_column = 'time',
+        tsdb.chunk_interval = '2 days', tsdb.columnstore);
+
+SELECT count(*) FROM timescaledb_information.hypertables
+WHERE hypertable_name = 't_plain';
+
+ROLLBACK;
+
 -- Cleanup
 RESET timescaledb.default_chunk_time_interval;
+

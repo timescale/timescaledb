@@ -8,6 +8,7 @@
 #include <postgres.h>
 #include <datatype/timestamp.h>
 #include <nodes/execnodes.h>
+#include <pgtime.h>
 
 /*
  * GapFillFetchState describes the state of subslot in GapFillState:
@@ -97,6 +98,7 @@ typedef struct GapFillState
 	/* arguments of the gapfill function call */
 	List *args;
 	bool have_timezone;
+	char tzname[TZ_STRLEN_MAX + 1];
 	int64 gapfill_start;
 	int64 gapfill_end;
 	/* bucket width for fixed-size buckets */

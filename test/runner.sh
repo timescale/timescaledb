@@ -84,19 +84,13 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
   ${PSQL} "$@" -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1 <<EOF
     SET client_min_messages=ERROR;
 
-    DO \$\$
-      BEGIN
-        IF current_setting('server_version_num')::int >= 150000 THEN
-          GRANT CREATE ON SCHEMA public TO ${TEST_PGUSER};
-          GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_DEFAULT_PERM_USER};
-          GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_DEFAULT_PERM_USER_2};
-          GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_1};
-          GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_2};
-          GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_3};
-          GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_4};
-        END IF;
-      END
-    \$\$ LANGUAGE PLPGSQL;
+    GRANT CREATE ON SCHEMA public TO ${TEST_PGUSER};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_DEFAULT_PERM_USER};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_DEFAULT_PERM_USER_2};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_1};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_2};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_3};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_4};
 
     ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_1} WITH CREATEDB CREATEROLE;

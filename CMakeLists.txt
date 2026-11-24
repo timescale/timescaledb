@@ -343,6 +343,19 @@ endif()
 
 find_package(Git)
 
+# If we have git installed, check if we're building from a repository. The
+# actual commit hashes are rechecked at build time.
+if(GIT_FOUND)
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    RESULT_VARIABLE _git_rev_parse_result
+    OUTPUT_QUIET ERROR_QUIET)
+  if(_git_rev_parse_result EQUAL 0)
+    set(GIT_COMMIT_INFO_FOUND TRUE)
+  endif()
+endif()
+
 # Check PostgreSQL version
 execute_process(
   COMMAND ${PG_CONFIG} --version
@@ -369,9 +382,9 @@ message(
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if(((${PG_VERSION_MAJOR} LESS "15") OR (${PG_VERSION_MAJOR} GREATER "18"))
+if(((${PG_VERSION_MAJOR} LESS "16") OR (${PG_VERSION_MAJOR} GREATER "19"))
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16, 17 and 18")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 16, 17, 18 and 19")
 endif()
 
 # Get PostgreSQL configuration from pg_config

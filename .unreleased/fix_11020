@@ -1,0 +1,1 @@
+Fixes: #11020 Create NOT NULL constraint on continuous aggregate materialization hypertables on PG18

@@ -13,10 +13,10 @@ step s3_lock_before_register:
     BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
 step s1_run_cagg1_refresh: 
-   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00+00', '2020-01-03 00:00:00+00');
+   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00+00', '2020-01-03 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step s2_run_cagg2_overlap_refresh: 
-   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00');
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step s4_enable_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
@@ -39,8 +39,8 @@ step s5_show_running_jobs:
 
 cagg_name|     start_range|       end_range|start_ts_utc            |end_ts_utc              
 ---------+----------------+----------------+------------------------+------------------------
-cagg_1   |1577980800000000|1578009600000000|Thu Jan 02 16:00:00 2020|Fri Jan 03 00:00:00 2020
-cagg_2   |1578153600000000|1578182400000000|Sat Jan 04 16:00:00 2020|Sun Jan 05 00:00:00 2020
+cagg_1   |1577836800000000|1578009600000000|Wed Jan 01 00:00:00 2020|Fri Jan 03 00:00:00 2020
+cagg_2   |1578009600000000|1578182400000000|Fri Jan 03 00:00:00 2020|Sun Jan 05 00:00:00 2020
 
 step s4_release_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
@@ -66,10 +66,10 @@ step s3_lock_before_register:
     BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
 step s1_run_cagg2_overlap_refresh: 
-   CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00+00', '2020-01-07 00:00:00+00');
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00+00', '2020-01-07 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step s2_run_cagg2_overlap_refresh: 
-   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00');
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step s4_enable_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
@@ -92,15 +92,14 @@ step s5_show_running_jobs:
 
 cagg_name|     start_range|       end_range|start_ts_utc            |end_ts_utc              
 ---------+----------------+----------------+------------------------+------------------------
-cagg_2   |1578153600000000|1578182400000000|Sat Jan 04 16:00:00 2020|Sun Jan 05 00:00:00 2020
-cagg_2   |1578268800000000|1578355200000000|Mon Jan 06 00:00:00 2020|Tue Jan 07 00:00:00 2020
+cagg_2   |1577836800000000|1578355200000000|Wed Jan 01 00:00:00 2020|Tue Jan 07 00:00:00 2020
 
 step s4_release_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
  <waiting ...>
 step s1_run_cagg2_overlap_refresh: <... completed>
-ERROR:  could not refresh continuous aggregate "cagg_2" due to a concurrent refresh
 step s2_run_cagg2_overlap_refresh: <... completed>
+ERROR:  could not refresh continuous aggregate "cagg_2" due to a concurrent refresh
 step s4_release_before_process_cagg_invalidations: <... completed>
 debug_waitpoint_release
 -----------------------
@@ -123,7 +122,7 @@ step s1_run_cagg2_nonoverlap_refresh:
    CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00+00', '2020-01-02 00:00:00+00');
  <waiting ...>
 step s2_run_cagg2_overlap_refresh: 
-   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00');
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step s4_enable_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
@@ -147,7 +146,7 @@ step s5_show_running_jobs:
 cagg_name|     start_range|       end_range|start_ts_utc            |end_ts_utc              
 ---------+----------------+----------------+------------------------+------------------------
 cagg_2   |1577836800000000|1577923200000000|Wed Jan 01 00:00:00 2020|Thu Jan 02 00:00:00 2020
-cagg_2   |1578153600000000|1578182400000000|Sat Jan 04 16:00:00 2020|Sun Jan 05 00:00:00 2020
+cagg_2   |1578009600000000|1578182400000000|Fri Jan 03 00:00:00 2020|Sun Jan 05 00:00:00 2020
 
 step s4_release_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');

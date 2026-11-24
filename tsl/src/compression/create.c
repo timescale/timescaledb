@@ -12,6 +12,7 @@
 #include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am_d.h>
+#include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_type.h>
@@ -30,12 +31,19 @@
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
+#include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/jsonb.h>
+#include <utils/lsyscache.h>
 #include <utils/rel.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/timestamp.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "bgw/job.h"
+#include "bgw_policy/compaction_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "chunk.h"
 #include "chunk_index.h"
@@ -45,8 +53,10 @@
 #include "create.h"
 #include "custom_type_cache.h"
 #include "dimension.h"
+#include "extension_constants.h"
 #include "foreach_ptr.h"
 #include "guc.h"
+#include "hypertable.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "trigger.h"
@@ -100,6 +110,10 @@ static void compression_settings_set_manually_for_alter(Hypertable *ht,
 static void create_default_composite_bloom(IndexInfo *index_info, Hypertable *ht,
 										   CompressionSettings *settings, JsonbInState *parse_state,
 										   TsBmsList *sparse_index_columns, bool *has_object);
+static Interval *direct_compress_default_schedule_interval(void);
+static void enable_direct_compress_policies(Hypertable *ht, Interval *schedule_interval,
+											Datum compress_after_datum, Oid compress_after_type);
+static void disable_direct_compress_policies(Hypertable *ht);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -123,7 +137,7 @@ NameData
 build_compressed_relation_name(const Chunk *chunk)
 {
 	NameData name;
-	int ret = snprintf(NameStr(name), NAMEDATALEN, "%s_compressed", NameStr(chunk->fd.table_name));
+	int ret = snprintf(NameStr(name), NAMEDATALEN, "%s_compressed", ts_chunk_get_table_name(chunk));
 	if (ret < 0 || ret >= NAMEDATALEN)
 	{
 		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk name too long")));
@@ -906,6 +920,56 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
 }
 
 /*
+ * Check the metadata of every batch in a table that gets attached as the
+ * compressed chunk. The count column drives the decompression of a batch, so a
+ * NULL or out-of-range count makes the chunk unreadable. The compressed data
+ * itself is not checked, that would require decompressing all of it.
+ */
+static void
+validate_compressed_chunk_metadata(Oid table_id)
+{
+	Relation rel = table_open(table_id, AccessShareLock);
+	AttrNumber count_attno = get_attnum(table_id, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+	TupleTableSlot *slot = table_slot_create(rel, NULL);
+	TableScanDesc scan = table_beginscan_compat(rel, GetActiveSnapshot(), 0, NULL, 0);
+
+	Assert(AttributeNumberIsValid(count_attno));
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		bool isnull;
+		Datum value = slot_getattr(slot, count_attno, &isnull);
+
+		if (isnull)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_CORRUPTED),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("Column \"%s\" is NULL.", COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
+		}
+
+		int32 count = DatumGetInt32(value);
+		if (count <= 0 || count > GLOBAL_MAX_ROWS_PER_COMPRESSION)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_CORRUPTED),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("Column \"%s\" has value %d but a value between 1 and %d was "
+							   "expected.",
+							   COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+							   count,
+							   GLOBAL_MAX_ROWS_PER_COMPRESSION)));
+		}
+	}
+
+	table_endscan(scan);
+	ExecDropSingleTupleTableSlot(slot);
+	table_close(rel, NoLock);
+}
+
+/*
  * Create compress chunk for specific table.
  *
  * If table_id is InvalidOid, create a new table.
@@ -928,7 +992,7 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	 * on which to base this decision. We simply pick the same tablespace as the uncompressed chunk
 	 * for now.
 	 */
-	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
+	tablespace_oid = get_rel_tablespace(src_chunk->fd.relid);
 	if (!settings_provided)
 	{
 		settings = ts_compression_settings_get(src_chunk->hypertable_relid);
@@ -964,8 +1028,109 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 
 	if (!OidIsValid(table_id))
 	{
-		List *column_defs = build_columndefs(settings, src_chunk->table_id);
+		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
 		table_id = compression_table_create(src_chunk, column_defs, tablespace_oid, settings);
+	}
+	else
+	{
+		/*
+		 * An existing relation was supplied as the compressed chunk. It has to
+		 * be a plain table.
+		 */
+		char relkind = get_rel_relkind(table_id);
+		if (relkind != RELKIND_RELATION)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail_relkind_not_supported(relkind)));
+		}
+
+		/*
+		 * The table must not be a hypertable.
+		 */
+		if (ts_is_hypertable(table_id))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("The relation is a hypertable.")));
+		}
+
+		/*
+		 * The table must not be a chunk.
+		 */
+		if (ts_chunk_get_by_relid(table_id, false) != NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("The relation is a chunk.")));
+		}
+
+		/*
+		 * The table must not already be the compressed chunk of another
+		 * chunk.
+		 */
+		Oid owner_relid = ts_relation_get_uncompressed_relid(table_id);
+		if (OidIsValid(owner_relid) && owner_relid != src_chunk->fd.relid)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_IN_USE),
+					 errmsg("relation \"%s\" is not a valid compressed chunk",
+							get_rel_name(table_id)),
+					 errdetail("The relation is already the compressed chunk of \"%s\".",
+							   get_rel_name(owner_relid))));
+		}
+
+		/*
+		 * Make sure it has every column the settings require, otherwise a
+		 * later query over the chunk fails when a missing column is looked up.
+		 */
+		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
+		ListCell *lc;
+		foreach (lc, column_defs)
+		{
+			ColumnDef *coldef = lfirst_node(ColumnDef, lc);
+			AttrNumber attno = get_attnum(table_id, coldef->colname);
+			if (attno == InvalidAttrNumber)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("relation \"%s\" is not a valid compressed chunk",
+								get_rel_name(table_id)),
+						 errdetail("Column \"%s\" is missing.", coldef->colname)));
+			}
+
+			/*
+			 * The expected type is encoded in the column definition: segmentby
+			 * columns keep their original type, the data columns are compressed
+			 * data, and the metadata columns have their fixed types.
+			 */
+			Oid expected_typid = typenameTypeId(NULL, coldef->typeName);
+			Oid actual_typid = get_atttype(table_id, attno);
+			if (actual_typid != expected_typid)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("relation \"%s\" is not a valid compressed chunk",
+								get_rel_name(table_id)),
+						 errdetail("Column \"%s\" has type %s but %s was expected.",
+								   coldef->colname,
+								   format_type_be(actual_typid),
+								   format_type_be(expected_typid))));
+			}
+		}
+
+		/*
+		 * The data comes from the outside, make sure that the batches have
+		 * sane metadata before the table is attached. Otherwise the chunk
+		 * could neither be queried nor decompressed anymore.
+		 */
+		validate_compressed_chunk_metadata(table_id);
 	}
 
 	if (!OidIsValid(table_id))
@@ -976,7 +1141,7 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	/* Materialize current compression settings for this chunk */
 	if (!settings_provided)
 	{
-		ts_compression_settings_materialize(settings, src_chunk->table_id, table_id);
+		ts_compression_settings_materialize(settings, src_chunk->fd.relid, table_id);
 	}
 	else
 	{
@@ -1195,7 +1360,13 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 				 errmsg("cannot disable columnstore on hypertable with columnstore chunks")));
 	}
 
+	if (TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
+	{
+		disable_direct_compress_policies(ht);
+	}
+
 	ts_hypertable_unset_compression(ht);
+	ts_hypertable_unset_direct_compress(ht);
 	ts_compression_settings_delete(ht->main_table_relid);
 
 	return true;
@@ -1350,6 +1521,112 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 	return ts_hypertable_set_compress_interval(ht, compress_interval_usec);
 }
 
+static Interval *
+direct_compress_default_schedule_interval(void)
+{
+	return DatumGetIntervalP(
+		DirectFunctionCall3(interval_in, CStringGetDatum("1 minute"), InvalidOid, -1));
+}
+
+/*
+ * Creates the compaction and compression policies that back direct compress:
+ * compaction to defragment the small batches direct compress writes, and
+ * compression as a backstop for handling any uncompressed tuples.
+ * Both run on the same schedule, and the compression policy is set
+ * to skip unordered chunks so it doesn't fight the compaction policy for the
+ * same chunk. If either policy already exists it is updated to the required
+ * schedule and config instead of being left alone.
+ */
+static void
+enable_direct_compress_policies(Hypertable *ht, Interval *schedule_interval,
+								Datum compress_after_datum, Oid compress_after_type)
+{
+	policy_compaction_add_internal(ht->main_table_relid,
+								   true /* if_not_exists */,
+								   schedule_interval,
+								   DT_NOBEGIN,
+								   false /* fixed_schedule */,
+								   NULL /* timezone */,
+								   0 /* max_chunks */,
+								   0 /* max_batches */,
+								   NULL /* inactive_for */);
+
+	List *compaction_jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPACTION_PROC_NAME,
+																	  FUNCTIONS_SCHEMA_NAME,
+																	  ht->fd.id);
+	Assert(list_length(compaction_jobs) == 1);
+	BgwJob *compaction_job = linitial(compaction_jobs);
+	compaction_job->fd.schedule_interval = *schedule_interval;
+	ts_bgw_job_update_by_id(compaction_job->fd.id, compaction_job);
+
+	policy_compression_add_internal(ht->main_table_relid,
+									compress_after_datum,
+									compress_after_type,
+									NULL /* created_before */,
+									schedule_interval,
+									true /* user_defined_schedule_interval */,
+									true /* if_not_exists */,
+									false /* fixed_schedule */,
+									DT_NOBEGIN,
+									NULL /* timezone */);
+
+	List *compression_jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
+																	   FUNCTIONS_SCHEMA_NAME,
+																	   ht->fd.id);
+	Assert(list_length(compression_jobs) == 1);
+	BgwJob *compression_job = linitial(compression_jobs);
+
+	JsonbInState merge_state = { 0 };
+	pushJsonbValueCompat(&merge_state, WJB_BEGIN_OBJECT, NULL);
+	switch (compress_after_type)
+	{
+		case INTERVALOID:
+			ts_jsonb_add_interval(&merge_state,
+								  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+								  DatumGetIntervalP(compress_after_datum));
+			break;
+		case INT2OID:
+			ts_jsonb_add_int64(&merge_state,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+							   DatumGetInt16(compress_after_datum));
+			break;
+		case INT4OID:
+			ts_jsonb_add_int64(&merge_state,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+							   DatumGetInt32(compress_after_datum));
+			break;
+		case INT8OID:
+			ts_jsonb_add_int64(&merge_state,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+							   DatumGetInt64(compress_after_datum));
+			break;
+		default:
+			elog(ERROR, "unsupported compress_after type for direct compress");
+	}
+	ts_jsonb_add_bool(&merge_state, "recompress_unordered", false);
+	pushJsonbValueCompat(&merge_state, WJB_END_OBJECT, NULL);
+	Jsonb *config_merge = JsonbValueToJsonb(merge_state.result);
+
+	compression_job->fd.schedule_interval = *schedule_interval;
+	compression_job->fd.config =
+		DatumGetJsonbP(DirectFunctionCall2(jsonb_concat,
+										   JsonbPGetDatum(compression_job->fd.config),
+										   JsonbPGetDatum(config_merge)));
+	ts_bgw_job_update_by_id(compression_job->fd.id, compression_job);
+}
+
+/*
+ * Removes the compaction and compression policies that direct compress
+ * created. Called whenever direct compress is turned off, since the
+ * policies exist to support it and shouldn't keep running once it's gone.
+ */
+static void
+disable_direct_compress_policies(Hypertable *ht)
+{
+	policy_compaction_remove_internal(ht->main_table_relid, true /* if_exists */);
+	policy_compression_remove_internal(ht->main_table_relid, true /* if_exists */);
+}
+
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -1443,6 +1720,56 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		validate_existing_indexes(ht, settings);
 
 		ts_hypertable_set_compression(ht);
+	}
+
+	if (!with_clause_options[AlterTableFlagDirectCompressScheduleInterval].is_default &&
+		with_clause_options[AlterTableFlagDirectCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"direct_compress_schedule_interval\" requires \"direct_compress\" to be "
+						"set in the same clause")));
+	}
+
+	if (!with_clause_options[AlterTableFlagDirectCompress].is_default)
+	{
+		bool enable_direct_compress =
+			DatumGetBool(with_clause_options[AlterTableFlagDirectCompress].parsed);
+
+		if (enable_direct_compress)
+		{
+			/* columnstore is enabled unconditionally above if it wasn't already, so this always
+			 * holds by this point */
+			Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+
+			Interval *schedule_interval =
+				!with_clause_options[AlterTableFlagDirectCompressScheduleInterval].is_default ?
+					DatumGetIntervalP(
+						with_clause_options[AlterTableFlagDirectCompressScheduleInterval].parsed) :
+					direct_compress_default_schedule_interval();
+
+			/* Use the chunk interval as the compression interval, same as the
+			 * default compression policy added by CREATE TABLE ... WITH */
+			const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+			Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
+			if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
+			{
+				compress_after_type = INTERVALOID;
+			}
+			Datum compress_after_datum =
+				ts_internal_to_interval_value(time_dim->fd.interval_length, compress_after_type);
+
+			ts_hypertable_set_direct_compress(ht);
+			enable_direct_compress_policies(ht,
+											schedule_interval,
+											compress_after_datum,
+											compress_after_type);
+		}
+		else if (TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
+		{
+			disable_direct_compress_policies(ht);
+			ts_hypertable_unset_direct_compress(ht);
+		}
 	}
 
 	/*
@@ -1584,19 +1911,9 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
 	int32 confidence = -1;
-	Oid default_segmentby_fn = ts_guc_default_segmentby_fn_oid();
 
-	if (!OidIsValid(default_segmentby_fn))
-	{
-		elog(LOG_SERVER_ONLY,
-			 "segment_by default: hypertable=\"%s\" columns=\"\" function: \"\" confidence=-1",
-			 get_rel_name(ht->main_table_relid));
-		return NULL;
-	}
-
-	/* Lock down search_path */
-	int save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
+	TSSecurityContext secctx;
+	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), 0, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -1605,9 +1922,7 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 					 " FROM jsonb_array_elements_text(seg_by->'columns') t(x))::text[], "
 					 " seg_by->>'message', "
 					 " (seg_by->>'confidence')::int "
-					 "FROM %s.%s(%d) seg_by",
-					 quote_identifier(get_namespace_name(get_func_namespace(default_segmentby_fn))),
-					 quote_identifier(get_func_name(default_segmentby_fn)),
+					 "FROM " FUNCTIONS_SCHEMA_NAME ".get_segmentby_defaults(%d) seg_by",
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -1617,7 +1932,7 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
-	if (res < 0)
+	if (res != SPI_OK_SELECT)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -1651,8 +1966,7 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	pfree(command.data);
 
-	/* Reset search path since this can be executed as part of a larger transaction */
-	AtEOXact_GUC(false, save_nestlevel);
+	ts_security_context_exit(&secctx);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
@@ -1664,11 +1978,10 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 	ts_array_append_stringinfo(column_res, &result);
 
 	elog(LOG_SERVER_ONLY,
-		 "segment_by default: hypertable=\"%s\" columns=\"%s\" function: \"%s.%s\" confidence=%d",
+		 "segment_by default: hypertable=\"%s\" columns=\"%s\" function: \"" FUNCTIONS_SCHEMA_NAME
+		 ".get_segmentby_defaults\" confidence=%d",
 		 get_rel_name(ht->main_table_relid),
 		 result.data,
-		 get_namespace_name(get_func_namespace(default_segmentby_fn)),
-		 get_func_name(default_segmentby_fn),
 		 confidence);
 	pfree(result.data);
 	return column_res;
@@ -1694,22 +2007,9 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	Oid types[] = { TEXTARRAYOID };
 	Datum values[] = { PointerGetDatum(segmentby) };
 	char nulls[] = { segmentby == NULL ? 'n' : 'v' };
-	Oid orderby_fn = ts_guc_default_orderby_fn_oid();
 
-	if (!OidIsValid(orderby_fn))
-	{
-		/* fallback to original logic */
-		OrderBySettings obs = (OrderBySettings){ 0 };
-		obs = add_time_to_order_by_if_not_included(obs, segmentby, ht);
-		elog(LOG_SERVER_ONLY,
-			 "order_by default: hypertable=\"%s\" function=\"\" confidence=-1",
-			 get_rel_name(ht->main_table_relid));
-		return obs;
-	}
-
-	/* Lock down search_path */
-	int save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
+	TSSecurityContext secctx;
+	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), 0, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -1719,9 +2019,8 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 					 "t(x))::text, "
 					 " seg_by->>'message', "
 					 " (seg_by->>'confidence')::int "
-					 "FROM %s.%s(%d, coalesce($1, array[]::text[])) seg_by",
-					 quote_identifier(get_namespace_name(get_func_namespace(orderby_fn))),
-					 quote_identifier(get_func_name(orderby_fn)),
+					 "FROM " FUNCTIONS_SCHEMA_NAME
+					 ".get_orderby_defaults(%d, coalesce($1, array[]::text[])) seg_by",
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -1736,7 +2035,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 								nulls,
 								true /* read_only */,
 								0 /*count*/);
-	if (res < 0)
+	if (res != SPI_OK_SELECT)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -1768,8 +2067,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 		confidence = DatumGetInt32(datum);
 	}
 
-	/* Reset search path since this can be executed as part of a larger transaction */
-	AtEOXact_GUC(false, save_nestlevel);
+	ts_security_context_exit(&secctx);
 
 	pfree(command.data);
 
@@ -1789,11 +2087,10 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	}
 
 	elog(LOG_SERVER_ONLY,
-		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"%s.%s\" confidence=%d",
+		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"" FUNCTIONS_SCHEMA_NAME
+		 ".get_orderby_defaults\" confidence=%d",
 		 get_rel_name(ht->main_table_relid),
 		 orderby,
-		 get_namespace_name(get_func_namespace(orderby_fn)),
-		 get_func_name(orderby_fn),
 		 confidence);
 
 	if (*orderby == '\0')
@@ -2236,15 +2533,15 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		if (!OidIsValid(compressed_relid))
 		{
 			continue;
 		}
-		/* don't add column if it already exists */
+		/* don't add column to this chunk if the chunk has the column already */
 		if (get_attnum(compressed_relid, orig_def->colname) != InvalidAttrNumber)
 		{
-			return;
+			continue;
 		}
 		ColumnDef *coldef = build_columndef_singlecolumn(orig_def->colname, coloid);
 		CompressionSettings *settings =
@@ -2291,7 +2588,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		if (!OidIsValid(compressed_relid))
 		{
 			continue;
@@ -2408,7 +2705,7 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		if (!OidIsValid(compressed_relid))
 		{
 			continue;
@@ -2420,7 +2717,8 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 		ExecRenameStmt(compressed_col_stmt);
 
 		List *rename_from_to = NIL;
-		CompressionSettings *settings = ts_compression_settings_get(compressed_relid);
+		CompressionSettings *settings =
+			ts_compression_settings_get_by_compress_relid(compressed_relid);
 		if (!settings || settings->fd.index == NULL)
 		{
 			/* only lookup ht settings if we haven't already */
@@ -2588,10 +2886,11 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 	/* Add default compression policy when compression is enabled via CREATE TABLE WITH */
 	/* Use the chunk interval as the compression interval */
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Datum compress_after_datum = 0;
+	Oid compress_after_type = InvalidOid;
 	if (time_dim != NULL)
 	{
-		Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
-		Datum compress_after_datum;
+		compress_after_type = ts_dimension_get_partition_type(time_dim);
 		if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
 		{
 			compress_after_type = INTERVALOID;
@@ -2612,5 +2911,30 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 			false,								   /* fixed_schedule */
 			GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
 			NULL /* timezone */);
+	}
+
+	if (!with_clause_options[CreateTableFlagDirectCompressScheduleInterval].is_default &&
+		with_clause_options[CreateTableFlagDirectCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"direct_compress_schedule_interval\" requires \"direct_compress\" to be "
+						"set in the same clause")));
+	}
+
+	if (!with_clause_options[CreateTableFlagDirectCompress].is_default &&
+		DatumGetBool(with_clause_options[CreateTableFlagDirectCompress].parsed))
+	{
+		Interval *schedule_interval =
+			!with_clause_options[CreateTableFlagDirectCompressScheduleInterval].is_default ?
+				DatumGetIntervalP(
+					with_clause_options[CreateTableFlagDirectCompressScheduleInterval].parsed) :
+				direct_compress_default_schedule_interval();
+
+		ts_hypertable_set_direct_compress(ht);
+		enable_direct_compress_policies(ht,
+										schedule_interval,
+										compress_after_datum,
+										compress_after_type);
 	}
 }

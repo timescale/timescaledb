@@ -24,7 +24,7 @@
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "guc.h"
-#include "import/ts_explain.h"
+#include "import/commands/explain.h"
 #include "nodes/columnar_scan/batch_array.h"
 #include "nodes/columnar_scan/batch_queue_fifo.h"
 #include "nodes/columnar_scan/batch_queue_heap.h"
@@ -90,6 +90,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	chunk_state->decompress_context.chunk_status = list_nth_int(settings, DCS_ChunkStatus);
 	chunk_state->decompress_context.enable_bulk_decompression =
 		list_nth_int(settings, DCS_EnableBulkDecompression);
+	chunk_state->decompress_context.metadata_only = list_nth_int(settings, DCS_MetadataOnly);
 	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
@@ -98,6 +99,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	Assert(list_length(chunk_state->decompression_map) ==
 		   list_length(chunk_state->is_segmentby_column));
 
+	chunk_state->done_fetching_batches = false;
 	return (Node *) chunk_state;
 }
 
@@ -201,6 +203,7 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
 
+	chunk_state->done_fetching_batches = false;
 	ts_stats_compression_acc_init(&dcontext->observ_acc);
 
 	PlanState *ps = &node->ss.ps;
@@ -242,6 +245,12 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	 * Init the underlying compressed scan.
 	 */
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
+
+	/* Only the first row of a metadata only scan matters, so bound the sort below. */
+	if (dcontext->metadata_only)
+	{
+		ExecSetTupleBound(1, linitial(node->custom_ps));
+	}
 
 	/*
 	 * Count the actual data columns we have to decompress, skipping the
@@ -451,12 +460,13 @@ columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunction
 
 	bqfuncs->pop(bq, dcontext);
 
-	while (bqfuncs->needs_next_batch(bq))
+	while (!chunk_state->done_fetching_batches && bqfuncs->needs_next_batch(bq))
 	{
 		TupleTableSlot *subslot = ExecProcNode(linitial(chunk_state->csstate.custom_ps));
 		if (TupIsNull(subslot))
 		{
 			/* Won't have more compressed tuples. */
+			chunk_state->done_fetching_batches = true;
 			break;
 		}
 
@@ -491,6 +501,7 @@ static void
 columnar_scan_rescan(CustomScanState *node)
 {
 	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
+	chunk_state->done_fetching_batches = false;
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	bq->funcs->reset(bq);
@@ -582,6 +593,11 @@ columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 		if (dcontext->batch_sorted_merge)
 		{
 			ExplainPropertyBool("Batch Sorted Merge", dcontext->batch_sorted_merge, es);
+		}
+
+		if (dcontext->metadata_only)
+		{
+			ExplainPropertyBool("Metadata Only", dcontext->metadata_only, es);
 		}
 
 		if (dcontext->reverse)

@@ -4,10 +4,12 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/genam.h>
 #include <access/heapam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
+#include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_constraint.h>
@@ -20,10 +22,12 @@
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/typcache.h>
 
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
+#include "chunk_index.h"
 #include "constraint.h"
 #include "debug_assert.h"
 #include "dimension.h"
@@ -36,6 +40,7 @@
 #include "partitioning.h"
 #include "process_utility.h"
 #include "ts_catalog/catalog.h"
+#include "utils.h"
 
 /*
  * Build the deterministic "<chunk_id>_<parent>" chunk-side name so DROP/RENAME
@@ -59,87 +64,107 @@ dimension_constraint_choose_name(char *dst, int32 dimension_slice_id)
 }
 
 /*
+ * Build "arg <op> bound" using the default btree operator class of the type.
+ * Types without one are compared as bigint.
+ */
+Expr *
+ts_chunk_constraint_bound_expr(Node *arg, Oid type, int64 bound, StrategyNumber strategy)
+{
+	TypeCacheEntry *tce = lookup_type_cache(type, TYPECACHE_BTREE_OPFAMILY);
+	int16 typlen;
+	bool typbyval;
+
+	if (!OidIsValid(tce->btree_opf))
+	{
+		tce = lookup_type_cache(INT8OID, TYPECACHE_BTREE_OPFAMILY);
+	}
+
+	Oid cmptype = tce->btree_opintype;
+	Oid opno = get_opfamily_member(tce->btree_opf, cmptype, cmptype, strategy);
+	Ensure(OidIsValid(opno), "no comparison operator for type %s", format_type_be(cmptype));
+
+	if (cmptype != type)
+	{
+		arg = (Node *) makeRelabelType((Expr *) arg, cmptype, -1, InvalidOid, COERCE_EXPLICIT_CAST);
+	}
+
+	get_typlenbyval(cmptype, &typlen, &typbyval);
+	Const *boundconst = makeConst(cmptype,
+								  -1,
+								  InvalidOid,
+								  typlen,
+								  ts_internal_to_time_value(bound, cmptype),
+								  false,
+								  typbyval);
+	OpExpr *opexpr = castNode(OpExpr,
+							  make_opclause(opno,
+											BOOLOID,
+											false,
+											(Expr *) arg,
+											(Expr *) boundconst,
+											InvalidOid,
+											InvalidOid));
+	opexpr->opfuncid = get_opcode(opno);
+
+	return (Expr *) opexpr;
+}
+
+/*
  * Create a dimensional CHECK constraint node for a partitioning dimension.
  */
 Constraint *
-ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlice *slice,
-									   const char *name)
+ts_chunk_constraint_dimensional_create(Oid chunk_relid, const Dimension *dim,
+									   const DimensionSlice *slice, const char *name)
 {
 	Constraint *constr = NULL;
 	Node *dimdef;
-	ColumnRef *colref;
 	List *compexprs = NIL;
 	Oid type;
+	Oid coltype;
+	int32 coltypmod;
+	Oid colcollation;
 
 	if (slice->fd.range_start == PG_INT64_MIN && slice->fd.range_end == PG_INT64_MAX)
 	{
 		return NULL;
 	}
 
-	colref = makeNode(ColumnRef);
-	colref->fields = list_make1(makeString(pstrdup(NameStr(dim->fd.column_name))));
-	colref->location = -1;
+	AttrNumber attno = get_attnum(chunk_relid, NameStr(dim->fd.column_name));
+	get_atttypetypmodcoll(chunk_relid, attno, &coltype, &coltypmod, &colcollation);
+	dimdef = (Node *) makeVar(1, attno, coltype, coltypmod, colcollation, 0);
+	type = coltype;
 
-	/* Convert the dimensional ranges to the appropriate text/string
-	 * representation for the time type. For dimensions with a
-	 * partitioning/time function, use the function's output type. */
+	/* Dimensions with a partitioning function compare the function result */
 	if (dim->partitioning != NULL)
 	{
-		/* Both open and closed dimensions can have a partitioning function */
-		PartitioningInfo *partinfo = dim->partitioning;
-		List *funcname = list_make2(makeString(NameStr(partinfo->partfunc.schema)),
-									makeString(NameStr(partinfo->partfunc.name)));
-		dimdef = (Node *) makeFuncCall(funcname, list_make1(colref), COERCE_EXPLICIT_CALL, -1);
+		PartitioningFunc *partfunc = &dim->partitioning->partfunc;
 
-		if (IS_OPEN_DIMENSION(dim))
-		{
-			/* The dimension has a time function to compute the time value so
-			 * need to convert the range values to the time type returned by
-			 * the partitioning function. */
-			type = partinfo->partfunc.rettype;
-		}
-		else
-		{
-			/* Closed dimension, just use the INT8 type */
-			type = INT8OID;
-		}
+		type = partfunc->rettype;
+		dimdef = (Node *) makeFuncExpr(partfunc->func_fmgr.fn_oid,
+									   type,
+									   list_make1(dimdef),
+									   InvalidOid,
+									   colcollation,
+									   COERCE_EXPLICIT_CALL);
 	}
-	else
-	{
-		/* Must be open dimension, since no partitioning function */
-		Assert(IS_OPEN_DIMENSION(dim));
-
-		dimdef = (Node *) colref;
-		type = dim->fd.column_type;
-	}
-
-	/*
-	 * We are forcing ISO datestyle here to prevent parsing errors with
-	 * certain timezone/datestyle combinations.
-	 */
-	int current_datestyle = DateStyle;
-	DateStyle = USE_ISO_DATES;
-	char *start_str = ts_internal_to_time_string(slice->fd.range_start, type);
-	char *end_str = ts_internal_to_time_string(slice->fd.range_end, type);
-	DateStyle = current_datestyle;
 
 	/* Elide range constraint for +INF or -INF */
 	if (slice->fd.range_start != PG_INT64_MIN)
 	{
-		A_Const *start_const = makeNode(A_Const);
-		memcpy(&start_const->val, makeString(start_str), sizeof(start_const->val));
-		start_const->location = -1;
-		A_Expr *ge_expr = makeSimpleA_Expr(AEXPR_OP, ">=", dimdef, (Node *) start_const, -1);
-		compexprs = lappend(compexprs, ge_expr);
+		compexprs = lappend(compexprs,
+							ts_chunk_constraint_bound_expr(dimdef,
+														   type,
+														   slice->fd.range_start,
+														   BTGreaterEqualStrategyNumber));
 	}
 
 	if (slice->fd.range_end != PG_INT64_MAX)
 	{
-		A_Const *end_const = makeNode(A_Const);
-		memcpy(&end_const->val, makeString(end_str), sizeof(end_const->val));
-		end_const->location = -1;
-		A_Expr *lt_expr = makeSimpleA_Expr(AEXPR_OP, "<", dimdef, (Node *) end_const, -1);
-		compexprs = lappend(compexprs, lt_expr);
+		compexprs = lappend(compexprs,
+							ts_chunk_constraint_bound_expr(dimdef,
+														   type,
+														   slice->fd.range_end,
+														   BTLessStrategyNumber));
 	}
 
 	constr = makeNode(Constraint);
@@ -151,17 +176,7 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 #if PG18_GE
 	constr->is_enforced = true;
 #endif
-
-	Assert(list_length(compexprs) >= 1);
-
-	if (list_length(compexprs) == 2)
-	{
-		constr->raw_expr = (Node *) makeBoolExpr(AND_EXPR, compexprs, -1);
-	}
-	else if (list_length(compexprs) == 1)
-	{
-		constr->raw_expr = linitial(compexprs);
-	}
+	constr->cooked_expr = nodeToString(make_ands_explicit(compexprs));
 
 	return constr;
 }
@@ -193,36 +208,63 @@ chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 }
 
 /*
- * Add a single non-dimensional chunk-side constraint by replicating the
- * hypertable's definition. Delegates to a PL/pgSQL helper that pulls the
- * constraint definition with pg_get_constraintdef and runs ALTER TABLE.
+ * Create a PK, UNIQUE or EXCLUSION constraint on a chunk from the hypertable
+ * constraint. The backing index is created directly from the hypertable
+ * constraint's index, so no privilege on the chunk schema is needed.
  */
-static Oid
-create_non_dimensional_constraint(int32 chunk_id, const char *chunk_constraint_name,
-								  const char *hypertable_constraint_name, Oid chunk_oid)
+static void
+create_non_dimensional_constraint(const Hypertable *ht, const Chunk *chunk,
+								  const char *chunk_constraint_name, Form_pg_constraint con)
 {
-	NameData chunk_name_data;
-	NameData hypertable_name_data;
-	CatalogSecurityContext sec_ctx;
+	Relation htrel;
+	Relation chunkrel;
+	Relation ht_idxrel;
+	uint16 constr_flags = 0;
 
-	if (ConstraintNameIsUsed(CONSTRAINT_RELATION, chunk_oid, chunk_constraint_name))
+	if (ConstraintNameIsUsed(CONSTRAINT_RELATION, chunk->fd.relid, chunk_constraint_name))
 	{
-		return get_relation_constraint_oid(chunk_oid, chunk_constraint_name, true);
+		return;
 	}
 
-	namestrcpy(&chunk_name_data, chunk_constraint_name);
-	namestrcpy(&hypertable_name_data, hypertable_constraint_name);
+	/* Constraint triggers are copied together with the other triggers */
+	if (con->contype == CONSTRAINT_TRIGGER)
+	{
+		return;
+	}
 
-	ts_process_utility_set_expect_chunk_modification(true);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	CatalogInternalCall3(DDL_ADD_CHUNK_CONSTRAINT,
-						 Int32GetDatum(chunk_id),
-						 NameGetDatum(&chunk_name_data),
-						 NameGetDatum(&hypertable_name_data));
-	ts_catalog_restore_user(&sec_ctx);
-	ts_process_utility_set_expect_chunk_modification(false);
+	Assert(con->contype == CONSTRAINT_PRIMARY || con->contype == CONSTRAINT_UNIQUE ||
+		   con->contype == CONSTRAINT_EXCLUSION);
+	Assert(OidIsValid(con->conindid));
 
-	return get_relation_constraint_oid(chunk_oid, chunk_constraint_name, true);
+	if (con->condeferrable)
+	{
+		constr_flags |= INDEX_CONSTR_CREATE_DEFERRABLE;
+	}
+	if (con->condeferred)
+	{
+		constr_flags |= INDEX_CONSTR_CREATE_INIT_DEFERRED;
+	}
+#if PG18_GE
+	if (con->conperiod)
+	{
+		constr_flags |= INDEX_CONSTR_CREATE_WITHOUT_OVERLAPS;
+	}
+#endif
+
+	htrel = table_open(ht->main_table_relid, AccessShareLock);
+	/* CreateTrigger needs ShareRowExclusiveLock for deferrable constraints */
+	chunkrel = table_open(chunk->fd.relid, ShareRowExclusiveLock);
+	ht_idxrel = index_open(con->conindid, AccessShareLock);
+
+	ts_chunk_index_create_constraint(htrel,
+									 ht_idxrel,
+									 chunkrel,
+									 chunk_constraint_name,
+									 constr_flags);
+
+	index_close(ht_idxrel, NoLock);
+	table_close(chunkrel, NoLock);
+	table_close(htrel, NoLock);
 }
 
 typedef struct InheritableContext
@@ -233,8 +275,8 @@ typedef struct InheritableContext
 
 /*
  * Callback invoked for each hypertable constraint. For non-dim constraints
- * that need replication on the chunk side, create them via the PL/pgSQL
- * helper.
+ * that need replication on the chunk side, create them from the hypertable
+ * constraint.
  */
 static ConstraintProcessStatus
 inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
@@ -260,7 +302,7 @@ inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
 
 	/* If the chunk already has an equivalent constraint, reuse it under its
 	 * existing name. */
-	chunk_rel = table_open(ctx->chunk->table_id, AccessShareLock);
+	chunk_rel = table_open(ctx->chunk->fd.relid, AccessShareLock);
 	matching_const = ts_constraint_find_matching(constraint_tuple, chunk_rel);
 	table_close(chunk_rel, NoLock);
 
@@ -272,10 +314,7 @@ inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
 	ts_chunk_constraint_choose_name(chunk_constraint_name,
 									ctx->chunk->fd.id,
 									hypertable_constraint_name);
-	create_non_dimensional_constraint(ctx->chunk->fd.id,
-									  chunk_constraint_name,
-									  hypertable_constraint_name,
-									  ctx->chunk->table_id);
+	create_non_dimensional_constraint(ctx->ht, ctx->chunk, chunk_constraint_name, constraint);
 	return CONSTR_PROCESSED;
 }
 
@@ -304,12 +343,12 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 		Assert(dim != NULL);
 		dimension_constraint_choose_name(name, slice->fd.id);
 
-		if (OidIsValid(get_relation_constraint_oid(chunk->table_id, name, true)))
+		if (OidIsValid(get_relation_constraint_oid(chunk->fd.relid, name, true)))
 		{
 			continue;
 		}
 
-		constr = ts_chunk_constraint_dimensional_create(dim, slice, name);
+		constr = ts_chunk_constraint_dimensional_create(chunk->fd.relid, dim, slice, name);
 		if (constr != NULL)
 		{
 			newconstrs = lappend(newconstrs, constr);
@@ -319,7 +358,7 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 	if (newconstrs != NIL)
 	{
 		List PG_USED_FOR_ASSERTS_ONLY *cookedconstrs = NIL;
-		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Relation rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 		cookedconstrs = AddRelationNewConstraints(rel,
 												  NIL /* List *newColDefaults */,
 												  newconstrs,
@@ -408,10 +447,7 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 			ts_chunk_constraint_choose_name(chunk_constraint_name,
 											chunk->fd.id,
 											NameStr(con->conname));
-			create_non_dimensional_constraint(chunk->fd.id,
-											  chunk_constraint_name,
-											  NameStr(con->conname),
-											  chunk->table_id);
+			create_non_dimensional_constraint(ht, chunk, chunk_constraint_name, con);
 		}
 	}
 
@@ -432,7 +468,7 @@ ts_chunk_constraints_recreate(const Hypertable *ht, const Chunk *chunk)
 		Oid constraint_oid;
 
 		dimension_constraint_choose_name(name, slice->fd.id);
-		constraint_oid = get_relation_constraint_oid(chunk->table_id, name, true);
+		constraint_oid = get_relation_constraint_oid(chunk->fd.relid, name, true);
 		if (OidIsValid(constraint_oid))
 		{
 			ObjectAddress addr = {
@@ -494,7 +530,13 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 		int64 value;
 
 		datum = slot_getattr(slot, attno, &isnull);
-		Assert(!isnull);
+		if (isnull)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_NOT_NULL_VIOLATION),
+					 errmsg("dimension not null constraint for column \"%s\" violated by some row",
+							NameStr(dim->fd.column_name))));
+		}
 
 		if (NULL != dim->partitioning)
 		{
@@ -543,6 +585,6 @@ ts_chunk_constraint_check_violated(const Chunk *chunk, const Hyperspace *hs)
 		const Dimension *dim = ts_hyperspace_get_dimension_by_id(hs, slice->fd.dimension_id);
 
 		Assert(dim);
-		check_chunk_constraint_violated(chunk->table_id, dim, slice);
+		check_chunk_constraint_violated(chunk->fd.relid, dim, slice);
 	}
 }

@@ -422,12 +422,9 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 														  csettings->fd.compress_relid,
 														  csettings->fd.relid);
 
-		heap_deform_tuple(tuple,
-						  decompressor.in_desc,
-						  decompressor.compressed_datums,
-						  decompressor.compressed_is_nulls);
+		row_decompressor_set_compressed_tuple(&decompressor, tuple);
 
-		int nrows = decompress_batch(&decompressor);
+		int nrows = decompress_batch(&decompressor, NULL, 0);
 
 		/*
 		 * Initialize a compressor for each new partition.
@@ -438,7 +435,7 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 			row_compressor_init(&rws->compressor,
 								csettings,
 								csp->noncompressed_tupdesc,
-								RelationGetDescr(scontext->rws[i].targetrel));
+								RelationGetDescr(scontext->rel));
 		}
 
 		/*
@@ -945,17 +942,25 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
 	};
 
-	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, true);
-
-	/* Chunk already locked, so use NoLock */
-	srcrel = table_open(relid, NoLock);
-
-	if (srcrel->rd_rel->relkind != RELKIND_RELATION)
+	if (get_rel_relkind(relid) != RELKIND_RELATION)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split non-table relations")));
 	}
+
+	/* Only owner is allowed to split */
+	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+	{
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   OBJECT_TABLE /* only table is allowed */,
+					   get_rel_name(relid));
+	}
+
+	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, true);
+
+	/* Chunk already locked, so use NoLock */
+	srcrel = table_open(relid, NoLock);
 
 	Oid amoid = srcrel->rd_rel->relam;
 
@@ -964,14 +969,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("access method \"%s\" is not supported for split", get_am_name(amoid))));
-	}
-
-	/* Only owner is allowed to split */
-	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
-	{
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(srcrel->rd_rel->relkind),
-					   get_rel_name(relid));
 	}
 
 	/* Lock toast table to prevent it from being concurrently vacuumed */
@@ -996,9 +993,19 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split frozen chunk \"%s.%s\" scheduled for tiering",
-						NameStr(chunk->fd.schema_name),
-						NameStr(chunk->fd.table_name)),
+						ts_chunk_get_schema_name(chunk),
+						ts_chunk_get_table_name(chunk)),
 				 errhint("Untier the chunk before splitting it.")));
+	}
+
+	/*
+	 * The split clears stored column defaults, so rebuild compressed data
+	 * that relies on them.
+	 */
+	if (ts_chunk_is_compressed(chunk) && compressed_chunk_uses_missing_values(srcrel))
+	{
+		rebuild_compressed_chunk(ts_chunk_get_by_relid(relid, true));
+		chunk = ts_chunk_get_by_relid(relid, true);
 	}
 
 	Cache *hcache;
@@ -1164,7 +1171,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	bool created = false;
 	Chunk *new_chunk = ts_chunk_find_or_create_without_cuts(ht,
 															new_cube,
-															NameStr(chunk->fd.schema_name),
+															ts_chunk_get_schema_name(chunk),
 															NULL,
 															InvalidOid,
 															&created);
@@ -1175,7 +1182,10 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	if (compress_settings != NULL)
 	{
-		new_compressed_relid = create_compress_chunk(new_chunk, InvalidOid, false, NULL);
+		/* Use the compression settings of the chunk being split */
+		CompressionSettings *new_settings =
+			ts_compression_settings_materialize(compress_settings, new_chunk->fd.relid, InvalidOid);
+		new_compressed_relid = create_compress_chunk(new_chunk, InvalidOid, false, new_settings);
 	}
 
 	CommandCounterIncrement();
@@ -1195,7 +1205,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	 */
 	SplitRelationInfo split_relations[SPLIT_FACTOR] = {
 		[0] = { .relid = relid, .chunk_id = chunk->fd.id, .heap_swap = true },
-		[1] = { .relid = new_chunk->table_id, .chunk_id = new_chunk->fd.id, .heap_swap = false }
+		[1] = { .relid = new_chunk->fd.relid, .chunk_id = new_chunk->fd.id, .heap_swap = false }
 	};
 	SplitRelationInfo csplit_relations[SPLIT_FACTOR] = {};
 	SplitRelationInfo *compressed_split_relations = NULL;
@@ -1209,18 +1219,14 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			   NameStr(splitdim_name));
 
 		/*
-		 * Get the attribute numbers for the primary dimension's lower- and
-		 * upper-bound metadata columns in the compressed relation. We'll use
-		 * these to get the time range of compressed segments in order to
-		 * route segments to the right result chunk.
+		 * Use the min/max metadata to get the time range of compressed
+		 * segments. First/last metadata is not a range for non-leading
+		 * orderby columns.
 		 */
-		AttrNumber lower_attno;
-		AttrNumber upper_attno;
-		orderby_sparse_metadata_attnos(compress_settings,
-									   compress_settings->fd.compress_relid,
-									   orderby_pos,
-									   &lower_attno,
-									   &upper_attno);
+		AttrNumber lower_attno =
+			get_attnum(compress_settings->fd.compress_relid, column_segment_min_name(orderby_pos));
+		AttrNumber upper_attno =
+			get_attnum(compress_settings->fd.compress_relid, column_segment_max_name(orderby_pos));
 
 		CompressedSplitPoint csp = {
 			.base = {
@@ -1231,7 +1237,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			.attnum_min = lower_attno,
 			.attnum_max = upper_attno,
 			.attnum_count = get_attnum(compress_settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME),
-			.noncompressed_tupdesc = CreateTupleDescCopy(RelationGetDescr(srcrel)),
+			.noncompressed_tupdesc = CreateTupleDescCopyConstr(RelationGetDescr(srcrel)),
 		};
 
 		csplit_relations[0] =

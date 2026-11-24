@@ -23,3 +23,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
 :PREFIX SELECT 'query 101' AS label, * FROM cagg2 ORDER BY time_bucket::date;
 :PREFIX SELECT 'query 102' AS label, * FROM cagg2 ORDER BY time_bucket::date DESC;
 
+
+-- cagg with ORDER BY in definition
+SET enable_hashagg TO off;
+:PREFIX SELECT 'query 09' AS label, * FROM cagg4 ORDER BY time_bucket;
+:PREFIX SELECT 'query 10' AS label, * FROM cagg4 ORDER BY time_bucket DESC;
+RESET enable_hashagg;

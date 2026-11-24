@@ -1,0 +1,276 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Tests for the timescaledb.direct_compress option, which enables direct
+-- compress on a hypertable and creates the compaction and compression
+-- policies that back it as a single command. Available both as an
+-- ALTER TABLE ... SET (...) option and as a CREATE TABLE ... WITH (...) option.
+----------------------------------------------------------------------
+-- ALTER TABLE: enabling direct_compress also enables columnstore and
+-- creates both policies
+----------------------------------------------------------------------
+-- create_hypertable() doesn't enable columnstore by default, so this table
+-- starts out with no compression and no policies.
+CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float);
+SELECT create_hypertable('metrics', 'time');
+  create_hypertable   
+----------------------
+ (1,public,metrics,t)
+
+ALTER TABLE metrics SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device',
+  timescaledb.direct_compress
+);
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics';
+ status 
+--------
+     12
+
+SELECT proc_name, schedule_interval, config
+FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics')
+ORDER BY proc_name;
+     proc_name      | schedule_interval |                                      config                                       
+--------------------+-------------------+-----------------------------------------------------------------------------------
+ policy_compaction  | @ 1 min           | {"hypertable_id": 1}
+ policy_compression | @ 1 min           | {"hypertable_id": 1, "compress_after": "@ 7 days", "recompress_unordered": false}
+
+----------------------------------------------------------------------
+-- ALTER TABLE: direct_compress_schedule_interval is honored by both policies
+----------------------------------------------------------------------
+CREATE TABLE metrics2 (time TIMESTAMPTZ NOT NULL, device TEXT, value float);
+SELECT create_hypertable('metrics2', 'time');
+   create_hypertable   
+-----------------------
+ (2,public,metrics2,t)
+
+ALTER TABLE metrics2 SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device',
+  timescaledb.direct_compress,
+  timescaledb.direct_compress_schedule_interval = '30 seconds'
+);
+SELECT proc_name, schedule_interval
+FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics2')
+ORDER BY proc_name;
+     proc_name      | schedule_interval 
+--------------------+-------------------
+ policy_compaction  | @ 30 secs
+ policy_compression | @ 30 secs
+
+----------------------------------------------------------------------
+-- ALTER TABLE: re-running is idempotent and converges the existing
+-- policies to the new schedule
+----------------------------------------------------------------------
+ALTER TABLE metrics SET (
+  timescaledb.direct_compress,
+  timescaledb.direct_compress_schedule_interval = '10 seconds'
+);
+NOTICE:  compaction policy already exists on hypertable "metrics", skipping
+NOTICE:  columnstore policy already exists for hypertable "metrics", skipping
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics');
+ count 
+-------
+     2
+
+SELECT proc_name, schedule_interval, config
+FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics')
+ORDER BY proc_name;
+     proc_name      | schedule_interval |                                      config                                       
+--------------------+-------------------+-----------------------------------------------------------------------------------
+ policy_compaction  | @ 10 secs         | {"hypertable_id": 1}
+ policy_compression | @ 10 secs         | {"hypertable_id": 1, "compress_after": "@ 7 days", "recompress_unordered": false}
+
+----------------------------------------------------------------------
+-- ALTER TABLE: direct_compress alone (no timescaledb.compress) auto-enables
+-- columnstore too
+----------------------------------------------------------------------
+CREATE TABLE metrics3 (time TIMESTAMPTZ NOT NULL, device TEXT, value float);
+SELECT create_hypertable('metrics3', 'time');
+   create_hypertable   
+-----------------------
+ (3,public,metrics3,t)
+
+ALTER TABLE metrics3 SET (timescaledb.direct_compress);
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics3';
+ status 
+--------
+     12
+
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics3');
+ count 
+-------
+     2
+
+----------------------------------------------------------------------
+-- ALTER TABLE: disabling direct_compress clears the status bit and
+-- removes the policies it created
+----------------------------------------------------------------------
+ALTER TABLE metrics SET (timescaledb.direct_compress = false);
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics';
+ status 
+--------
+      4
+
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics');
+ count 
+-------
+     0
+
+----------------------------------------------------------------------
+-- ALTER TABLE: disabling columnstore also clears direct_compress and
+-- removes the policies
+----------------------------------------------------------------------
+ALTER TABLE metrics2 SET (timescaledb.direct_compress);
+NOTICE:  compaction policy already exists on hypertable "metrics2", skipping
+NOTICE:  columnstore policy already exists for hypertable "metrics2", skipping
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics2';
+ status 
+--------
+     12
+
+ALTER TABLE metrics2 SET (timescaledb.compress = false);
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics2';
+ status 
+--------
+      0
+
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics2');
+ count 
+-------
+     0
+
+----------------------------------------------------------------------
+-- ALTER TABLE: per-table flag turns on direct compress even with the
+-- instance GUC off
+----------------------------------------------------------------------
+SET timescaledb.enable_direct_compress_insert = false;
+CREATE TABLE metrics4 (time TIMESTAMPTZ NOT NULL, device TEXT, value float);
+SELECT create_hypertable('metrics4', 'time');
+   create_hypertable   
+-----------------------
+ (4,public,metrics4,t)
+
+ALTER TABLE metrics4 SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device',
+  timescaledb.direct_compress
+);
+BEGIN;
+INSERT INTO metrics4 SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics4;
+--- QUERY PLAN ---
+ Append (actual rows=3001.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_4_1_chunk (actual rows=960.00 loops=1)
+         ->  Seq Scan on _hyper_4_1_chunk_compressed (actual rows=1.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_4_2_chunk (actual rows=2041.00 loops=1)
+         ->  Seq Scan on _hyper_4_2_chunk_compressed (actual rows=3.00 loops=1)
+
+ROLLBACK;
+-- without direct_compress set, the GUC being off means no direct compress
+CREATE TABLE metrics5 (time TIMESTAMPTZ NOT NULL, device TEXT, value float);
+SELECT create_hypertable('metrics5', 'time');
+   create_hypertable   
+-----------------------
+ (5,public,metrics5,t)
+
+ALTER TABLE metrics5 SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device'
+);
+BEGIN;
+INSERT INTO metrics5 SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics5;
+--- QUERY PLAN ---
+ Append (actual rows=3001.00 loops=1)
+   ->  Seq Scan on _hyper_5_3_chunk (actual rows=960.00 loops=1)
+   ->  Seq Scan on _hyper_5_4_chunk (actual rows=2041.00 loops=1)
+
+ROLLBACK;
+RESET timescaledb.enable_direct_compress_insert;
+----------------------------------------------------------------------
+-- CREATE TABLE ... WITH (tsdb.hypertable, tsdb.direct_compress, ...)
+----------------------------------------------------------------------
+CREATE TABLE metrics6 (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device', tsdb.direct_compress);
+NOTICE:  using column "time" as partitioning column
+NOTICE:  columnstore policy already exists for hypertable "metrics6", skipping
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics6';
+ status 
+--------
+     12
+
+SELECT proc_name, schedule_interval, config
+FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics6')
+ORDER BY proc_name;
+     proc_name      | schedule_interval |                                      config                                       
+--------------------+-------------------+-----------------------------------------------------------------------------------
+ policy_compaction  | @ 1 min           | {"hypertable_id": 6}
+ policy_compression | @ 1 min           | {"hypertable_id": 6, "compress_after": "@ 7 days", "recompress_unordered": false}
+
+-- direct_compress_schedule_interval is honored at create time too
+CREATE TABLE metrics7 (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (
+    tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device',
+    tsdb.direct_compress, tsdb.direct_compress_schedule_interval='15 seconds'
+  );
+NOTICE:  using column "time" as partitioning column
+NOTICE:  columnstore policy already exists for hypertable "metrics7", skipping
+SELECT proc_name, schedule_interval
+FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics7')
+ORDER BY proc_name;
+     proc_name      | schedule_interval 
+--------------------+-------------------
+ policy_compaction  | @ 15 secs
+ policy_compression | @ 15 secs
+
+-- tsdb.hypertable without direct_compress doesn't set the status bit, but
+-- still gets the regular default compression policy (1 chunk interval,
+-- scheduled daily) since plain columnstore always adds one
+CREATE TABLE metrics8 (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device', tsdb.chunk_interval='1 day');
+NOTICE:  using column "time" as partitioning column
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics8';
+ status 
+--------
+      4
+
+SELECT proc_name, schedule_interval, config
+FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics8')
+ORDER BY proc_name;
+     proc_name      | schedule_interval |                      config                       
+--------------------+-------------------+---------------------------------------------------
+ policy_compression | @ 1 day           | {"hypertable_id": 8, "compress_after": "@ 1 day"}
+
+----------------------------------------------------------------------
+-- disabling direct_compress and then just re-enabling plain compression
+-- (no direct_compress) leaves no policy: unlike CREATE TABLE WITH, plain
+-- ALTER TABLE compress on its own never adds a default compression policy
+----------------------------------------------------------------------
+CREATE TABLE metrics9 (time TIMESTAMPTZ NOT NULL, device TEXT, value float);
+SELECT create_hypertable('metrics9', 'time');
+   create_hypertable   
+-----------------------
+ (9,public,metrics9,t)
+
+ALTER TABLE metrics9 SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device',
+  timescaledb.direct_compress
+);
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics9');
+ count 
+-------
+     2
+
+ALTER TABLE metrics9 SET (timescaledb.direct_compress = false);
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics9';
+ status 
+--------
+      4
+
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics9');
+ count 
+-------
+     0
+

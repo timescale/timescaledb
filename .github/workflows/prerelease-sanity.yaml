@@ -16,12 +16,12 @@ jobs:
   # separate step below.
   config:
     name: Check the configuration
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
 
@@ -65,11 +65,11 @@ jobs:
     name: Check Release Commit
     needs: config
     if: needs.config.outputs.should_run == 'true'
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
 
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # GitHub creates an empty merge commit even for fast-forward merges, which
       # makes it needlessly difficult to inspect the actual commit title. Since
       # we require the PRs to release branches to be up to date before merging,
@@ -101,27 +101,6 @@ jobs:
         commit_title=$(git log --oneline -1 --pretty=format:%s @^0)
         echo "Commit title: $commit_title"
         grep "$required_title" <<<"$commit_title"
-
-    # The release commit must modify the version.config
-    - name: The release commit must modify the version.config
-      run: |
-        set -xeu
-
-        if [[ "${{ github.event_name }}" == "pull_request" ]]
-        then
-            git remote set-branches origin '*'
-            git fetch origin "${{ github.event.pull_request.base.ref }}"
-
-            # We're working with pull request head here, see the comment
-            # at checkout step.
-            base="$(git merge-base "${{ github.event.pull_request.base.sha }}" @)"
-        else
-            base="${{ github.sha }}~"
-        fi
-
-        git log --oneline -1 @^0
-        git log --oneline -1 "${base}"
-        ! git diff --exit-code "${base}" @^0 -- version.config
 
     # The SQL upgrade scripts must be moved from the development files to
     # the respective versioned files.

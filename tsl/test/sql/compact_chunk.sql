@@ -9,7 +9,6 @@
 CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- compact_chunk with no overlapping batches (no-op case)
@@ -76,6 +75,11 @@ ORDER BY _ts_meta_min_1;
 -- Status should not contain UNORDERED flag
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
 
+-- compact_chunk with negative max_batches must fail
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.compact_chunk(chunk, -1) FROM show_chunks('metrics') chunk;
+\set ON_ERROR_STOP 1
+
 -- compact an uncompressed chunk
 -- Create a new uncompressed chunk for a different time range by
 -- inserting with direct compress insert disabled.
@@ -136,6 +140,13 @@ SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics') c
 
 SET default_transaction_read_only TO off;
 
+-- compact_chunk in REPEATABLE READ must fail
+\set ON_ERROR_STOP 0
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics') chunk;
+COMMIT;
+\set ON_ERROR_STOP 1
+
 -- Create a hypertable with a segmentby column.
 -- Each segment ('d1', 'd2') will have its own set of batches, and
 -- compact_chunk should handle overlaps per segment independently.
@@ -143,7 +154,6 @@ CREATE TABLE metrics_seg (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
 WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert 2000 rows for each of two devices: non-overlapping within each segment
@@ -284,7 +294,6 @@ CREATE TABLE metrics_desc (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
 WITH (tsdb.hypertable, tsdb.orderby='time DESC', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert non-overlapping data for two devices
@@ -364,7 +373,6 @@ CREATE TABLE metrics_multi (time TIMESTAMPTZ NOT NULL, device TEXT NOT NULL, val
 WITH (tsdb.hypertable, tsdb.orderby='device,time');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert 3 batches with different devices creating boundary ties on col1:
@@ -438,7 +446,6 @@ CREATE TABLE metrics_multi_desc (time TIMESTAMPTZ NOT NULL, device TEXT NOT NULL
 WITH (tsdb.hypertable, tsdb.orderby='device,time DESC');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert 2 batches with multiple devices, DESC time ordering:
@@ -513,7 +520,6 @@ CREATE TABLE metrics_combined (time TIMESTAMPTZ NOT NULL, device TEXT, value flo
 WITH (tsdb.hypertable, tsdb.orderby='time,value', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert non-null data for two segments: 1000 rows each, non-overlapping
@@ -614,7 +620,6 @@ CREATE TABLE metrics_nulls_last (time TIMESTAMPTZ NOT NULL, device TEXT, value f
 WITH (tsdb.hypertable, tsdb.orderby='value,time', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert non-null data for two segments
@@ -710,7 +715,6 @@ CREATE TABLE metrics_nulls_first (time TIMESTAMPTZ NOT NULL, device TEXT, value 
 WITH (tsdb.hypertable, tsdb.orderby='value NULLS FIRST,time', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert non-null data for two segments
@@ -804,7 +808,6 @@ CREATE TABLE metrics_mixed_nulls (time TIMESTAMPTZ NOT NULL, device TEXT, value 
 WITH (tsdb.hypertable, tsdb.orderby='value,time', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert 1800 non-null rows + 200 NULL rows for device 'd1'.
@@ -875,7 +878,6 @@ CREATE TABLE metrics_secondary_null (time TIMESTAMPTZ NOT NULL, device TEXT, val
 WITH (tsdb.hypertable, tsdb.orderby='time,value', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert batch 1 (500 rows): time [00:01..08:20], with NULL value at the
@@ -943,7 +945,6 @@ CREATE TABLE metrics_secondary_null_first (time TIMESTAMPTZ NOT NULL, device TEX
 WITH (tsdb.hypertable, tsdb.orderby='time,value NULLS FIRST', tsdb.segmentby='device');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Insert batch 1 (500 rows): time [00:01..08:20], all non-null values.
@@ -1009,7 +1010,6 @@ CREATE TABLE metrics_no_firstlast (time TIMESTAMPTZ NOT NULL, device TEXT, value
 WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.index='minmax(time)');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Two inserts over the same time range (one chunk), leaving the chunk UNORDERED.
@@ -1052,3 +1052,291 @@ FROM :NO_FL_CHUNK ORDER BY _ts_meta_min_1;
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_no_firstlast') chunk;
 
 DROP TABLE metrics_no_firstlast;
+
+-- Test max batches limit
+SET timescaledb.enable_direct_compress_insert = true;
+
+CREATE TABLE metrics_max_batches (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device');
+
+-- inserts are in a pattern to test compaction
+-- two overlapping batches (d1 and d3)
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(1,100) i, (VALUES ('d1'), ('d3')) AS v(d);
+
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(50,150) i, (VALUES ('d1'), ('d3')) AS v(d);
+
+-- non overlapping batch (d1 and d3)
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(250, 350) i, (VALUES ('d1'), ('d3')) AS v(d);
+
+-- three overlapping batches (d1 and d3)
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(400, 500) i, (VALUES ('d1'), ('d3')) AS v(d);
+
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(450, 550) i, (VALUES ('d1'), ('d3')) AS v(d);
+
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(500, 600) i, (VALUES ('d1'), ('d3')) AS v(d);
+
+-- two overlapping batches with segment change
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(700, 800) i;
+
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(750, 850) i;
+
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd2', i::float
+FROM generate_series(700, 800) i;
+
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd2', i::float
+FROM generate_series(750, 850) i;
+
+SELECT cs.compress_relid::regclass::text AS "MB_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_max_batches'
+ORDER BY ch.id LIMIT 1 \gset
+
+-- only showing device = 'd1' to reduce noise
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device = 'd1' ORDER BY _ts_meta_min_1;
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_max_batches') chunk;
+
+-- first compact (compacts two batches)
+SELECT _timescaledb_functions.compact_chunk(chunk, 2) FROM show_chunks('metrics_max_batches') chunk;
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device = 'd1' ORDER BY _ts_meta_min_1;
+
+-- second compact (compacts three batches even though max_batches = 2)
+SELECT _timescaledb_functions.compact_chunk(chunk, 2) FROM show_chunks('metrics_max_batches') chunk;
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device = 'd1' ORDER BY _ts_meta_min_1;
+
+-- third compact (compacts with segment change)
+SELECT _timescaledb_functions.compact_chunk(chunk, 3) FROM show_chunks('metrics_max_batches') chunk;
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device IN ('d1', 'd2') ORDER BY device, _ts_meta_min_1;
+-- should be compressed, unordered
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_max_batches') chunk;
+
+-- compact_chunk with max_batches=0 (unlimited): resolves all remaining overlaps.
+SELECT _timescaledb_functions.compact_chunk(chunk, 0) FROM show_chunks('metrics_max_batches') chunk;
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK ORDER BY device, _ts_meta_min_1;
+-- should be compressed
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_max_batches') chunk;
+
+DROP TABLE metrics_max_batches;
+
+-- Test Small intermediate batches must not hide overlaps with later batches.
+CREATE TABLE metrics_running_max (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time');
+
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,1000) i;
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(500,1500) i;
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1000,2000) i;
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1500,2500) i;
+
+-- Should resolve all overlaps in one pass.
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_running_max') chunk;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_running_max') chunk;
+DROP TABLE metrics_running_max;
+
+-- Test NULL last with NULLS LAST must stay as the running max.
+CREATE TABLE metrics_null_boundary (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='value NULLS LAST');
+
+-- insert in a pattern to trigger NULL value overlap
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval,
+       CASE WHEN i = 1000 THEN NULL ELSE i::float END
+FROM generate_series(1,1000) i;
+
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + ((999 + i) || ' minute')::interval, (499 + i)::float
+FROM generate_series(1,11) i;
+
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + ((1010 + i) || ' minute')::interval, (799 + i)::float
+FROM generate_series(1,101) i;
+
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + ((1200 + i) || ' minute')::interval, (950 + i)::float
+FROM generate_series(1,50) i;
+
+SELECT cs.compress_relid::regclass::text AS "MIXED_NULLS_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_null_boundary'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_value, _ts_meta_v2_last_value
+FROM :MIXED_NULLS_CHUNK
+ORDER BY _ts_meta_min_1;
+
+-- Should resolve all overlaps in one pass.
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_null_boundary') chunk;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_null_boundary') chunk;
+
+SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_value, _ts_meta_v2_last_value
+FROM :MIXED_NULLS_CHUNK
+ORDER BY _ts_meta_min_1;
+DROP TABLE metrics_null_boundary;
+
+-- Test with orderby DESC
+CREATE TABLE metrics_rm_desc (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time DESC');
+
+INSERT INTO metrics_rm_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,1000) i;
+INSERT INTO metrics_rm_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(500,1500) i;
+INSERT INTO metrics_rm_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1000,2000) i;
+INSERT INTO metrics_rm_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1500,2500) i;
+
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_rm_desc') chunk;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_rm_desc') chunk;
+SELECT count(*) FROM metrics_rm_desc;
+DROP TABLE metrics_rm_desc;
+
+-- Running max with multi-column orderby and mixed directions.
+CREATE TABLE metrics_rm_multi (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time ASC, value DESC');
+
+INSERT INTO metrics_rm_multi SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,1000) i;
+INSERT INTO metrics_rm_multi SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(500,1500) i;
+INSERT INTO metrics_rm_multi SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1000,2000) i;
+INSERT INTO metrics_rm_multi SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1500,2500) i;
+
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_rm_multi') chunk;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_rm_multi') chunk;
+SELECT count(*) FROM metrics_rm_multi;
+DROP TABLE metrics_rm_multi;
+
+-- Running max with segmentby: each segment tracked independently.
+CREATE TABLE metrics_rm_seg (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device');
+
+-- Same overlapping pattern for two devices.
+INSERT INTO metrics_rm_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, d, i FROM generate_series(1,1000) i, (VALUES ('d1'), ('d2')) AS v(d);
+INSERT INTO metrics_rm_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, d, i FROM generate_series(500,1500) i, (VALUES ('d1'), ('d2')) AS v(d);
+INSERT INTO metrics_rm_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, d, i FROM generate_series(1000,2000) i, (VALUES ('d1'), ('d2')) AS v(d);
+INSERT INTO metrics_rm_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, d, i FROM generate_series(1500,2500) i, (VALUES ('d1'), ('d2')) AS v(d);
+
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_rm_seg') chunk;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_rm_seg') chunk;
+SELECT count(*) FROM metrics_rm_seg;
+DROP TABLE metrics_rm_seg;
+
+-- Compaction is maintenance, not user activity, so it must leave the chunk's
+-- operation statistics alone.
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+
+CREATE TABLE metrics_stats (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.chunk_interval='1 year');
+
+INSERT INTO metrics_stats SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,3000) i;
+INSERT INTO metrics_stats SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,3000) i;
+
+SELECT ch.relid::regclass::text AS "STATS_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_stats'
+ORDER BY ch.id LIMIT 1 \gset
+
+-- A real SELECT, so the operation counters and the last-operation snapshot
+-- hold something that compaction could overwrite.
+SELECT count(*) FROM metrics_stats WHERE value = 42;
+
+SELECT n_selects, n_inserts, n_updates, n_deletes,
+       total_batches_decompressed, total_tuples_decompressed,
+       last_op_batches_decompressed, last_op_tuples_decompressed
+FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK');
+
+CREATE TEMP TABLE stats_before AS
+SELECT * FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK');
+
+-- Overlapping batches, so this run does real work.
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_stats') chunk;
+SELECT _timescaledb_functions.compact_chunk(:'STATS_CHUNK');
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_stats') chunk;
+
+-- Every operation counter unchanged and stats before compaction kept.
+SELECT a.n_selects - b.n_selects AS n_selects_delta,
+       a.n_inserts - b.n_inserts AS n_inserts_delta,
+       a.n_updates - b.n_updates AS n_updates_delta,
+       a.n_deletes - b.n_deletes AS n_deletes_delta,
+       a.total_batches_decompressed - b.total_batches_decompressed AS total_batches_delta,
+       a.total_tuples_decompressed - b.total_tuples_decompressed AS total_tuples_delta,
+       a.last_op_batches_decompressed = b.last_op_batches_decompressed AS last_op_batches_kept,
+       a.last_op_tuples_decompressed = b.last_op_tuples_decompressed AS last_op_tuples_kept,
+       a.last_update = b.last_update AS last_update_kept
+FROM stats_before b,
+     LATERAL _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK') a;
+
+DROP TABLE stats_before;
+
+-- A compaction run with nothing to merge must be just as invisible.
+CREATE TEMP TABLE stats_before AS
+SELECT * FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK');
+
+SELECT _timescaledb_functions.compact_chunk(:'STATS_CHUNK');
+
+SELECT a.n_selects - b.n_selects AS n_selects_delta,
+       a.total_batches_decompressed - b.total_batches_decompressed AS total_batches_delta,
+       a.last_op_batches_decompressed = b.last_op_batches_decompressed AS last_op_batches_kept,
+       a.last_update = b.last_update AS last_update_kept
+FROM stats_before b,
+     LATERAL _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK') a;
+
+DROP TABLE stats_before;
+DROP TABLE metrics_stats;
+
+-- Segmentwise recompression is maintenance as well and decompresses batches
+-- the same way, so it must stay out of the operation statistics too.
+SET timescaledb.enable_direct_compress_insert = false;
+
+CREATE TABLE metrics_rc_stats (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.chunk_interval='1 year');
+
+INSERT INTO metrics_rc_stats SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,3000) i;
+SELECT compress_chunk(chunk) FROM show_chunks('metrics_rc_stats') chunk;
+
+-- Out-of-order rows leave the chunk partially compressed, which is what
+-- segmentwise recompression folds back in.
+INSERT INTO metrics_rc_stats SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,500) i;
+
+SELECT ch.relid::regclass::text AS "RC_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_rc_stats'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT count(*) FROM metrics_rc_stats WHERE value = 42;
+
+CREATE TEMP TABLE stats_before AS
+SELECT * FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'RC_CHUNK');
+
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'RC_CHUNK');
+
+SELECT a.n_selects - b.n_selects AS n_selects_delta,
+       a.total_batches_decompressed - b.total_batches_decompressed AS total_batches_delta,
+       a.total_tuples_decompressed - b.total_tuples_decompressed AS total_tuples_delta,
+       a.last_op_batches_decompressed = b.last_op_batches_decompressed AS last_op_batches_kept,
+       a.last_op_tuples_decompressed = b.last_op_tuples_decompressed AS last_op_tuples_kept,
+       a.last_update = b.last_update AS last_update_kept
+FROM stats_before b,
+     LATERAL _timescaledb_functions.chunk_statistics(uncompressed_relid => :'RC_CHUNK') a;
+
+DROP TABLE stats_before;
+DROP TABLE metrics_rc_stats;

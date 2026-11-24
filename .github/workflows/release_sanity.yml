@@ -1,0 +1,176 @@
+# Validates that given a TimescaleDB [version], it's
+# [x.x.x] release branch is in a correct releasable state.
+# It does not test the correctness or performance of the code,
+# just
+
+# This workflow is meant to be used by other workflows.
+# [version] must be given by the release manager.
+
+name: Release sanity
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      # Ref in timescale/timescaledb to validate, usually the release branch
+      # (e.g. 2.30.x), not the release tag created later.
+      timescaledb-ref:
+        description: "TimescaleDB branch/ref to validate."
+        required: true
+        type: string
+
+jobs:
+  release_sanity:
+    name: Validate release conditions
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: timescale/timescaledb
+          ref: ${{ inputs.timescaledb-ref }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          fetch-depth: 0
+
+      # The release branch must have the exact version the release manager
+      # specified.
+      - name: The release branch must have a correct version.
+        run: |
+          local_version="$(sed -n 's/^version = //p' version.config)"
+          input_version="${{ inputs.version }}"
+
+          echo "Input version: $input_version"
+          echo "version.config version: $local_version"
+
+          if [ "$local_version" != "$input_version" ]; then
+            echo "::error::version.config must contain '$input_version', got '$local_version'"
+            exit 1
+          fi
+
+      # The release commit has to follow a name convention: "Release `version`".
+      - name: Last commit has correct name
+        run: |
+          required_title="Release ${{ inputs.version }}"
+          commit_title="$(git log -1 --pretty=format:%s HEAD)"
+
+          echo "Required title: $required_title"
+          echo "Commit title: $commit_title"
+
+          if [ "$commit_title" != "$required_title" ]; then
+            echo "::error::Last commit title must be '$required_title', got '$commit_title'"
+            exit 1
+          fi
+
+      # All .unreleased files should be referenced in the CHANGELOG and not
+      # exist as files at the time of a release.
+      - name: No .unreleased files are left behind
+        run: |
+          ! compgen -G '.unreleased/*'
+
+      # The SQL upgrade scripts must be moved from the development files to
+      # the respective versioned files.
+      - name: The latest-dev.sql and the reverse-dev.sql must be empty
+        run: |
+          if [ -s sql/updates/latest-dev.sql ]
+          then
+              echo "latest-dev.sql is not empty"
+              exit 1
+          fi
+
+          if [ -s sql/updates/reverse-dev.sql ]
+          then
+              echo "reverse-dev.sql is not empty"
+              exit 1
+          fi
+
+      # The release milestone is named v{version}, e.g. v2.31.0, and must have
+      # no open issues or PRs at release time.
+      - name: Release milestone is empty
+        env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          milestone_title="v${{ inputs.version }}"
+
+          milestone_number="$(
+            gh api "repos/timescale/timescaledb/milestones?state=all&per_page=100" \
+              --paginate \
+              --jq ".[] | select(.title == \"$milestone_title\") | .number" \
+              | head -n 1
+          )"
+
+          if [ -z "$milestone_number" ]; then
+            echo "::error::Release milestone '$milestone_title' does not exist"
+            exit 1
+          fi
+
+          open_items="$(
+            gh api "repos/timescale/timescaledb/milestones/${milestone_number}" \
+              --jq '.open_issues'
+          )"
+
+          echo "Release milestone: $milestone_title"
+          echo "Open milestone items: $open_items"
+
+          if [ "$open_items" -ne 0 ]; then
+            echo "::error::Release milestone '$milestone_title' still has open items"
+            gh api "repos/timescale/timescaledb/issues?milestone=${milestone_number}&state=open&per_page=100" \
+              --paginate \
+              --jq '.[] | "- #\(.number) \(.title) (\(.html_url))"'
+            exit 1
+          fi
+
+      # Every merged PR in the release milestone must be in the release branch,
+      # either directly or as a backport (cherry-pick, backport PR or same
+      # commit title).
+      - name: Release milestone PRs are in the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          milestone_title="v${{ inputs.version }}"
+
+          milestone_number="$(
+            gh api "repos/timescale/timescaledb/milestones?state=all&per_page=100" \
+              --paginate \
+              --jq ".[] | select(.title == \"$milestone_title\") | .number" \
+              | head -n 1
+          )"
+
+          prs="$(
+            gh api "repos/timescale/timescaledb/issues?milestone=${milestone_number}&state=closed&per_page=100" \
+              --paginate \
+              --jq '.[] | select(.pull_request.merged_at != null) | .number'
+          )"
+
+          branch_titles="$(git log --format=%s HEAD)"
+          missing=0
+
+          for pr in $prs; do
+            sha="$(gh api "repos/timescale/timescaledb/pulls/${pr}" --jq '.merge_commit_sha')"
+
+            if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+              continue
+            fi
+
+            if [ -n "$(git log --format=%H -F --grep="cherry picked from commit $sha" HEAD)" ]; then
+              continue
+            fi
+
+            if grep -qE "^Backport to [^ ]+: #$pr: " <<< "$branch_titles"; then
+              continue
+            fi
+
+            title="$(gh api "repos/timescale/timescaledb/commits/${sha}" --jq '.commit.message | split("\n")[0]')"
+            if grep -qxF -- "$title" <<< "$branch_titles"; then
+              continue
+            fi
+
+            echo "::error::PR #$pr '$title' ($sha) is in milestone '$milestone_title' but not in the release branch"
+            missing=1
+          done
+
+          exit $missing

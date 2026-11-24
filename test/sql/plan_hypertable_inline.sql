@@ -60,11 +60,13 @@ WITH ct AS MATERIALIZED (
 SELECT * FROM ct;
 
 -- CTE within CTE
+-- use a distinct outer name so the plan does not depend on how a
+-- PG version disambiguates duplicate CTE names in EXPLAIN output
 :PREFIX
-WITH ct AS MATERIALIZED (
+WITH octe AS MATERIALIZED (
    SELECT * FROM test_f(5)
 )
-SELECT * FROM ct;
+SELECT * FROM octe;
 
 -- CTE within NO MATERIALIZED CTE
 :PREFIX

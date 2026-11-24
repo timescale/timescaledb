@@ -19,6 +19,7 @@ ALTER TABLE PUBLIC.hyper_timestamp
 \ir setup.continuous_aggs.sql
 \ir setup.compression.sql
 \ir setup.policies.sql
+\ir setup.publication.sql
 
 -- Space-partitioned hypertable for extra update/downgrade coverage
 CREATE TABLE space_constraints (

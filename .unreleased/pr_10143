@@ -1,1 +1,0 @@
-Fixes: #10143 Fix division by zero when planning time_bucket with zero width

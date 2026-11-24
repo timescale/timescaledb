@@ -16,6 +16,8 @@
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_proc.h>
+#include <catalog/pg_publication.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
 #include <commands/copy.h>
@@ -58,6 +60,7 @@
 
 #include "compat/compat.h"
 #include "annotations.h"
+#include "bgw/job.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"
@@ -91,6 +94,8 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
+#include "ts_stats/ts_stats_record.h"
 #include "tss_callbacks.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -112,6 +117,7 @@ static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPL
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+static bool is_granular_refresh_tracking_column(Hypertable *ht, const char *colname);
 static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
 									Oid newrole_oid);
 
@@ -263,6 +269,8 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 			case AT_SetRelOptions:
 			case AT_ResetRelOptions:
 			case AT_ReplicaIdentity:
+			case AT_SetNotNull:
+			case AT_DropNotNull:
 				/* allowed on materialization tables */
 				continue;
 			default:
@@ -394,7 +402,7 @@ check_altertable_add_column_for_compressed(ParseState *parse_state, Hypertable *
 				case CONSTR_UNIQUE:
 					break;
 				/*
-				 * We can safelly ignore NULL constraints because it does nothing
+				 * We can safely ignore NULL constraints because it does nothing
 				 * and according to Postgres docs is useless and exist just for
 				 * compatibility with other database systems
 				 * https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6
@@ -555,12 +563,9 @@ process_drop_schema_start(DropStmt *stmt)
 			String *object = lfirst_node(String, cell);
 			if (namestrcmp(proc_schema, strVal(object)) == 0)
 			{
-				CatalogSecurityContext sec_ctx;
 				Assert(stmt->behavior == DROP_CASCADE);
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
 				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-				ts_catalog_restore_user(&sec_ctx);
 			}
 		}
 	}
@@ -575,11 +580,42 @@ process_drop_schema_start(DropStmt *stmt)
 static void
 process_drop_procedure_start(DropStmt *stmt)
 {
+	List *target_oids = NIL;
+	List *target_objs = NIL;
+	ListCell *lc;
+
+	Assert(stmt->removeType == OBJECT_PROCEDURE || stmt->removeType == OBJECT_FUNCTION ||
+		   stmt->removeType == OBJECT_ROUTINE);
+
+	foreach (lc, stmt->objects)
+	{
+		Node *object = lfirst(lc);
+		Relation relation = NULL;
+		ObjectAddress address = get_object_address(stmt->removeType,
+												   object,
+												   &relation,
+												   AccessExclusiveLock,
+												   stmt->missing_ok);
+
+		if (!OidIsValid(address.objectId))
+		{
+			continue;
+		}
+
+		target_oids = lappend_oid(target_oids, address.objectId);
+		target_objs = lappend(target_objs, object);
+	}
+
+	if (target_oids == NIL)
+	{
+		return;
+	}
+
 	ScanIterator iterator =
 		ts_scan_iterator_create(BGW_JOB, RowExclusiveLock, CurrentMemoryContext);
 	ts_scanner_foreach(&iterator)
 	{
-		ListCell *cell;
+		ListCell *lc_oid, *lc_obj;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		bool schema_isnull, name_isnull, job_id_isnull;
 		Name proc_schema =
@@ -593,32 +629,40 @@ process_drop_procedure_start(DropStmt *stmt)
 					 job_id,
 					 NameStr(*proc_schema),
 					 NameStr(*proc_name));
-		foreach (cell, stmt->objects)
+
+		/*
+		 * Match on the function OID so that only the routine the job actually
+		 * runs can block or cascade the drop.
+		 */
+		Oid job_funcid = ts_bgw_job_get_funcid_from_catalog(proc_schema, proc_name);
+		if (!OidIsValid(job_funcid))
 		{
-			ObjectWithArgs *object = castNode(ObjectWithArgs, lfirst(cell));
-			RangeVar *rel = makeRangeVarFromNameList(object->objname);
-			if (namestrcmp(proc_schema, rel->schemaname) == 0 &&
-				namestrcmp(proc_name, rel->relname) == 0)
+			continue;
+		}
+
+		forboth (lc_oid, target_oids, lc_obj, target_objs)
+		{
+			if (lfirst_oid(lc_oid) != job_funcid)
 			{
-				Assert(stmt->removeType == OBJECT_PROCEDURE || stmt->removeType == OBJECT_FUNCTION);
-				if (stmt->behavior == DROP_RESTRICT)
-				{
-					ereport(ERROR,
-							errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
-							errmsg("cannot drop %s because background job %d depends on it",
-								   NameListToString(object->objname),
-								   job_id),
-							errhint("Use delete_job() to drop the job first."));
-				}
-				else
-				{
-					CatalogSecurityContext sec_ctx;
-					ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-					ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
-					ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-					ts_catalog_restore_user(&sec_ctx);
-				}
+				continue;
 			}
+
+			ObjectWithArgs *object = castNode(ObjectWithArgs, lfirst(lc_obj));
+			if (stmt->behavior == DROP_RESTRICT)
+			{
+				ereport(ERROR,
+						errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+						errmsg("cannot drop %s because background job %d depends on it",
+							   NameListToString(object->objname),
+							   job_id),
+						errhint("Use delete_job() to drop the job first."));
+			}
+			else
+			{
+				ereport(NOTICE, errmsg("drop cascades to job %d", job_id));
+				ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+			}
+			break;
 		}
 	}
 }
@@ -708,11 +752,14 @@ ts_bgw_job_rename_proc(ObjectAddress address, const char *newschema, const char 
 			DatumGetName(slot_getattr(ti->slot, Anum_bgw_job_proc_schema, &curr_schema_isnull));
 		Name curr_proc_name =
 			DatumGetName(slot_getattr(ti->slot, Anum_bgw_job_proc_name, &curr_name_isnull));
-		const char *old_proc_schema = get_namespace_name(get_func_namespace(address.objectId));
-		const char *old_proc_name = get_func_name(address.objectId);
+		/*
+		 * Match on the function OID rather than on the name: a different
+		 * overload with the same schema-qualified name must not retarget
+		 * this job.
+		 */
 		if (!curr_schema_isnull && !curr_name_isnull &&
-			namestrcmp(curr_proc_name, old_proc_name) == 0 &&
-			namestrcmp(curr_proc_schema, old_proc_schema) == 0)
+			ts_bgw_job_get_funcid_from_catalog(curr_proc_schema, curr_proc_name) ==
+				address.objectId)
 		{
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 			ts_bgw_job_update_proc(ti->scanrel,
@@ -736,7 +783,8 @@ process_alterprocedureschema(ProcessUtilityArgs *args)
 	AlterObjectSchemaStmt *stmt = (AlterObjectSchemaStmt *) args->parsetree;
 	Relation relation;
 
-	Assert(stmt->objectType == OBJECT_PROCEDURE || stmt->objectType == OBJECT_FUNCTION);
+	Assert(stmt->objectType == OBJECT_PROCEDURE || stmt->objectType == OBJECT_FUNCTION ||
+		   stmt->objectType == OBJECT_ROUTINE);
 	ObjectAddress address =
 		get_object_address(stmt->objectType, stmt->object, &relation, AccessExclusiveLock, false);
 	ts_bgw_job_rename_proc(address, stmt->newschema, NULL);
@@ -805,6 +853,24 @@ process_altertableschema(ProcessUtilityArgs *args)
 
 	if (ht)
 	{
+		Oid old_schema = get_rel_namespace(relid);
+		Oid new_schema = get_namespace_oid(alterstmt->newschema, true);
+
+		/*
+		 * Chunks live in _timescaledb_internal and don't move with the root
+		 * table, so a schema publication (which follows the root table's
+		 * schema) leaves chunk rows behind. Reconcile them for the schema the
+		 * hypertable is leaving and the one it is entering. This must run
+		 * before ts_hypertable_set_schema flips the catalog schema, since
+		 * ts_chunk_publication_reconcile_ht_schema_change resolves the
+		 * hypertable's relid from the catalog (which still points at the old
+		 * schema's physical table); the chunk rows themselves are stable.
+		 */
+		if (OidIsValid(new_schema))
+		{
+			ts_chunk_publication_reconcile_ht_schema_change(ht->fd.id, old_schema, new_schema);
+		}
+
 		ts_hypertable_set_schema(ht, alterstmt->newschema);
 	}
 	else
@@ -838,6 +904,7 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_alterprocedureschema(args);
 			break;
 		default:
@@ -846,20 +913,35 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+static void
+ts_copy_execute_in_tss_scope(CopyStmt *stmt, const char *query_string, uint64 *processed,
+							 Hypertable *ht, volatile TsTssStatementScope *tss_scope)
+{
+	ts_tss_statement_scope_enter(tss_scope);
+	PG_TRY();
+	{
+		timescaledb_DoCopy(stmt, query_string, processed, ht);
+	}
+	PG_FINALLY();
+	{
+		ts_tss_statement_scope_exit(tss_scope);
+	}
+	PG_END_TRY();
+}
+
 static DDLResult
 process_copy(ProcessUtilityArgs *args)
 {
 	CopyStmt *stmt = (CopyStmt *) args->parsetree;
+	volatile TsTssStatementScope tss_scope = TS_TSS_STATEMENT_SCOPE_INIT;
 
-	ts_begin_tss_store_callback();
-
-	/*
-	 * Needed to add the appropriate number of tuples to the completion tag
-	 */
+	/* Needed to add the appropriate number of tuples to the completion tag. */
 	uint64 processed;
 	Hypertable *ht = NULL;
 	Cache *hcache = NULL;
 	Oid relid;
+
+	ts_begin_tss_store_callback(&tss_scope);
 
 	if (stmt->relation)
 	{
@@ -933,14 +1015,15 @@ process_copy(ProcessUtilityArgs *args)
 	PreventCommandIfReadOnly("COPY FROM");
 
 	/* Performs acl check in here inside `copy_security_check` */
-	timescaledb_DoCopy(stmt, args->query_string, &processed, ht);
+	ts_copy_execute_in_tss_scope(stmt, args->query_string, &processed, ht, &tss_scope);
 
 	args->completion_tag->commandTag = CMDTAG_COPY;
 	args->completion_tag->nprocessed = processed;
 
 	ts_cache_release(&hcache);
 
-	ts_end_tss_store_callback(args->query_string,
+	ts_end_tss_store_callback(&tss_scope,
+							  args->query_string,
 							  args->pstmt->stmt_location,
 							  args->pstmt->stmt_len,
 							  args->pstmt->queryId,
@@ -1046,7 +1129,7 @@ chunk_has_missing_attrs(Chunk *chunk)
 {
 	bool has_missing_attrs = false;
 	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
-	Relation chunk_rel = relation_open(chunk->table_id, AccessShareLock);
+	Relation chunk_rel = relation_open(chunk->fd.relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
 
 	for (int i = 0; i < tupdesc->natts; i++)
@@ -1091,8 +1174,8 @@ register_chunk_for_rebuild_if_needed(Oid chunk_relid, VacuumCtx *ctx)
 		 */
 		Ensure(!ts_chunk_is_frozen(chunk),
 			   "chunk \"%s.%s\" was altered unsafely after it was frozen",
-			   NameStr(chunk->fd.schema_name),
-			   NameStr(chunk->fd.table_name));
+			   ts_chunk_get_schema_name(chunk),
+			   ts_chunk_get_table_name(chunk));
 		ctx->rebuild_columnstore_chunk_oids =
 			lappend_oid(ctx->rebuild_columnstore_chunk_oids, chunk_relid);
 	}
@@ -1113,8 +1196,8 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
-	chunk_range_var->relname = NameStr(chunk->fd.table_name);
-	chunk_range_var->schemaname = NameStr(chunk->fd.schema_name);
+	chunk_range_var->relname = ts_chunk_get_table_name(chunk);
+	chunk_range_var->schemaname = ts_chunk_get_schema_name(chunk);
 	chunk_vacuum_rel =
 		makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
@@ -1122,7 +1205,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	/* If we have a compressed chunk make sure to analyze it as well */
 	if (ts_chunk_is_compressed(chunk))
 	{
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		/* Compressed chunk might be missing due to concurrent operations */
 		if (OidIsValid(compressed_relid))
 		{
@@ -1282,6 +1365,23 @@ process_vacuum(ProcessUtilityArgs *args)
 					ctx.ht_vacuum_rel = vacuum_rel;
 					foreach_chunk(ht, add_chunk_to_vacuum, &ctx, false);
 				}
+				else
+				{
+					/* VACUUM targets a chunk directly. */
+					Chunk *chunk = ts_chunk_get_by_relid(table_relid, false);
+					if (chunk && ts_chunk_is_compressed(chunk))
+					{
+						Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
+						/* Compressed chunk might be missing due to concurrent operations */
+						if (OidIsValid(compressed_relid))
+						{
+							ctx.chunk_rels =
+								lappend(ctx.chunk_rels,
+										makeVacuumRelation(NULL, compressed_relid, NIL));
+						}
+					}
+					register_chunk_for_rebuild_if_needed(table_relid, &ctx);
+				}
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
 		}
@@ -1328,6 +1428,8 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	/* Drop FKs referencing the chunk so CASCADE does not drop the hypertable FK */
+	ts_chunk_drop_referencing_fk_by_relid(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -1532,7 +1634,7 @@ process_truncate(ProcessUtilityArgs *args)
 						if (ts_chunk_is_compressed(chunk))
 						{
 							Oid compressed_relid =
-								ts_relation_get_compressed_relid(chunk->table_id);
+								ts_relation_get_compressed_relid(chunk->fd.relid);
 							if (OidIsValid(compressed_relid))
 							{
 								/* Create list item into the same context of the list. */
@@ -1540,7 +1642,8 @@ process_truncate(ProcessUtilityArgs *args)
 								char *schema_name =
 									get_namespace_name(get_rel_namespace(compressed_relid));
 								char *table_name = get_rel_name(compressed_relid);
-								rv = makeRangeVar(schema_name, table_name, -1);
+								relations =
+									lappend(relations, makeRangeVar(schema_name, table_name, -1));
 								MemoryContextSwitchTo(oldctx);
 								list_changed = true;
 							}
@@ -1620,6 +1723,8 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	ts_compression_settings_delete(chunk_relid);
 	ts_chunk_rewrite_delete(chunk_relid, false);
 	performDeletion(&objaddr, stmt->behavior, 0);
+
+	ts_stats_chunk_evict(chunk_relid);
 }
 
 /* Block drop compressed chunks directly and drop corresponding compressed chunks if
@@ -1656,30 +1761,11 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 							 "instead.")));
 		}
 
-		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
-														 relation->relname,
-														 AccessExclusiveLock,
-														 &slice_lock,
-														 CurrentMemoryContext,
-														 false);
+		chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, false);
 
 		if (chunk)
 		{
 			Hypertable *ht;
-
-			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
-			 *  it would be blocked if there are dependent objects */
-			if (stmt->behavior == DROP_CASCADE && ts_chunk_is_compressed(chunk))
-			{
-				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
-				/* The chunk may have been delete by a CASCADE */
-				if (OidIsValid(compressed_relid))
-				{
-					LockRelationOid(compressed_relid, AccessExclusiveLock);
-					ts_chunk_drop_by_relid(compressed_relid, stmt->behavior, DEBUG1);
-				}
-			}
-
 			ht = ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
 
 			Assert(ht != NULL);
@@ -2215,6 +2301,7 @@ process_drop_start(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_drop_procedure_start(stmt);
 			break;
 		case OBJECT_SCHEMA:
@@ -2377,6 +2464,17 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	Dimension *dim;
 	bool is_cagg = false;
 
+	if (ht && is_granular_refresh_tracking_column(ht, stmt->subname))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot rename column \"%s\" used to set up granular refresh",
+						stmt->subname),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(relid))));
+	}
+
 	if (!ht)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
@@ -2408,6 +2506,18 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			 * aggregate rather than one of the internal views, which is what
 			 * the ExecRenameStmt calls below would otherwise report. */
 			ts_cagg_permissions_check(relid, GetUserId());
+
+			/* Block renaming granular refresh column */
+			Hypertable *raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+			if (raw_ht && is_granular_refresh_tracking_column(raw_ht, stmt->subname))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+						 errmsg("cannot rename column \"%s\" used to set up granular refresh",
+								stmt->subname),
+						 errdetail("Renaming the timescaledb.cagg_granular_refresh_column is not "
+								   "supported.")));
+			}
 
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
@@ -2581,7 +2691,7 @@ rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 	RenameStmt *stmt = (RenameStmt *) arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	RangeVar *chunk_rel =
-		makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0);
+		makeRangeVar(ts_chunk_get_schema_name(chunk), ts_chunk_get_table_name(chunk), 0);
 	char old_chunk_name[NAMEDATALEN];
 	char new_chunk_name[NAMEDATALEN];
 	Oid chunk_con_oid;
@@ -2711,7 +2821,8 @@ rename_hypertable_trigger(Hypertable *ht, Oid chunk_relid, void *arg)
 	RenameStmt *stmt = copyObject(castNode(RenameStmt, arg));
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
-	stmt->relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0);
+	stmt->relation =
+		makeRangeVar(ts_chunk_get_schema_name(chunk), ts_chunk_get_table_name(chunk), 0);
 	renametrig(stmt);
 }
 
@@ -2796,6 +2907,7 @@ process_rename(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
+		case OBJECT_ROUTINE:
 			process_rename_procedure(args);
 			break;
 		default:
@@ -2825,7 +2937,14 @@ process_altertable_change_owner_bgw_jobs(int32 hypertable_id, Oid newrole_oid)
 		bool should_free, isnull;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		Datum htid = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
-		if (!isnull && DatumGetInt32(htid) == hypertable_id)
+		if (isnull || DatumGetInt32(htid) != hypertable_id)
+		{
+			continue;
+		}
+
+		/* Only policy jobs follow the hypertable owner, user-defined jobs keep theirs */
+		Datum proc_schema = slot_getattr(ti->slot, Anum_bgw_job_proc_schema, &isnull);
+		if (!isnull && namestrcmp(DatumGetName(proc_schema), FUNCTIONS_SCHEMA_NAME) == 0)
 		{
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
@@ -2833,6 +2952,17 @@ process_altertable_change_owner_bgw_jobs(int32 hypertable_id, Oid newrole_oid)
 			{
 				heap_freetuple(tuple);
 			}
+			continue;
+		}
+
+		Datum owner = slot_getattr(ti->slot, Anum_bgw_job_owner, &isnull);
+		if (!isnull && DatumGetObjectId(owner) != newrole_oid)
+		{
+			Datum job_id = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull);
+			ereport(WARNING,
+					(errmsg("owner of job %d not changed", DatumGetInt32(job_id)),
+					 errdetail("Only policy jobs follow the hypertable owner."),
+					 errhint("Use REASSIGN OWNED or recreate the job to change its owner.")));
 		}
 	}
 }
@@ -2869,15 +2999,15 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 	if ((stmt->primary || stmt->unique) && ts_chunk_is_compressed(chunk))
 	{
 		StringInfoData command;
-		Oid nspcid = get_rel_namespace(chunk->table_id);
+		Oid nspcid = get_rel_namespace(chunk->fd.relid);
 		ListCell *lc;
-		List *dpcontext = deparse_context_for(get_rel_name(chunk->table_id), chunk->table_id);
+		List *dpcontext = deparse_context_for(get_rel_name(chunk->fd.relid), chunk->fd.relid);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
 						 "SELECT EXISTS(SELECT FROM %s.%s",
 						 quote_identifier(get_namespace_name(nspcid)),
-						 quote_identifier(get_rel_name(chunk->table_id)));
+						 quote_identifier(get_rel_name(chunk->fd.relid)));
 
 		if (!stmt->nulls_not_distinct)
 		{
@@ -2926,9 +3056,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			elog(ERROR, "could not connect to SPI");
 		}
 
-		/* Lock down search_path */
-		int save_nestlevel = NewGUCNestLevel();
-		RestrictSearchPath();
+		/* Run index constraint validation as chunk owner in security-restricted context */
+		TSSecurityContext sctx;
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), 0, &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -2937,7 +3067,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not verify unique constraint on \"%s\"",
-							 get_rel_name(chunk->table_id)))));
+							 get_rel_name(chunk->fd.relid)))));
 		}
 
 		bool isnull;
@@ -2952,8 +3082,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 					 (errmsg("duplicate key value violates unique constraint"))));
 		}
 
-		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
+		ts_security_context_exit(&sctx);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
@@ -2969,8 +3098,8 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 	if (ts_chunk_is_compressed(chunk))
 	{
 		StringInfoData command;
-		Oid nspcid = get_rel_namespace(chunk->table_id);
-		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Oid nspcid = get_rel_namespace(chunk->fd.relid);
+		Relation rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
@@ -2984,9 +3113,8 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 			elog(ERROR, "could not connect to SPI");
 		}
 
-		/* Lock down search_path */
-		int save_nestlevel = NewGUCNestLevel();
-		RestrictSearchPath();
+		TSSecurityContext sctx;
+		ts_security_context_enter(ts_rel_get_owner(chunk->fd.relid), 0, &sctx);
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -2995,7 +3123,7 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not verify check constraint on \"%s\"",
-							 get_rel_name(chunk->table_id)))));
+							 get_rel_name(chunk->fd.relid)))));
 		}
 
 		bool isnull;
@@ -3015,7 +3143,7 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 
 		table_close(rel, NoLock);
 		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
+		ts_security_context_exit(&sctx);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
@@ -3173,7 +3301,7 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 	{
 		StringInfoData command;
 		AlterTableCmd *cmd = (AlterTableCmd *) arg;
-		const CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		const CompressionSettings *settings = ts_compression_settings_get(chunk->fd.relid);
 		Oid nspcid = get_rel_namespace(settings->fd.compress_relid);
 
 		initStringInfo(&command);
@@ -3279,6 +3407,15 @@ process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 	}
 }
 
+static bool
+is_granular_refresh_tracking_column(Hypertable *ht, const char *colname)
+{
+	FormData_hypertable_cagg_settings settings;
+
+	return ts_hypertable_cagg_settings_get(ht->fd.id, &settings, NULL) &&
+		   namestrcmp(&settings.granular_refresh_column, colname) == 0;
+}
+
 static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
@@ -3297,6 +3434,16 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 		}
+	}
+
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot drop column \"%s\" used to set up granular refresh", cmd->name),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(ht->main_table_relid))));
 	}
 
 	/* Delete dimension range entries on this column, if any.  */
@@ -3478,7 +3625,6 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 	ts_chunk_index_create_from_adjusted_index_info(ht->fd.id,
 												   hypertable_index_rel,
-												   chunk->fd.id,
 												   chunk_rel,
 												   indexinfo);
 
@@ -3493,7 +3639,6 @@ static void
 process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
-	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
@@ -3538,13 +3683,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 #endif
 
 	/*
-	 * Change user since chunks are typically located in an internal schema
-	 * and chunk indexes require metadata changes. In the single-transaction
-	 * case, we do this once for the entire table.
-	 */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	/*
 	 * Hold a lock on the hypertable index, and the chunk to prevent
 	 * from being altered. Since we use the same relids across transactions,
 	 * there is a potential issue if the id gets reassigned between one
@@ -3574,7 +3712,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 
 		ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
 													   hypertable_index_rel,
-													   chunk->fd.id,
 													   chunk_rel,
 													   indexinfo);
 
@@ -3588,8 +3725,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	validate_index_constraints(chunk, info->stmt);
 
 	table_close(chunk_rel, NoLock);
-
-	ts_catalog_restore_user(&sec_ctx);
 
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
 	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
@@ -3652,8 +3787,6 @@ process_index_start(ProcessUtilityArgs *args)
 	TupleDesc main_table_desc;
 	Relation main_table_index_relation;
 	LockRelId main_table_index_lock_relid;
-	int sec_ctx;
-	Oid uid = InvalidOid, saved_uid = InvalidOid;
 	ContinuousAgg *cagg = NULL;
 
 	Assert(IsA(stmt, IndexStmt));
@@ -3696,8 +3829,16 @@ process_index_start(ProcessUtilityArgs *args)
 			 * present on the chunk that would not be considered by postgres validity
 			 * check. We need to check for constraint violations ourselves in those
 			 * cases.
+			 *
+			 * That validation runs the index expression as the chunk owner, so
+			 * the caller has to pass the same ownership check that DefineIndex
+			 * would apply later.
 			 */
-			Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+			Oid relid = RangeVarGetRelidExtended(stmt->relation,
+												 AccessShareLock,
+												 RVR_MISSING_OK,
+												 RangeVarCallbackOwnsRelation,
+												 NULL);
 
 			if (OidIsValid(relid))
 			{
@@ -3710,9 +3851,7 @@ process_index_start(ProcessUtilityArgs *args)
 					 * and cannot be passed to deparse_expression directly, so run the
 					 * standard PostgreSQL transformation first.
 					 */
-					Relation rel = table_open(chunk->table_id, AccessShareLock);
-					IndexStmt *transformed = transformIndexStmt(chunk->table_id, stmt, NULL);
-					table_close(rel, NoLock);
+					IndexStmt *transformed = transformIndexStmt(chunk->fd.relid, stmt, NULL);
 					validate_index_constraints(chunk, transformed);
 				}
 			}
@@ -3730,7 +3869,18 @@ process_index_start(ProcessUtilityArgs *args)
 
 	if (cagg != NULL)
 	{
-		ts_cagg_permissions_check(cagg->relid, GetUserId());
+		/*
+		 * The database owner must not be allowed to create an index on a
+		 * continuous aggregate it does not own, so require actual ownership
+		 * instead of ts_cagg_permissions_check().
+		 */
+		if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("must be owner of continuous aggregate \"%s\"",
+							get_rel_name(cagg->relid))));
+		}
 	}
 	else
 	{
@@ -3780,25 +3930,15 @@ process_index_start(ProcessUtilityArgs *args)
 								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
 	}
 
-	if (cagg)
-	{
-		/*
-		 * If this is an index creation for cagg, then we need to switch user as the current
-		 * user might not have permissions on the internal schema where cagg index will be
-		 * created.
-		 */
-		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
-	}
-
-	/* CREATE INDEX on the root table of the hypertable */
+	/*
+	 * CREATE INDEX on the root table of the hypertable. The owner of a
+	 * continuous aggregate usually has no CREATE permission on the schema
+	 * of the materialization hypertable.
+	 */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
-														   info.extended_options.multitransaction);
-
-	if (cagg)
-	{
-		RESTORE_USER(uid, saved_uid, sec_ctx);
-	}
+														   info.extended_options.multitransaction,
+														   cagg == NULL);
 
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
@@ -3843,14 +3983,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* create chunk indexes using the same transaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
-		CatalogSecurityContext sec_ctx;
 		List *chunks;
-		/*
-		 * Change user since chunk's are typically located in an internal
-		 * schema and chunk indexes require metadata changes. In the
-		 * multi-transaction case, we do this once per chunk.
-		 */
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 		pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
@@ -3859,7 +3992,6 @@ process_index_start(ProcessUtilityArgs *args)
 		/* Recurse to each chunk and create a corresponding index. */
 		foreach_chunk(ht, process_index_chunk, &info, false);
 
-		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
 
 		pgstat_progress_end_command();
@@ -3963,11 +4095,17 @@ process_cluster_start(ProcessUtilityArgs *args)
 	Hypertable *ht;
 	DDLResult result = DDL_CONTINUE;
 	RangeVar *cluster_rv = stmt->relation ? stmt->relation->relation : NULL;
+	/*
+	 * CLUSTER and REPACK ... USING INDEX reorder each chunk by an index; plain
+	 * REPACK rewrites each chunk without an index, like VACUUM FULL.
+	 */
+	bool index_based = (stmt->command == REPACK_COMMAND_CLUSTER) || stmt->usingindex;
+	const char *cmdname = (stmt->command == REPACK_COMMAND_CLUSTER) ? "CLUSTER" : "REPACK";
 
 	Assert(IsA(stmt, RepackStmt));
 
-	/* We only intercept CLUSTER; let REPACK and VACUUM FULL fall through */
-	if (stmt->command != REPACK_COMMAND_CLUSTER)
+	/* VACUUM FULL arrives as a VacuumStmt, so it never reaches this handler */
+	if (stmt->command == REPACK_COMMAND_VACUUMFULL)
 	{
 		return DDL_CONTINUE;
 	}
@@ -3977,6 +4115,8 @@ process_cluster_start(ProcessUtilityArgs *args)
 	Hypertable *ht;
 	DDLResult result = DDL_CONTINUE;
 	RangeVar *cluster_rv = stmt->relation;
+	bool index_based = true;
+	const char *cmdname = "CLUSTER";
 
 	Assert(IsA(stmt, ClusterStmt));
 #endif
@@ -3993,68 +4133,84 @@ process_cluster_start(ProcessUtilityArgs *args)
 	if (NULL != ht)
 	{
 		bool is_top_level = (args->context == PROCESS_UTILITY_TOPLEVEL);
-		Oid index_relid;
-		Relation index_rel;
+		Oid index_relid = InvalidOid;
 		List *chunk_indexes;
 		ListCell *lc;
 		MemoryContext old, mcxt;
-		LockRelId cluster_index_lockid;
+		LockRelId cluster_index_lockid = { 0 };
+		bool have_index_lock = false;
 		ChunkIndexMapping **mappings = NULL;
 		int i;
 
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 		/*
-		 * If CLUSTER is run inside a user transaction block; we bail out or
-		 * otherwise we'd be holding locks way too long.
+		 * If run inside a user transaction block we bail out or otherwise we'd
+		 * be holding locks way too long.
 		 */
-		PreventInTransactionBlock(is_top_level, "CLUSTER");
+		PreventInTransactionBlock(is_top_level, cmdname);
 
-		if (NULL == stmt->indexname)
+#if PG19_GE
+		/*
+		 * CONCURRENTLY and ANALYZE would each need per-chunk handling we don't
+		 * do yet, so reject them clearly instead of silently ignoring them.
+		 */
+		foreach (lc, stmt->params)
 		{
-			index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
-			if (!OidIsValid(index_relid))
+			DefElem *opt = (DefElem *) lfirst(lc);
+
+			if ((strcmp(opt->defname, "concurrently") == 0 ||
+				 strcmp(opt->defname, "analyze") == 0) &&
+				defGetBoolean(opt))
 			{
 				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_OBJECT),
-						 errmsg("there is no previously clustered index for table \"%s\"",
-								get_rel_name(ht->main_table_relid))));
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("REPACK option \"%s\" is not supported on hypertables",
+								opt->defname)));
 			}
 		}
-		else
+#endif
+
+		if (index_based)
 		{
-			index_relid =
-				get_relname_relid(stmt->indexname, get_rel_namespace(ht->main_table_relid));
+			Relation index_rel;
+
+			if (NULL == stmt->indexname)
+			{
+				index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
+				if (!OidIsValid(index_relid))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_OBJECT),
+							 errmsg("there is no previously clustered index for table \"%s\"",
+									get_rel_name(ht->main_table_relid))));
+				}
+			}
+			else
+			{
+				index_relid =
+					get_relname_relid(stmt->indexname, get_rel_namespace(ht->main_table_relid));
+			}
+
+			if (!OidIsValid(index_relid))
+			{
+				/* Let regular process utility handle */
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
+
+			LockRelationOid(ht->main_table_relid, AccessShareLock);
+			index_rel = index_open(index_relid, AccessShareLock);
+			cluster_index_lockid = index_rel->rd_lockInfo.lockRelId;
+			index_close(index_rel, NoLock);
+
+			/* mark main table as clustered, so future calls to CLUSTER don't need to pass index */
+			ts_chunk_index_mark_clustered(ht->main_table_relid, index_relid);
+
+			/* keep index lock throughout CLUSTER */
+			LockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
+			have_index_lock = true;
 		}
-
-		if (!OidIsValid(index_relid))
-		{
-			/* Let regular process utility handle */
-			ts_cache_release(&hcache);
-			return DDL_CONTINUE;
-		}
-
-		/*
-		 * DROP INDEX locks the table then the index, to prevent deadlocks we
-		 * lock them in the same order. The main table lock will be released
-		 * when the current transaction commits, and never taken again. We
-		 * will use the index relation to grab a session lock on the index,
-		 * which we will hold throughout CLUSTER
-		 */
-		LockRelationOid(ht->main_table_relid, AccessShareLock);
-		index_rel = index_open(index_relid, AccessShareLock);
-		cluster_index_lockid = index_rel->rd_lockInfo.lockRelId;
-
-		index_close(index_rel, NoLock);
-
-		/*
-		 * mark the main table as clustered, even though it has no data, so
-		 * future calls to CLUSTER don't need to pass in the index
-		 */
-		ts_chunk_index_mark_clustered(ht->main_table_relid, index_relid);
-
-		/* we will keep holding this lock throughout CLUSTER */
-		LockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
 
 		/*
 		 * The list of chunks and their indexes need to be on a memory context
@@ -4063,11 +4219,26 @@ process_cluster_start(ProcessUtilityArgs *args)
 		mcxt = AllocSetContextCreate(PortalContext, "Hypertable cluster", ALLOCSET_DEFAULT_SIZES);
 
 		/*
-		 * Get a list of chunks and indexes that correspond to the
-		 * hypertable's index
+		 * Get a list of chunks to process. For an index-based rewrite we pair
+		 * each chunk with its matching index; a plain REPACK has no index.
 		 */
 		old = MemoryContextSwitchTo(mcxt);
-		chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
+		if (index_based)
+		{
+			chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
+		}
+		else
+		{
+			chunk_indexes = NIL;
+			foreach (lc, find_inheritance_children(ht->main_table_relid, NoLock))
+			{
+				ChunkIndexMapping *cim = palloc0(sizeof(ChunkIndexMapping));
+
+				cim->chunkoid = lfirst_oid(lc);
+				cim->indexoid = InvalidOid;
+				chunk_indexes = lappend(chunk_indexes, cim);
+			}
+		}
 
 		if (list_length(chunk_indexes) > 0)
 		{
@@ -4093,6 +4264,9 @@ process_cluster_start(ProcessUtilityArgs *args)
 
 		MemoryContextSwitchTo(old);
 
+		/* The options are the same for every chunk, so parse them once. */
+		ClusterParams *cluster_params = get_cluster_options(stmt->params);
+
 		hcache->release_on_commit = false;
 
 		/* Commit to get out of starting transaction */
@@ -4114,7 +4288,10 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * rechecked (due to new transaction) to already have that mark
 			 * set
 			 */
-			ts_chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+			if (OidIsValid(cim->indexoid))
+			{
+				ts_chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+			}
 
 			/* Do the job. */
 
@@ -4124,16 +4301,12 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 */
 #if PG19_GE
 			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
-			cluster_rel(REPACK_COMMAND_CLUSTER,
-						rel,
-						cim->indexoid,
-						get_cluster_options(stmt->params),
-						is_top_level);
+			cluster_rel(stmt->command, rel, cim->indexoid, cluster_params, is_top_level);
 #elif PG18_GE
 			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
-			cluster_rel(rel, cim->indexoid, get_cluster_options(stmt->params));
+			cluster_rel(rel, cim->indexoid, cluster_params);
 #else
-			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt->params));
+			cluster_rel(cim->chunkoid, cim->indexoid, cluster_params);
 #endif
 			PopActiveSnapshot();
 			CommitTransactionCommand();
@@ -4146,7 +4319,10 @@ process_cluster_start(ProcessUtilityArgs *args)
 		/* Clean up working storage */
 		MemoryContextDelete(mcxt);
 
-		UnlockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
+		if (have_index_lock)
+		{
+			UnlockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
+		}
 		result = DDL_DONE;
 	}
 
@@ -4343,10 +4519,7 @@ process_create_table_end(Node *parsetree)
 										  InvalidOid		 /* partitioning func */
 			);
 
-		CatalogSecurityContext sec_ctx;
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-		ts_catalog_restore_user(&sec_ctx);
 
 		if (ts_hypertable_create_from_info(table_relid,
 										   ht_id,
@@ -4455,6 +4628,17 @@ process_alter_column_type_start(ParseState *pstate, Hypertable *ht, AlterTableCm
 								 " Disable the stats using disable_column_stats function"
 								 " before changing the type")));
 		}
+	}
+
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot change type of column \"%s\" used to set up granular refresh",
+						cmd->name),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(ht->main_table_relid))));
 	}
 }
 
@@ -4574,8 +4758,8 @@ process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void 
 		{
 			elog(ERROR,
 				 "chunk \"%s.%s\" has no index corresponding to hypertable index \"%s\"",
-				 NameStr(chunk->fd.schema_name),
-				 NameStr(chunk->fd.table_name),
+				 ts_chunk_get_schema_name(chunk),
+				 ts_chunk_get_table_name(chunk),
 				 stmt->name);
 		}
 
@@ -4634,9 +4818,7 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 	if (tspcs->num_tablespaces == 1)
 	{
 		Assert(ts_hypertable_has_tablespace(ht, tspcs->tablespaces[0].tablespace_oid));
-		ts_tablespace_delete(ht->fd.id,
-							 NameStr(tspcs->tablespaces[0].fd.tablespace_name),
-							 tspcs->tablespaces[0].tablespace_oid);
+		ts_tablespace_delete(ht->fd.id, NameStr(tspcs->tablespaces[0].fd.tablespace_name));
 	}
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
@@ -5551,7 +5733,7 @@ ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc, Oid 
 
 	if (DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]) != newrole_oid)
 	{
-		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = Int32GetDatum(newrole_oid);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = ObjectIdGetDatum(newrole_oid);
 		replace[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = true;
 		new_tuple = heap_modify_tuple(tuple, tupledesc, values, isnull, replace);
 		ts_catalog_update(rel, new_tuple);
@@ -5643,14 +5825,17 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
 		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default ||
 		!parse_results[AlterTableFlagIndex].is_default ||
-		!parse_results[AlterTableFlagColumnCodec].is_default)
+		!parse_results[AlterTableFlagColumnCodec].is_default ||
+		!parse_results[AlterTableFlagDirectCompress].is_default ||
+		!parse_results[AlterTableFlagDirectCompressScheduleInterval].is_default)
 	{
 		ts_cm_functions->process_compress_table(ht, parse_results);
 	}
 
 	if (ht && (!parse_results[AlterTableFlagGranularRefreshColumn].is_default ||
 			   !parse_results[AlterTableFlagGranularRefreshStartOffset].is_default ||
-			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default))
+			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default ||
+			   !parse_results[AlterTableFlagCaggEnableGranularRefresh].is_default))
 	{
 		ts_cm_functions->process_granular_refresh_options(ht, parse_results);
 	}
@@ -5877,10 +6062,21 @@ process_create_stmt(ProcessUtilityArgs *args)
 
 		if (!create_table_info.hypertable)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("timescaledb options requires hypertable option"),
-					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+			if (create_table_info.with_clauses[CreateTableFlagHypertable].is_default)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("timescaledb options requires hypertable option"),
+						 errhint(
+							 "Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+			}
+
+			/*
+			 * Allow specifying with (tsdb.hypertable = false) for ease of testing.
+			 * This creates a plain Postgres table.
+			 */
+			create_table_info.with_clauses = NULL;
+			return DDL_CONTINUE;
 		}
 
 		if (ts_guc_enable_partitioned_hypertables)
@@ -6013,6 +6209,92 @@ preprocess_execute(ProcessUtilityArgs *args)
 }
 
 /*
+ * Collect the Oids of schemas named by FOR TABLES IN SCHEMA in a
+ * CREATE/ALTER PUBLICATION object list. Mirrors PostgreSQL's schema handling
+ * in ObjectsInPublicationToOids; FOR TABLE / EXCEPT TABLE objects are left to
+ * PostgreSQL, which already expands inheritance children (chunks) itself.
+ */
+static List *
+publication_schema_oids(List *pubobjects)
+{
+	List *schemas = NIL;
+	ListCell *lc;
+
+	foreach (lc, pubobjects)
+	{
+		PublicationObjSpec *pubobj = lfirst(lc);
+		Oid schemaid;
+
+		switch (pubobj->pubobjtype)
+		{
+			case PUBLICATIONOBJ_TABLES_IN_SCHEMA:
+				schemaid = get_namespace_oid(pubobj->name, false);
+				break;
+			case PUBLICATIONOBJ_TABLES_IN_CUR_SCHEMA:
+			{
+				List *search_path = fetch_search_path(false);
+
+				if (search_path == NIL)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_SCHEMA),
+							 errmsg("no schema has been selected for CURRENT_SCHEMA")));
+				}
+				schemaid = linitial_oid(search_path);
+				list_free(search_path);
+				break;
+			}
+			default:
+				continue;
+		}
+		schemas = list_append_unique_oid(schemas, schemaid);
+	}
+	return schemas;
+}
+
+/*
+ * Add or remove chunk rows for the schemas named in this publication command;
+ * see ts_chunk_publication_reconcile_schema_chunks for the rationale. For SET,
+ * PostgreSQL has already dropped every chunk row it tracked, so we rebuild for
+ * the full new schema set rather than a difference; only DROP removes chunks.
+ */
+static void
+reconcile_publication_schemas(const char *pubname, List *schema_oids, bool add)
+{
+	Publication *pub = GetPublicationByName(pubname, true);
+	if (pub)
+	{
+		ts_chunk_publication_reconcile_schema_chunks(pub->oid, schema_oids, add);
+	}
+}
+
+/*
+ * Keep chunk membership of a schema publication in sync with the schemas named
+ * by ALTER PUBLICATION ... ADD/DROP/SET TABLES IN SCHEMA. CREATE PUBLICATION is
+ * handled later in process_ddl_event_command_end, where the publication's Oid
+ * is already available.
+ */
+static DDLResult
+process_publication(ProcessUtilityArgs *args)
+{
+	AlterPublicationStmt *stmt = castNode(AlterPublicationStmt, args->parsetree);
+	List *schema_oids;
+
+	/* Let PostgreSQL alter the publication first. */
+	prev_ProcessUtility(args);
+
+	schema_oids = publication_schema_oids(stmt->pubobjects);
+	if (schema_oids == NIL)
+	{
+		return DDL_DONE;
+	}
+
+	reconcile_publication_schemas(stmt->pubname, schema_oids, stmt->action != AP_DropObjects);
+
+	return DDL_DONE;
+}
+
+/*
  * Handle DDL commands before they have been processed by PostgreSQL.
  */
 static DDLResult
@@ -6105,6 +6387,15 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			handler = preprocess_execute;
 			break;
 
+		/* ALTER PUBLICATION is reconciled here; CREATE PUBLICATION is reconciled
+		 * later in process_ddl_event_command_end (where the publication's Oid is
+		 * available). check_read_only stays off to match prior behavior; PG
+		 * rejects publication DDL on read-only standbys itself. */
+		case T_AlterPublicationStmt:
+			check_read_only = false;
+			handler = process_publication;
+			break;
+
 		default:
 			handler = NULL;
 			break;
@@ -6124,6 +6415,25 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 }
 
 /*
+ * Backfill chunk membership for a publication created with FOR TABLES IN
+ * SCHEMA. Runs in the ddl_command_end event trigger, so the publication (and
+ * its Oid) already exists.
+ */
+static void
+process_create_publication_end(Node *parsetree)
+{
+	CreatePublicationStmt *stmt = castNode(CreatePublicationStmt, parsetree);
+	List *schema_oids = publication_schema_oids(stmt->pubobjects);
+
+	if (schema_oids == NIL)
+	{
+		return;
+	}
+
+	reconcile_publication_schemas(stmt->pubname, schema_oids, true);
+}
+
+/*
  * Handle DDL commands after they've been processed by PostgreSQL.
  */
 static void
@@ -6136,6 +6446,9 @@ process_ddl_command_end(CollectedCommand *cmd)
 			break;
 		case T_AlterTableStmt:
 			process_altertable_end(cmd->parsetree, cmd);
+			break;
+		case T_CreatePublicationStmt:
+			process_create_publication_end(cmd->parsetree);
 			break;
 		default:
 			break;
@@ -6206,28 +6519,22 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 
 	if (ht != NULL)
 	{
-		CatalogSecurityContext sec_ctx;
-
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 		/* Recurse to each chunk and drop the corresponding constraint */
 		foreach_chunk(ht,
 					  process_drop_constraint_on_chunk,
 					  (void *) constraint->constraint_name,
 					  false);
-
-		ts_catalog_restore_user(&sec_ctx);
 	}
 }
 
 static void
-process_drop_table(EventTriggerDropObject *obj)
+process_drop_table(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
-	ts_chunk_delete_by_relid_and_relname(table->relid, table->schema, table->name, DROP_RESTRICT);
-	ts_hypertable_delete_by_name(table->schema, table->name);
+	ts_chunk_delete_by_relid(table->relid, behavior);
+	ts_hypertable_delete_by_name(table->schema, table->name, table->relid);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up
 	 * when deleting the hypertable or chunk. However, in some cases, e.g.,
@@ -6239,6 +6546,7 @@ process_drop_table(EventTriggerDropObject *obj)
 	 */
 	ts_compression_settings_delete_any(table->relid);
 	ts_chunk_rewrite_delete(table->relid, false);
+	ts_stats_chunk_evict(table->relid);
 }
 
 static void
@@ -6299,7 +6607,7 @@ process_drop_view(EventTriggerDropView *dropped_view)
 }
 
 static void
-process_ddl_sql_drop(EventTriggerDropObject *obj)
+process_ddl_sql_drop(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	switch (obj->type)
 	{
@@ -6307,7 +6615,7 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			process_drop_table_constraint(obj);
 			break;
 		case EVENT_TRIGGER_DROP_TABLE:
-			process_drop_table(obj);
+			process_drop_table(obj, behavior);
 			break;
 		case EVENT_TRIGGER_DROP_SCHEMA:
 			process_sql_drop_schema(obj);
@@ -6400,6 +6708,7 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 		case T_CreateTrigStmt:
 		case T_CreateStmt:
 		case T_IndexStmt:
+		case T_CreatePublicationStmt:
 			foreach (lc, ts_event_trigger_ddl_commands())
 			{
 				process_ddl_command_end(lfirst(lc));
@@ -6412,15 +6721,36 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 	EventTriggerUndoInhibitCommandCollection();
 }
 
+/* Get the drop behavior of the statement that caused the drop. */
+static DropBehavior
+event_trigger_drop_behavior(Node *parsetree)
+{
+	if (parsetree != NULL)
+	{
+		switch (nodeTag(parsetree))
+		{
+			case T_DropStmt:
+				return castNode(DropStmt, parsetree)->behavior;
+			case T_DropOwnedStmt:
+				return castNode(DropOwnedStmt, parsetree)->behavior;
+			default:
+				break;
+		}
+	}
+
+	return DROP_RESTRICT;
+}
+
 static void
 process_ddl_event_sql_drop(EventTriggerData *trigdata)
 {
 	ListCell *lc;
 	List *dropped_objects = ts_event_trigger_dropped_objects();
+	DropBehavior behavior = event_trigger_drop_behavior(trigdata->parsetree);
 
 	foreach (lc, dropped_objects)
 	{
-		process_ddl_sql_drop(lfirst(lc));
+		process_ddl_sql_drop(lfirst(lc), behavior);
 	}
 }
 

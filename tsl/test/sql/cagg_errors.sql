@@ -5,7 +5,7 @@
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 --negative tests for query validation
 create table mat_t1( a integer, b integer,c TEXT);

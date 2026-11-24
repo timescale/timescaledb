@@ -24,9 +24,12 @@ extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;
 extern bool ts_guc_enable_qual_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
+extern TSDLLEXPORT bool ts_guc_scan_uncompressed_chunks;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
+extern bool ts_guc_enable_hypertable_expansion_for_dml;
+extern TSDLLEXPORT bool ts_guc_enable_deferred_chunk_append;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT bool ts_guc_skip_cagg_invalidation;
@@ -44,6 +47,7 @@ extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
 extern int ts_guc_direct_compress_copy_tuple_sort_limit;
+extern TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert;
 extern bool ts_guc_enable_direct_compress_insert_sort_batches;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted;
@@ -52,6 +56,7 @@ extern TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby;
 extern int ts_guc_direct_compress_insert_tuple_sort_limit;
 extern TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows;
 extern TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit;
+extern TSDLLEXPORT bool ts_guc_use_custom_toaster;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;
@@ -72,6 +77,7 @@ extern TSDLLEXPORT bool ts_guc_enable_in_memory_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
+extern TSDLLEXPORT bool ts_guc_enable_aic_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
@@ -87,6 +93,14 @@ extern TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info;
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
+
+typedef enum CaggRefreshStatsLevel
+{
+	CAGG_REFRESH_STATS_OFF,
+	CAGG_REFRESH_STATS_SUMMARY,
+	CAGG_REFRESH_STATS_VERBOSE_LOG,
+} CaggRefreshStatsLevel;
+extern TSDLLEXPORT CaggRefreshStatsLevel ts_guc_cagg_refresh_stats_level;
 
 typedef enum CompressTruncateBehaviour
 {
@@ -115,8 +129,9 @@ extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
 extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
-extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
+extern TSDLLEXPORT bool ts_guc_debug_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
+extern TSDLLEXPORT bool ts_guc_enable_columnarscan_metadata_only;
 #if PG19_LT
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 #endif
@@ -149,6 +164,8 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_qual;
 
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
 
+extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_deferred_chunk_append;
+
 #endif
 
 extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
@@ -176,8 +193,6 @@ typedef enum
 } FeatureFlagType;
 
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
-extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
-extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
 
 #define TARGET_COMPRESSED_BATCH_SIZE 1000
 

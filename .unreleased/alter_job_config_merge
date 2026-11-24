@@ -1,1 +1,0 @@
-Implements: #10225 Add config_merge parameter to alter_job for merging JSONB into the existing job configuration

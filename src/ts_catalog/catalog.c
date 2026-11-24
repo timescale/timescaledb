@@ -93,6 +93,14 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_TENANT_TRACKING] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_TENANT_TRACKING_TABLE_NAME,
+	},
+	[HYPERTABLE_CAGG_SETTINGS] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = HYPERTABLE_CAGG_SETTINGS_TABLE_NAME,
+	},
 	[COMPRESSION_SETTINGS] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = COMPRESSION_SETTINGS_TABLE_NAME,
@@ -242,6 +250,18 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_IDX] = "continuous_aggs_jobs_refresh_ranges_idx",
 		},
 	},
+	[CONTINUOUS_AGGS_TENANT_TRACKING] = {
+		.length = _MAX_CONTINUOUS_AGGS_TENANT_TRACKING_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_TENANT_TRACKING_IDX] = "continuous_aggs_tenant_tracking_idx",
+		},
+	},
+	[HYPERTABLE_CAGG_SETTINGS] = {
+		.length = _MAX_HYPERTABLE_CAGG_SETTINGS_INDEX,
+		.names = (char *[]) {
+			[HYPERTABLE_CAGG_SETTINGS_PKEY] = "hypertable_cagg_settings_pkey",
+		},
+	},
 	[CONTINUOUS_AGGS_WATERMARK] = {
 		.length = _MAX_CONTINUOUS_AGGS_WATERMARK_INDEX,
 		.names = (char *[]) {
@@ -294,10 +314,6 @@ typedef struct InternalFunctionDef
 } InternalFunctionDef;
 
 static const InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
-	[DDL_ADD_CHUNK_CONSTRAINT] = {
-		.name = "chunk_constraint_add_table_constraint",
-		.args = 3,
-	},
 	[DDL_CONSTRAINT_CLONE] = {
 		.name = "constraint_clone",
 		.args = 2,
@@ -600,7 +616,7 @@ ts_catalog_table_next_seq_id(const Catalog *catalog, CatalogTable table)
 			 catalog_table_name(table));
 	}
 
-	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
+	return nextval_internal(relid, false);
 }
 
 Oid
@@ -624,43 +640,6 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 	}
 
 	return catalog->caches[type].inval_proxy_id;
-}
-
-/*
- * Become the user that owns the catalog schema.
- *
- * This might be necessary for users that do operations that require changes to
- * the catalog.
- *
- * The caller should pass a CatalogSecurityContext where the current security
- * context will be saved. The original security context can later be restored
- * with ts_catalog_restore_user().
- */
-TSDLLEXPORT bool
-ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info,
-									  CatalogSecurityContext *sec_ctx)
-{
-	GetUserIdAndSecContext(&sec_ctx->saved_uid, &sec_ctx->saved_security_context);
-
-	if (sec_ctx->saved_uid != database_info->owner_uid)
-	{
-		SetUserIdAndSecContext(database_info->owner_uid,
-							   sec_ctx->saved_security_context | SECURITY_LOCAL_USERID_CHANGE);
-		return true;
-	}
-
-	return false;
-}
-
-/*
- * Restore the security context of the original user after becoming the catalog
- * owner. The user should pass the original CatalogSecurityContext that was used
- * with ts_catalog_database_info_become_owner().
- */
-TSDLLEXPORT void
-ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
-{
-	SetUserIdAndSecContext(sec_ctx->saved_uid, sec_ctx->saved_security_context);
 }
 
 /*

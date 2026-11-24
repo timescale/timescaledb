@@ -21,7 +21,9 @@ typedef enum CreateTableFlags
 	CreateTableFlagOrderBy,
 	CreateTableFlagSegmentBy,
 	CreateTableFlagIndex,
-	CreateTableFlagColumnCodec
+	CreateTableFlagColumnCodec,
+	CreateTableFlagDirectCompress,
+	CreateTableFlagDirectCompressScheduleInterval
 } CreateTableFlags;
 
 WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);

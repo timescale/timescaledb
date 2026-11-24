@@ -15,18 +15,13 @@
 #include <executor/tuptable.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
-#include <optimizer/optimizer.h>
-#include <parser/parse_coerce.h>
-#include <parser/parse_collate.h>
-#include <parser/parse_expr.h>
-#include <parser/parse_relation.h>
-#include <rewrite/rewriteManip.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/datum.h>
 #include <utils/syscache.h>
 
 #include "chunk.h"
+#include "chunk_constraint.h"
 #include "dimension_slice.h"
 #include "guc.h"
 #include "hypertable_cache.h"
@@ -132,9 +127,7 @@ chunk_column_stats_insert_relation(const Relation rel, Form_chunk_column_stats i
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_chunk_column_stats] = { 0 };
 	bool nulls[Natts_chunk_column_stats] = { false };
-	CatalogSecurityContext sec_ctx;
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	info->id = ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_COLUMN_STATS);
 	values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_id)] = Int32GetDatum(info->id);
 	values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_hypertable_id)] =
@@ -155,7 +148,6 @@ chunk_column_stats_insert_relation(const Relation rel, Form_chunk_column_stats i
 	}
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
 
 	return info->id;
 }
@@ -254,8 +246,7 @@ ts_chunk_column_stats_update_by_id(int32 chunk_column_stats_id,
 }
 
 static void
-ts_chunk_column_stats_validate(Form_chunk_column_stats info, const Oid hypertable_relid,
-							   bool if_not_exists)
+ts_chunk_column_stats_validate(Form_chunk_column_stats info, const Oid hypertable_relid)
 {
 	HeapTuple tuple;
 	Datum datum;
@@ -317,7 +308,7 @@ ts_chunk_column_stats_add_internal(FunctionCallInfo fcinfo, Oid table_relid, Nam
 	namestrcpy(&fd.column_name, NameStr(*colname));
 	LockRelationOid(table_relid, AccessShareLock);
 
-	ts_chunk_column_stats_validate(&fd, table_relid, if_not_exists);
+	ts_chunk_column_stats_validate(&fd, table_relid);
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
@@ -570,78 +561,41 @@ ts_chunk_column_stats_fill_dummy_dimension(FormData_chunk_column_stats *r, Oid m
 }
 
 /*
- * Create a CHECK constraint for a min/max range chunk_column_stats entry
+ * Create the min/max range checks for a chunk_column_stats entry
  */
-static Constraint *
-create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_table_relid,
-								  Oid chunk_relid, const char *name)
+static List *
+create_col_stats_checks(const Form_chunk_column_stats info, Oid chunk_relid, Index varno)
 {
-	Constraint *constr = NULL;
-	Node *rangedef;
-	ColumnRef *colref;
-	List *compexprs = NIL;
-	Oid col_type;
+	List *checks = NIL;
+	Oid coltype;
+	int32 coltypmod;
+	Oid colcollation;
 
-	if (info->range_start == PG_INT64_MIN && info->range_end == PG_INT64_MAX)
-	{
-		return NULL;
-	}
-
-	colref = makeNode(ColumnRef);
-	colref->fields = list_make1(makeString(pstrdup(NameStr(info->column_name))));
-	colref->location = -1;
-
-	/*
-	 * Get the column type for later converting the internal format
-	 * to string.
-	 */
-	const int ht_attno = get_attnum(main_table_relid, NameStr(info->column_name));
-	col_type = get_atttype(main_table_relid, ht_attno);
-
-	rangedef = (Node *) colref;
+	AttrNumber attno = get_attnum(chunk_relid, NameStr(info->column_name));
+	get_atttypetypmodcoll(chunk_relid, attno, &coltype, &coltypmod, &colcollation);
+	Node *var = (Node *) makeVar(varno, attno, coltype, coltypmod, colcollation, 0);
 
 	/* Elide range constraint for +INF or -INF */
 	if (info->range_start != PG_INT64_MIN)
 	{
-		A_Const *start_const = makeNode(A_Const);
-		memcpy(&start_const->val,
-			   makeString(ts_internal_to_time_string(info->range_start, col_type)),
-			   sizeof(start_const->val));
-		start_const->location = -1;
-		A_Expr *ge_expr = makeSimpleA_Expr(AEXPR_OP, ">=", rangedef, (Node *) start_const, -1);
-		compexprs = lappend(compexprs, ge_expr);
+		checks = lappend(checks,
+						 ts_chunk_constraint_bound_expr(var,
+														coltype,
+														info->range_start,
+														BTGreaterEqualStrategyNumber));
 	}
 
+	/* Use the inclusive max, the exclusive end can overflow or round down for dates */
 	if (info->range_end != PG_INT64_MAX)
 	{
-		A_Const *end_const = makeNode(A_Const);
-		memcpy(&end_const->val,
-			   makeString(ts_internal_to_time_string(info->range_end, col_type)),
-			   sizeof(end_const->val));
-		end_const->location = -1;
-		A_Expr *lt_expr = makeSimpleA_Expr(AEXPR_OP, "<", rangedef, (Node *) end_const, -1);
-		compexprs = lappend(compexprs, lt_expr);
+		checks = lappend(checks,
+						 ts_chunk_constraint_bound_expr(var,
+														coltype,
+														info->range_end - 1,
+														BTLessEqualStrategyNumber));
 	}
 
-	constr = makeNode(Constraint);
-	constr->contype = CONSTR_CHECK;
-	constr->conname = name ? pstrdup(name) : NULL;
-	constr->deferrable = false;
-	constr->skip_validation = true;
-	constr->initially_valid = true;
-
-	Assert(list_length(compexprs) >= 1);
-
-	if (list_length(compexprs) == 2)
-	{
-		constr->raw_expr = (Node *) makeBoolExpr(AND_EXPR, compexprs, -1);
-	}
-	else if (list_length(compexprs) == 1)
-	{
-		constr->raw_expr = linitial(compexprs);
-	}
-
-	return constr;
+	return checks;
 }
 
 /*
@@ -829,13 +783,16 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
+	const char *schema_name = ts_chunk_get_schema_name(chunk);
+	const char *table_name = ts_chunk_get_table_name(chunk);
+
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT pg_catalog.min(%s), pg_catalog.max(%s) FROM %s.%s",
 					 quote_identifier(col_name),
 					 quote_identifier(col_name),
-					 quote_identifier(NameStr(chunk->fd.schema_name)),
-					 quote_identifier(NameStr(chunk->fd.table_name)));
+					 quote_identifier(schema_name),
+					 quote_identifier(table_name));
 
 	/*
 	 * SPI_connect will switch MemoryContext so we need to keep track
@@ -856,8 +813,8 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the min/max values for column \"%s\" of chunk \"%s.%s\"",
 						 col_name,
-						 NameStr(chunk->fd.schema_name),
-						 NameStr(chunk->fd.table_name)))));
+						 schema_name,
+						 table_name))));
 	}
 
 	pfree(command.data);
@@ -933,8 +890,8 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 		Oid col_type;
 
 		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
-		col_type = get_atttype(chunk->table_id, attno);
+		attno = ts_map_attno(ht->main_table_relid, chunk->fd.relid, attno);
+		col_type = get_atttype(chunk->fd.relid, attno);
 
 		/* calculate the min/max range for this column on this chunk */
 		if (chunk_get_minmax(chunk, col_type, col_name, minmax))
@@ -1029,13 +986,8 @@ ts_chunk_column_stats_insert(const Hypertable *ht, const Chunk *chunk)
 
 	for (range_index = 0; range_index < rs->num_range_cols; range_index++)
 	{
-		AttrNumber attno;
 		char *col_name = NameStr(rs->range_cols[range_index].column_name);
 		FormData_chunk_column_stats fd = { 0 };
-
-		/* Get the attribute number in the HT for this column, and map to the chunk */
-		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
 
 		/* insert an entry for this ht_id, chunk_id for this col_name with -inf/+inf range */
 		fd.hypertable_id = ht->fd.id;
@@ -1068,13 +1020,10 @@ ts_chunk_column_stats_drop(const Hypertable *ht, const char *col_name, bool *dro
 static ScanTupleResult
 chunk_column_stats_tuple_delete(TupleInfo *ti, void *data)
 {
-	CatalogSecurityContext sec_ctx;
 	int *count = data;
 
 	/* delete catalog entry */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	ts_catalog_restore_user(&sec_ctx);
 	*count = *count + 1;
 
 	return SCAN_CONTINUE;
@@ -1308,7 +1257,7 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		 * (Entry is typically marked "invalid" when a compressed chunk becomes partial
 		 * due to DML in it.)
 		 *
-		 * Also, if we have a valid chunnk with -inf/+inf entries then it matches all
+		 * Also, if we have a valid chunk with -inf/+inf entries then it matches all
 		 * queries
 		 */
 		if (!fd.valid || (fd.range_start == PG_INT64_MIN && fd.range_end == PG_INT64_MAX))
@@ -1500,7 +1449,7 @@ ts_chunk_column_stats_set_invalid(int32 hypertable_id, int32 chunk_id)
 typedef struct CheckList
 {
 	Oid chunk_relid;
-	Oid main_table_relid;
+	Index varno;
 	List *cclist;
 } CheckList;
 
@@ -1510,19 +1459,16 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	FormData_chunk_column_stats fd;
-	Constraint *constr;
 	CheckList *checklist = data;
 
 	fill_form_from_slot(ti->slot, &fd);
 
-	constr = create_col_stats_check_constraint(&fd,
-											   checklist->main_table_relid,
-											   checklist->chunk_relid,
-											   NULL);
-
-	if (constr)
+	/* Invalid ranges no longer cover all rows in the chunk */
+	if (fd.valid)
 	{
-		checklist->cclist = lappend(checklist->cclist, constr);
+		checklist->cclist =
+			list_concat(checklist->cclist,
+						create_col_stats_checks(&fd, checklist->chunk_relid, checklist->varno));
 	}
 
 	if (should_free)
@@ -1538,23 +1484,17 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
  * entries for each such entry.
  */
 List *
-ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid, Index varno)
+ts_chunk_column_stats_construct_check_constraints(Oid reloid, Index varno)
 {
 	FormData_chunk fd;
-	CheckList clist = { 0 };
-	ListCell *lc;
+	CheckList clist = { .chunk_relid = reloid, .varno = varno };
 	ScanKeyData scankey[2];
-	ParseState *pstate = NULL;
-	List *result = NIL;
 
 	/* check if it's not a chunk and return early in that case */
 	if (!ts_chunk_simple_scan_by_reloid(reloid, &fd, true))
 	{
 		return NIL;
 	}
-
-	clist.chunk_relid = reloid;
-	clist.main_table_relid = ts_hypertable_id_to_relid(fd.hypertable_id, false);
 
 	Assert(fd.id != INVALID_CHUNK_ID);
 
@@ -1581,44 +1521,5 @@ ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 									 RowExclusiveLock,
 									 CurrentMemoryContext);
 
-	if (clist.cclist)
-	{
-		pstate = make_parsestate(NULL);
-		/* The overall query should be holding an appropriate lock already on this relation */
-		ParseNamespaceItem *nsitem =
-			addRangeTableEntryForRelation(pstate, relation, AccessShareLock, NULL, false, false);
-		addNSItemToQuery(pstate, nsitem, true, true, true);
-	}
-
-	foreach (lc, clist.cclist)
-	{
-		Node *expr;
-		Constraint *constr = lfirst(lc);
-
-		/* Transform raw parsetree to executable expression. */
-		expr = transformExpr(pstate, constr->raw_expr, EXPR_KIND_CHECK_CONSTRAINT);
-
-		/* Make sure it yields a boolean result. */
-		expr = coerce_to_boolean(pstate, expr, "CHECK");
-
-		/* Take care of collations. */
-		assign_expr_collations(pstate, expr);
-
-		expr = eval_const_expressions(NULL, expr);
-		expr = (Node *) canonicalize_qual((Expr *) expr, true);
-
-		/* Fix Vars to have the desired varno */
-		if (varno != 1)
-		{
-			ChangeVarNodes(expr, 1, varno, 0);
-		}
-
-		/*
-		 * Finally, convert to implicit-AND format (that is, a List) and
-		 * append the resulting item(s) to our output list.
-		 */
-		result = list_concat(result, make_ands_implicit((Expr *) expr));
-	}
-
-	return result;
+	return clist.cclist;
 }

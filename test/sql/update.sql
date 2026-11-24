@@ -7,8 +7,6 @@
 \o
 
 -- Make sure UPDATE isn't optimized if it includes Append plans
--- Need to turn of nestloop to make append appear the same on PG96 and PG10
-set enable_nestloop = 'off';
 
 CREATE OR REPLACE FUNCTION series_val()
 RETURNS integer LANGUAGE PLPGSQL STABLE AS
@@ -70,4 +68,21 @@ SELECT count(*) FROM i6790_update WHERE value = 0.2;
 -- UPDATE with correlated EXISTS
 UPDATE i6790_update SET value = 0.3 WHERE EXISTS (SELECT 1 FROM i6790_update g WHERE g.device = i6790_update.device);
 SELECT count(*) FROM i6790_update WHERE value = 0.3;
+
+
+-- Test using a ctid column directly on a hypertable that is a target of an
+-- UPDATE query.
+CREATE TABLE ht_update_join(time timestamptz NOT NULL, val int);
+SELECT create_hypertable('ht_update_join', 'time', chunk_time_interval => interval '1 month');
+INSERT INTO ht_update_join VALUES ('2020-01-15', 1), ('2020-02-15', 2);
+
+UPDATE ht_update_join a SET val = 0
+FROM ht_update_join b
+WHERE a.time = b.time AND a.ctid = b.ctid;
+
+-- Test nesting.
+WITH updated AS (
+  UPDATE ht_update_join SET val = 99 WHERE time = '2020-01-15' RETURNING *
+)
+SELECT * FROM updated;
 

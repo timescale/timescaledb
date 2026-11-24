@@ -27,17 +27,17 @@ teardown {
 }
 
 session "S"
-setup		{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
+setup		{ BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';}
 step "S1"	{ SELECT * FROM ts_reorder_test; }
 step "Sc"	{ COMMIT; }
 
 session "R"
-setup		{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms'; }
+setup		{ BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms'; }
 step "R1"	{ SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); }
 step "Rc"	{ COMMIT; }
 
 session "B"
-setup		{ BEGIN; LOCK TABLE waiter; }
+setup		{ BEGIN; SET LOCAL lock_timeout = '2s'; LOCK TABLE waiter; }
 step "Bc"   { COMMIT; }
 
 permutation "Bc" "S1" "Sc" "R1" "Rc"

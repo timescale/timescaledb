@@ -735,7 +735,7 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_space (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
-         Delete on _timescaledb_internal._hyper_7_8_chunk metrics_space_2
+         Delete on _timescaledb_internal._hyper_7_8_chunk metrics_space
          Delete on _timescaledb_internal._hyper_7_15_chunk metrics_space
          Delete on _timescaledb_internal._hyper_7_16_chunk metrics_space
          Delete on _timescaledb_internal._hyper_7_23_chunk metrics_space
@@ -745,13 +745,10 @@ BEGIN;
          ->  Custom Scan (ChunkAppend) on public.metrics_space (actual rows=1.00 loops=1)
                Startup Exclusion: true
                Runtime Exclusion: false
-               Chunks excluded during startup: 6
+               Chunks excluded during startup: 7
                ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
                      Output: metrics_space_1.tableoid, metrics_space_1.ctid
                      Index Cond: ((metrics_space_1.device = format('1'::text)) AND (metrics_space_1."time" = ('2000-01-01'::cstring)::timestamp with time zone))
-               ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0.00 loops=1)
-                     Output: metrics_space_2.tableoid, metrics_space_2.ctid
-                     Index Cond: ((metrics_space_2.device = format('1'::text)) AND (metrics_space_2."time" = ('2000-01-01'::cstring)::timestamp with time zone))
 
 ROLLBACK;
 BEGIN;
@@ -760,41 +757,29 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_space (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
-         Delete on _timescaledb_internal._hyper_7_8_chunk metrics_space_2
-         Delete on _timescaledb_internal._hyper_7_15_chunk metrics_space_3
-         Delete on _timescaledb_internal._hyper_7_16_chunk metrics_space_4
-         Delete on _timescaledb_internal._hyper_7_23_chunk metrics_space_5
-         Delete on _timescaledb_internal._hyper_7_24_chunk metrics_space_6
-         Delete on _timescaledb_internal._hyper_7_31_chunk metrics_space_7
-         Delete on _timescaledb_internal._hyper_7_32_chunk metrics_space_8
+         Delete on _timescaledb_internal._hyper_7_8_chunk metrics_space
+         Delete on _timescaledb_internal._hyper_7_15_chunk metrics_space_2
+         Delete on _timescaledb_internal._hyper_7_16_chunk metrics_space
+         Delete on _timescaledb_internal._hyper_7_23_chunk metrics_space_3
+         Delete on _timescaledb_internal._hyper_7_24_chunk metrics_space
+         Delete on _timescaledb_internal._hyper_7_31_chunk metrics_space_4
+         Delete on _timescaledb_internal._hyper_7_32_chunk metrics_space
          ->  Custom Scan (ChunkAppend) on public.metrics_space (actual rows=4.00 loops=1)
                Startup Exclusion: true
                Runtime Exclusion: false
-               Chunks excluded during startup: 0
+               Chunks excluded during startup: 4
                ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
                      Output: metrics_space_1.tableoid, metrics_space_1.ctid
                      Index Cond: (metrics_space_1.device = format('1'::text))
-               ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_7_15_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_15_chunk metrics_space_2 (actual rows=1.00 loops=1)
                      Output: metrics_space_2.tableoid, metrics_space_2.ctid
                      Index Cond: (metrics_space_2.device = format('1'::text))
-               ->  Index Scan using _hyper_7_15_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_15_chunk metrics_space_3 (actual rows=1.00 loops=1)
+               ->  Index Scan using _hyper_7_23_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_23_chunk metrics_space_3 (actual rows=1.00 loops=1)
                      Output: metrics_space_3.tableoid, metrics_space_3.ctid
                      Index Cond: (metrics_space_3.device = format('1'::text))
-               ->  Index Scan using _hyper_7_16_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_16_chunk metrics_space_4 (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_7_31_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_31_chunk metrics_space_4 (actual rows=1.00 loops=1)
                      Output: metrics_space_4.tableoid, metrics_space_4.ctid
                      Index Cond: (metrics_space_4.device = format('1'::text))
-               ->  Index Scan using _hyper_7_23_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_23_chunk metrics_space_5 (actual rows=1.00 loops=1)
-                     Output: metrics_space_5.tableoid, metrics_space_5.ctid
-                     Index Cond: (metrics_space_5.device = format('1'::text))
-               ->  Index Scan using _hyper_7_24_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_24_chunk metrics_space_6 (actual rows=0.00 loops=1)
-                     Output: metrics_space_6.tableoid, metrics_space_6.ctid
-                     Index Cond: (metrics_space_6.device = format('1'::text))
-               ->  Index Scan using _hyper_7_31_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_31_chunk metrics_space_7 (actual rows=1.00 loops=1)
-                     Output: metrics_space_7.tableoid, metrics_space_7.ctid
-                     Index Cond: (metrics_space_7.device = format('1'::text))
-               ->  Index Scan using _hyper_7_32_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_32_chunk metrics_space_8 (actual rows=0.00 loops=1)
-                     Output: metrics_space_8.tableoid, metrics_space_8.ctid
-                     Index Cond: (metrics_space_8.device = format('1'::text))
 
 ROLLBACK;
 BEGIN;
@@ -803,7 +788,7 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_space (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
-         Update on _timescaledb_internal._hyper_7_8_chunk metrics_space_2
+         Update on _timescaledb_internal._hyper_7_8_chunk metrics_space
          Update on _timescaledb_internal._hyper_7_15_chunk metrics_space
          Update on _timescaledb_internal._hyper_7_16_chunk metrics_space
          Update on _timescaledb_internal._hyper_7_23_chunk metrics_space
@@ -816,13 +801,10 @@ BEGIN;
                      Output: metrics_space.tableoid, metrics_space.ctid
                      Startup Exclusion: true
                      Runtime Exclusion: false
-                     Chunks excluded during startup: 6
+                     Chunks excluded during startup: 7
                      ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
                            Output: metrics_space_1.tableoid, metrics_space_1.ctid
                            Index Cond: ((metrics_space_1.device = format('1'::text)) AND (metrics_space_1."time" = ('2000-01-01'::cstring)::timestamp with time zone))
-                     ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0.00 loops=1)
-                           Output: metrics_space_2.tableoid, metrics_space_2.ctid
-                           Index Cond: ((metrics_space_2.device = format('1'::text)) AND (metrics_space_2."time" = ('2000-01-01'::cstring)::timestamp with time zone))
 
 ROLLBACK;
 BEGIN;
@@ -831,44 +813,32 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_space (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
-         Update on _timescaledb_internal._hyper_7_8_chunk metrics_space_2
-         Update on _timescaledb_internal._hyper_7_15_chunk metrics_space_3
-         Update on _timescaledb_internal._hyper_7_16_chunk metrics_space_4
-         Update on _timescaledb_internal._hyper_7_23_chunk metrics_space_5
-         Update on _timescaledb_internal._hyper_7_24_chunk metrics_space_6
-         Update on _timescaledb_internal._hyper_7_31_chunk metrics_space_7
-         Update on _timescaledb_internal._hyper_7_32_chunk metrics_space_8
+         Update on _timescaledb_internal._hyper_7_8_chunk metrics_space
+         Update on _timescaledb_internal._hyper_7_15_chunk metrics_space_2
+         Update on _timescaledb_internal._hyper_7_16_chunk metrics_space
+         Update on _timescaledb_internal._hyper_7_23_chunk metrics_space_3
+         Update on _timescaledb_internal._hyper_7_24_chunk metrics_space
+         Update on _timescaledb_internal._hyper_7_31_chunk metrics_space_4
+         Update on _timescaledb_internal._hyper_7_32_chunk metrics_space
          ->  Result (actual rows=4.00 loops=1)
                Output: '0.1'::double precision, metrics_space.tableoid, metrics_space.ctid
                ->  Custom Scan (ChunkAppend) on public.metrics_space (actual rows=4.00 loops=1)
                      Output: metrics_space.tableoid, metrics_space.ctid
                      Startup Exclusion: true
                      Runtime Exclusion: false
-                     Chunks excluded during startup: 0
+                     Chunks excluded during startup: 4
                      ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
                            Output: metrics_space_1.tableoid, metrics_space_1.ctid
                            Index Cond: (metrics_space_1.device = format('1'::text))
-                     ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_7_15_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_15_chunk metrics_space_2 (actual rows=1.00 loops=1)
                            Output: metrics_space_2.tableoid, metrics_space_2.ctid
                            Index Cond: (metrics_space_2.device = format('1'::text))
-                     ->  Index Scan using _hyper_7_15_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_15_chunk metrics_space_3 (actual rows=1.00 loops=1)
+                     ->  Index Scan using _hyper_7_23_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_23_chunk metrics_space_3 (actual rows=1.00 loops=1)
                            Output: metrics_space_3.tableoid, metrics_space_3.ctid
                            Index Cond: (metrics_space_3.device = format('1'::text))
-                     ->  Index Scan using _hyper_7_16_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_16_chunk metrics_space_4 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_7_31_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_31_chunk metrics_space_4 (actual rows=1.00 loops=1)
                            Output: metrics_space_4.tableoid, metrics_space_4.ctid
                            Index Cond: (metrics_space_4.device = format('1'::text))
-                     ->  Index Scan using _hyper_7_23_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_23_chunk metrics_space_5 (actual rows=1.00 loops=1)
-                           Output: metrics_space_5.tableoid, metrics_space_5.ctid
-                           Index Cond: (metrics_space_5.device = format('1'::text))
-                     ->  Index Scan using _hyper_7_24_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_24_chunk metrics_space_6 (actual rows=0.00 loops=1)
-                           Output: metrics_space_6.tableoid, metrics_space_6.ctid
-                           Index Cond: (metrics_space_6.device = format('1'::text))
-                     ->  Index Scan using _hyper_7_31_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_31_chunk metrics_space_7 (actual rows=1.00 loops=1)
-                           Output: metrics_space_7.tableoid, metrics_space_7.ctid
-                           Index Cond: (metrics_space_7.device = format('1'::text))
-                     ->  Index Scan using _hyper_7_32_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_32_chunk metrics_space_8 (actual rows=0.00 loops=1)
-                           Output: metrics_space_8.tableoid, metrics_space_8.ctid
-                           Index Cond: (metrics_space_8.device = format('1'::text))
 
 ROLLBACK;
 -- should have ChunkAppend since constraint is stable

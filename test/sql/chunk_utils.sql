@@ -683,7 +683,7 @@ SELECT pg_typeof(_timescaledb_functions.chunk_status_text(0));
 
 -- Test hypertable_status and hypertable_status_text functions
 CREATE TABLE hypertable_status_test(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
-SELECT _timescaledb_functions.hypertable_status_text(i) FROM generate_series(0,7) i;
+SELECT _timescaledb_functions.hypertable_status_text(i) FROM generate_series(0,15) i;
 
 SELECT _timescaledb_functions.hypertable_status('hypertable_status_test');
 SELECT _timescaledb_functions.hypertable_status_text('hypertable_status_test'::regclass);
@@ -692,10 +692,22 @@ SELECT _timescaledb_functions.hypertable_status_text(NULL::int);
 SELECT _timescaledb_functions.hypertable_status_text(NULL::regclass);
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_status_text(-1);
-SELECT _timescaledb_functions.hypertable_status_text(8);
+SELECT _timescaledb_functions.hypertable_status_text(16);
 SELECT _timescaledb_functions.hypertable_status('pg_class'::regclass);
 \set ON_ERROR_STOP 1
 
 -- Test that function exists and returns an array type
 SELECT pg_typeof(_timescaledb_functions.hypertable_status_text(0));
+
+-- A non-owner must not be able to drop a chunk via the internal drop_chunk API
+\c  :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE drop_chunk_perm(time timestamptz NOT NULL);
+SELECT create_hypertable('drop_chunk_perm', 'time');
+INSERT INTO drop_chunk_perm VALUES ('2025-01-01');
+SELECT ch AS "PERMCHUNK" FROM show_chunks('drop_chunk_perm') ch \gset
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.drop_chunk(:'PERMCHUNK');
+\set ON_ERROR_STOP 1
+RESET ROLE;
 
