@@ -30,7 +30,13 @@ typedef enum GapfillPrivateIndex
 	GFP_GapfillFunc = 0, /* FuncExpr: time_bucket_gapfill call */
 	GFP_GroupClause = 1, /* List: parse->groupClause */
 	GFP_JoinTree = 2,	 /* FromExpr: parse->jointree */
-	GFP_Args = 3,		 /* List: gapfill function arguments */
+	GFP_BucketWidth = 3, /* Expr: gapfill function bucket width argument */
+	GFP_TimeColumn = 4,	 /* Expr: gapfill function time column argument */
+	GFP_TimeZone = 5,	 /* Expr/Null: gapfill function time zone argument */
+	GFP_Offset = 6,		 /* Expr/Null: gapfill function offset argument */
+	GFP_Origin = 7,		 /* Expr/Null: gapfill function origin argument */
+	GFP_Start = 8,		 /* Expr: gapfill function start argument */
+	GFP_End = 9,		 /* Expr: gapfill function end argument */
 	GFP_Count
 } GapfillPrivateIndex;
 
@@ -69,3 +75,12 @@ extern Const *make_const_value_for_gapfill_internal(Oid typid, int64 value);
 extern int64 gapfill_datum_get_internal(Datum, Oid);
 extern int64 gapfill_bucket_width_get_internal(Oid timetype, Oid argtype, Datum arg,
 											   Interval **interval);
+extern bool gapfill_is_integer_type(Oid bucket_type);
+extern bool gapfill_is_integer(List *args);
+extern Expr *gapfill_get_bucketwidth_arg(List *args);
+extern Expr *gapfill_get_timecolumn_arg(List *args);
+extern Expr *gapfill_get_start_arg(List *args);
+extern Expr *gapfill_get_end_arg(List *args);
+extern Expr *gapfill_get_timezone_arg(List *args);
+extern Expr *gapfill_get_offset_arg(List *args);
+extern Expr *gapfill_get_origin_arg(List *args);

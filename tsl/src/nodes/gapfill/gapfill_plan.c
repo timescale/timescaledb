@@ -247,6 +247,93 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	return false;
 }
 
+/*  time_bucket_gapfill signature variants
+ *
+ *  integer gapfills:
+ *    (<bucket width>, <timecol>, <start>, <end>) or
+ *    (<bucket width>, <timecol>, <offset>, <start>, <end>)
+ *
+ *  time gapfills:
+ *    (<bucket width>, <timecol>, <start>, <end>) or
+ *    (<bucket width>, <timecol>, <TZ>, <start>, <end>) or
+ *    (<bucket width>, <timecol>, <offset>, <origin>, <start>, <end>) or
+ *    (<bucket width>, <timecol>, <TZ>, <offset>, <origin>, <start>, <end>)
+ */
+Expr *
+gapfill_get_bucketwidth_arg(List *args)
+{
+	return linitial(args);
+}
+
+Expr *
+gapfill_get_timecolumn_arg(List *args)
+{
+	return lsecond(args);
+}
+
+Expr *
+gapfill_get_start_arg(List *args)
+{
+	return list_nth(args, list_length(args) - 2);
+}
+
+Expr *
+gapfill_get_end_arg(List *args)
+{
+	return llast(args);
+}
+
+Expr *
+gapfill_get_timezone_arg(List *args)
+{
+	if (!gapfill_is_integer(args) && (list_length(args) == 5 || list_length(args) == 7))
+	{
+		return lthird(args);
+	}
+	return NULL;
+}
+
+Expr *
+gapfill_get_offset_arg(List *args)
+{
+	if (gapfill_is_integer(args))
+	{
+		if (list_length(args) == 5)
+		{
+			return lthird(args);
+		}
+	}
+	else if (list_length(args) >= 6)
+	{
+		if (gapfill_get_timezone_arg(args))
+		{
+			return lfourth(args);
+		}
+		else
+		{
+			return lthird(args);
+		}
+	}
+	return NULL;
+}
+
+Expr *
+gapfill_get_origin_arg(List *args)
+{
+	if (!gapfill_is_integer(args) && list_length(args) >= 6)
+	{
+		if (gapfill_get_timezone_arg(args))
+		{
+			return lfifth(args);
+		}
+		else
+		{
+			return lfourth(args);
+		}
+	}
+	return NULL;
+}
+
 /*
  * Estimate simple expression
  * and if it resolves to a non-null Const evaluate it,
@@ -282,11 +369,11 @@ gapfill_estimate_boundary(GapFillArgEvalContext *gapfill_plan_ctx, GapFillBounda
 	Node *arg = NULL;
 	if (boundary == GAPFILL_START)
 	{
-		arg = (list_length(args) < 5 ? lthird(args) : lfourth(args));
+		arg = (Node *) gapfill_get_start_arg(args);
 	}
 	else
 	{
-		arg = (list_length(args) < 5 ? lfourth(args) : lfifth(args));
+		arg = (Node *) gapfill_get_end_arg(args);
 	}
 
 	if (gapfill_is_const_null((Expr *) arg))
@@ -321,15 +408,15 @@ estimate_and_check_gapfill_bucket_width(GapFillArgEvalContext *gapfill_plan_ctx)
 		return INVALID_ESTIMATE;
 	}
 	Assert(!isnull);
-	Interval *gapfill_interval = NULL;
+	Interval *bucket_width_interval = NULL;
 	int64 gapfill_bucket_width =
 		gapfill_bucket_width_get_internal(gapfill_plan_ctx->typid,
 										  exprType((Node *) bucket_width_arg),
 										  arg_value,
-										  &gapfill_interval);
-	if (gapfill_interval)
+										  &bucket_width_interval);
+	if (bucket_width_interval)
 	{
-		gapfill_bucket_width = ts_get_interval_period_approx(gapfill_interval);
+		gapfill_bucket_width = ts_get_interval_period_approx(bucket_width_interval);
 	}
 
 	/* negative bucket_width can be reported here */
@@ -434,8 +521,14 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *
 	lfirst(list_nth_cell(cscan->custom_private, GFP_GapfillFunc)) = gfpath->func;
 	lfirst(list_nth_cell(cscan->custom_private, GFP_GroupClause)) = root->parse->groupClause;
 	lfirst(list_nth_cell(cscan->custom_private, GFP_JoinTree)) = root->parse->jointree;
-	lfirst(list_nth_cell(cscan->custom_private, GFP_Args)) = args;
-
+	lfirst(list_nth_cell(cscan->custom_private, GFP_BucketWidth)) =
+		gapfill_get_bucketwidth_arg(args);
+	lfirst(list_nth_cell(cscan->custom_private, GFP_TimeColumn)) = gapfill_get_timecolumn_arg(args);
+	lfirst(list_nth_cell(cscan->custom_private, GFP_TimeZone)) = gapfill_get_timezone_arg(args);
+	lfirst(list_nth_cell(cscan->custom_private, GFP_Offset)) = gapfill_get_offset_arg(args);
+	lfirst(list_nth_cell(cscan->custom_private, GFP_Origin)) = gapfill_get_origin_arg(args);
+	lfirst(list_nth_cell(cscan->custom_private, GFP_Start)) = gapfill_get_start_arg(args);
+	lfirst(list_nth_cell(cscan->custom_private, GFP_End)) = gapfill_get_end_arg(args);
 	return &cscan->scan.plan;
 }
 
@@ -764,18 +857,15 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	 * non-timezone variant has 4: (bucket_width, ts, start, finish).
 	 */
 	FuncExpr *func = context.call.func;
-	int nargs = list_length(func->args);
-	if (nargs == 5)
+	Expr *tz_arg = gapfill_get_timezone_arg(func->args);
+	if (tz_arg && contains_nonconstant_expr((Node *) tz_arg))
 	{
-		Expr *tz_arg = lthird(func->args);
-		if (contains_nonconstant_expr((Node *) tz_arg))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("time_bucket_gapfill does not support non-constant timezone"),
-					 errhint("Use a constant timezone value.")));
-		}
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("time_bucket_gapfill does not support non-constant timezone"),
+				 errhint("Use a constant timezone value.")));
 	}
+
 	List *copy = group_rel->pathlist;
 	group_rel->pathlist = NIL;
 	group_rel->cheapest_total_path = NULL;
