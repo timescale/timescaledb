@@ -199,7 +199,7 @@ jobs:
       if: always() && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: config.log for PostgreSQL ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
+        name: ${{ matric.display_name }} config.log for PostgreSQL
         path: build-pg/config.log
 
     - name: Set up PATH
