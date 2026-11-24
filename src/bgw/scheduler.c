@@ -21,6 +21,7 @@
 #include <storage/latch.h>
 #include <storage/lwlock.h>
 #include <storage/proc.h>
+#include <storage/procarray.h>
 #include <storage/shmem.h>
 #include <tcop/tcopprot.h>
 #include <utils/acl.h>
@@ -465,7 +466,9 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 			break;
 		case BGWH_STOPPED:
 			StartTransactionCommand();
+			PushActiveSnapshot(GetTransactionSnapshot());
 			scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+			PopActiveSnapshot();
 			CommitTransactionCommand();
 			MemoryContextSwitchTo(scratch_mctx);
 			break;
@@ -487,8 +490,16 @@ terminate_and_cleanup_job(ScheduledBgwJob *sjob)
 		status = GetBackgroundWorkerPid(sjob->handle, &pid);
 		if (status == BGWH_STARTED)
 		{
-			/* Try graceful cancellation first (SIGINT via pg_cancel_backend) */
-			DirectFunctionCall1(pg_cancel_backend, Int32GetDatum(pid));
+			/*
+			 * Try graceful cancellation first (SIGINT via pg_cancel_backend).
+			 * A worker that just finished can still count as started while
+			 * its process is already gone, so only cancel a live backend and
+			 * otherwise just wait for it to stop.
+			 */
+			if (BackendPidGetProc(pid) != NULL)
+			{
+				DirectFunctionCall1(pg_cancel_backend, Int32GetDatum(pid));
+			}
 
 			/* Poll for up to 3 seconds for the worker to exit */
 			for (int i = 0; i < 30; i++)
