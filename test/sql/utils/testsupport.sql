@@ -406,17 +406,17 @@ BEGIN
 END
 $BODY$;
 
--- Wait until a run of the job has failed. This is a procedure that
--- commits between checks, so it also sees new rows under serializable
--- isolation.
-CREATE OR REPLACE PROCEDURE test.wait_for_job_failure(job INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS)
+-- Wait until the given number of runs of the job have failed. This is a
+-- procedure that commits between checks, so it also sees new rows under
+-- serializable isolation.
+CREATE OR REPLACE PROCEDURE test.wait_for_job_failure(job INTEGER, failures INTEGER=1, spins INTEGER=:TEST_SPINWAIT_ITERS)
 LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
     FOR i IN 1..spins
     LOOP
-        IF EXISTS (SELECT FROM _timescaledb_internal.bgw_job_stat_history
-                   WHERE job_id = job AND succeeded IS FALSE) THEN
+        IF (SELECT count(*) FROM _timescaledb_internal.bgw_job_stat_history
+            WHERE job_id = job AND succeeded IS FALSE) >= failures THEN
             RETURN;
         END IF;
         PERFORM pg_sleep(0.1);

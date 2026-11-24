@@ -96,7 +96,9 @@ WHERE succeeded IS FALSE;
 -- drop all job_stats for the retention job
 DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 3;
 SELECT FROM alter_job(3, next_start => now());
-SELECT _timescaledb_functions.restart_background_workers();
+-- Wake the scheduler instead of restarting it. The current scheduler can
+-- start the job right away, and a restart would kill it.
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(3, 1);
 -- only the last row remains
 SELECT job_id, pid, succeeded, execution_start, execution_finish, data

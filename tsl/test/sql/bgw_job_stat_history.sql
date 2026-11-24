@@ -43,7 +43,9 @@ SELECT add_job('custom_job_error', schedule_interval => interval '1 hour', initi
 SELECT _timescaledb_functions.start_background_workers();
 
 SELECT test.wait_for_job_to_run(:job_id_1, 1);
-SELECT test.wait_for_job_to_run(:job_id_2, 1);
+-- wait_for_job_to_run stops at the first failure, so wait for the
+-- failures of the error job instead
+CALL test.wait_for_job_failure(:job_id_2, 1);
 
 -- only 1 failure
 SELECT count(*), succeeded FROM timescaledb_information.job_history WHERE job_id >= 1000 GROUP BY 2 ORDER BY 2;
@@ -70,7 +72,7 @@ SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
 -- leave an unclosed history row that surfaces as "crash detected").
 SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_1, 2);
-SELECT test.wait_for_job_to_run(:job_id_2, 2);
+CALL test.wait_for_job_failure(:job_id_2, 2);
 
 -- 1 succeeded 2 failures
 SELECT count(*), succeeded FROM timescaledb_information.job_history WHERE job_id >= 1000 GROUP BY 2 ORDER BY 2;
@@ -90,7 +92,7 @@ SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
 
 SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_1, 3);
-SELECT test.wait_for_job_to_run(:job_id_2, 3);
+CALL test.wait_for_job_failure(:job_id_2, 3);
 
 -- Check job execution history
 SELECT job_id, pid IS NOT NULL AS pid, proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
