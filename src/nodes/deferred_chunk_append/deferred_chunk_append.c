@@ -836,21 +836,20 @@ deferred_chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->hypertable_id = ts_hypertable_relid_to_id(ht_relid);
 	state->primary_dimension_id = 0;
-	state->osm_chunk_id = INVALID_CHUNK_ID;
-	state->skip_osm_chunk = false;
+	state->skip_osm_chunk_id = INVALID_CHUNK_ID;
 	if (state->ordered)
 	{
 		Hypertable *ht = ts_hypertable_get_by_id(state->hypertable_id);
 		const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
 		state->primary_dimension_id = time_dim->fd.id;
-		state->osm_chunk_id = ts_chunk_get_osm_chunk_id(state->hypertable_id);
+		int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(state->hypertable_id);
 
-		if (state->osm_chunk_id != INVALID_CHUNK_ID)
+		if (osm_chunk_id != INVALID_CHUNK_ID)
 		{
 			if (!ts_guc_enable_osm_reads)
 			{
 				/* Tiered reads disabled */
-				state->skip_osm_chunk = true;
+				state->skip_osm_chunk_id = osm_chunk_id;
 			}
 			else
 			{
@@ -861,7 +860,7 @@ deferred_chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 				 * change between fetches (e.g. with a cursor), so the iterator relies on
 				 * this decision and doesn't read it again.
 				 */
-				DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(state->osm_chunk_id,
+				DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
 																		time_dim->fd.id,
 																		LockTupleKeyShare,
 																		RowShareLock);
@@ -885,8 +884,8 @@ deferred_chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 				}
 
 				/* Empty OSM chunk: invalid range and the non-contiguous flag is not set */
-				state->skip_osm_chunk =
-					ts_osm_chunk_range_is_invalid(slice->fd.range_start, slice->fd.range_end);
+				if (ts_osm_chunk_range_is_invalid(slice->fd.range_start, slice->fd.range_end))
+					state->skip_osm_chunk_id = osm_chunk_id;
 			}
 		}
 	}
@@ -974,7 +973,7 @@ next_chunk_reloid_ordered(DeferredChunkAppendState *state)
 			state->have_last = true;
 
 			/* Decided once in begin, see there for the reasons */
-			if (state->skip_osm_chunk && chunk_id == state->osm_chunk_id)
+			if (chunk_id == state->skip_osm_chunk_id)
 			{
 				continue;
 			}
