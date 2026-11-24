@@ -72,7 +72,8 @@ jobs:
     if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
     # runs-on: runs-on/fleet=linux-2cpu/env=ue1
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: "timescaledb-runner-arm64"
     needs: config
     permissions:
       contents: read
