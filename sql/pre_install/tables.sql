@@ -57,7 +57,8 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   CONSTRAINT hypertable_associated_schema_name_associated_table_prefix_key UNIQUE (associated_schema_name, associated_table_prefix),
   CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
   CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
-  CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0)
+  CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0),
+  CONSTRAINT hypertable_check CHECK (_timescaledb_functions.hypertable_validate(id, schema_name, table_name, associated_schema_name))
 );
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
@@ -128,7 +129,8 @@ CREATE TABLE _timescaledb_catalog.chunk (
   -- table constraints
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_relid_key UNIQUE (relid),
-  CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
+  CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id),
+  CONSTRAINT chunk_check CHECK (_timescaledb_functions.chunk_validate(relid, hypertable_id))
 );
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
@@ -470,6 +472,7 @@ CREATE TABLE _timescaledb_catalog.compression_settings (
   orderby_nullsfirst bool[],
   index jsonb,
   CONSTRAINT compression_settings_pkey PRIMARY KEY (relid),
+  CONSTRAINT compression_settings_check_relid CHECK (_timescaledb_functions.compression_settings_validate(relid, compress_relid)),
   CONSTRAINT compression_settings_check_segmentby CHECK (array_ndims(segmentby) = 1),
   CONSTRAINT compression_settings_check_orderby_null CHECK ((orderby IS NULL AND orderby_desc IS NULL AND orderby_nullsfirst IS NULL) OR (orderby IS NOT NULL AND orderby_desc IS NOT NULL AND orderby_nullsfirst IS NOT NULL)),
   CONSTRAINT compression_settings_check_orderby_cardinality CHECK (array_ndims(orderby) = 1 AND array_ndims(orderby_desc) = 1 AND array_ndims(orderby_nullsfirst) = 1 AND cardinality(orderby) = cardinality(orderby_desc) AND cardinality(orderby) = cardinality(orderby_nullsfirst))
@@ -505,7 +508,8 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chu
 CREATE TABLE _timescaledb_catalog.chunk_rewrite (
   chunk_relid REGCLASS NOT NULL,
   new_relid REGCLASS NOT NULL,
-  CONSTRAINT chunk_rewrite_key UNIQUE (chunk_relid)
+  CONSTRAINT chunk_rewrite_key UNIQUE (chunk_relid),
+  CONSTRAINT chunk_rewrite_check CHECK (_timescaledb_functions.chunk_rewrite_validate(chunk_relid, new_relid))
 );
 
 -- Set table permissions
