@@ -2394,14 +2394,14 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 	 * it in the decompressor as well.
 	 */
 	Datum compressed_datum = decompressor->compressed_datums[input_column];
-	if (VARATT_IS_EXTENDED(compressed_datum))
+	if (VARATT_IS_EXTENDED(DatumGetPointer(compressed_datum)))
 	{
 		compressed_datum = PointerGetDatum(
 			detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(compressed_datum),
 										&decompressor->detoaster,
 										decompressor->per_compressed_row_ctx));
 		decompressor->compressed_datums[input_column] = compressed_datum;
-		Assert(!VARATT_IS_EXTENDED(compressed_datum));
+		Assert(!VARATT_IS_EXTENDED(DatumGetPointer(compressed_datum)));
 	}
 
 	const CompressedDataHeader *header = (const CompressedDataHeader *) compressed_datum;
