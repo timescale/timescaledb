@@ -1631,8 +1631,15 @@ CREATE POLICY p1 ON r2 USING (false);
 ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 
--- Errors due to rows in r2
-DELETE FROM r1;
+-- Errors due to rows in r2. The error names r2 or one of its chunks,
+-- depending on the order of the foreign key triggers, so only show that
+-- the delete was refused.
+DO $$
+BEGIN
+  DELETE FROM r1;
+EXCEPTION WHEN foreign_key_violation THEN
+  RAISE NOTICE 'delete from r1 refused by foreign key on r2';
+END $$;
 
 -- Reset r2 to no-RLS
 DROP POLICY p1 ON r2;
