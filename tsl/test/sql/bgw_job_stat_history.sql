@@ -239,6 +239,12 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE job_id = :job_id_4
 ORDER BY id;
 
+-- The job_history view shows the same information for successful executions
+SELECT job_id - :job_id_4 AS job, succeeded, jsonb_pretty(execution_info) AS execution_info, err_message
+FROM timescaledb_information.job_history
+WHERE job_id = :job_id_4
+ORDER BY id;
+
 -- The same for a timestamptz bucketing column with interval offsets. The
 -- range is reported as ISO-8601 timestamps. The policy computes its window
 -- from the mocked current time, which the background worker picks up from
@@ -337,6 +343,12 @@ SELECT debug_waitpoint_release('cagg_policy_batch_3_after_refresh');
 SELECT job_id - :job_id_6 AS job, succeeded, jsonb_pretty(data->'info') AS info,
        data->'error_data'->>'message' AS err_message
 FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_6
+ORDER BY id;
+
+-- The job_history view shows the information next to the error
+SELECT job_id - :job_id_6 AS job, succeeded, jsonb_pretty(execution_info) AS execution_info, err_message
+FROM timescaledb_information.job_history
 WHERE job_id = :job_id_6
 ORDER BY id;
 
