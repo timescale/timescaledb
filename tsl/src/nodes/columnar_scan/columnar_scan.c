@@ -1898,7 +1898,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		columnar_scan_path_create(root, compression_info, compressed_path, all_quals_pushed_down);
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
 
-	if (chunk_rel->consider_startup && ((ColumnarScanPath *) chunk_path_no_sort)->enable_bulk_decompression &&
+	if (chunk_rel->consider_startup &&
+		((ColumnarScanPath *) chunk_path_no_sort)->enable_bulk_decompression &&
 		sort_info->decompressed_sort_pathkeys == NIL)
 	{
 		/*
@@ -1908,7 +1909,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		 * exploration. To reduce latency for this case, try a version with
 		 * row-by-row decompression as well.
 		 */
-		ColumnarScanPath *path_copy = copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
+		ColumnarScanPath *path_copy =
+			copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 		path_copy->enable_bulk_decompression = false;
 
 		cost_columnar_scan(compression_info, path_copy, compressed_path);
