@@ -131,6 +131,18 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 	return ownerid;
 }
 
+/* Creating a hypertable needs table ownership, being database owner is not enough */
+static void
+hypertable_create_owner_check(Oid table_relid, Oid userid)
+{
+	if (!has_privs_of_role(userid, ts_rel_get_owner(table_relid)))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be owner of hypertable \"%s\"", get_rel_name(table_relid))));
+	}
+}
+
 void
 ts_hypertable_permissions_check_by_id(int32 hypertable_id)
 {
@@ -1749,6 +1761,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		return false;
 	}
 
+	/* Only the table owner may take the lock below */
+	hypertable_create_owner_check(table_relid, user_oid);
+
 	/*
 	 * Serialize hypertable creation to avoid having multiple transactions
 	 * creating the same hypertable simultaneously. The lock should conflict
@@ -1793,11 +1808,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		ts_validate_basetable_columns(&rel);
 	}
 
-	/*
-	 * Check that the user has permissions to make this table into a
-	 * hypertable
-	 */
-	ts_hypertable_permissions_check(table_relid, user_oid);
+	/* Recheck ownership now that the table is locked */
+	hypertable_create_owner_check(table_relid, user_oid);
 
 	/* Is this the right kind of relation? */
 	switch (get_rel_relkind(table_relid))
