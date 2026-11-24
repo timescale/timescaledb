@@ -41,11 +41,12 @@ typedef struct BytesView
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 {
-	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
-	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
+	const uint32 start = ((uint32 *) column_values->storage.buffers[1])[arrow_row];
+	const int32 value_bytes = ((uint32 *) column_values->storage.buffers[1])[arrow_row + 1] - start;
 	Assert(value_bytes >= 0);
 
-	return (BytesView){ .len = value_bytes, .data = &((uint8 *) column_values->buffers[2])[start] };
+	return (BytesView){ .len = value_bytes,
+						.data = &((uint8 *) column_values->storage.buffers[2])[start] };
 }
 
 static pg_attribute_always_inline void
@@ -59,12 +60,13 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 
 	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		*valid = !DatumGetBool(PointerGetDatum(params.single_grouping_column.buffers[0]));
+		*valid = !params.single_grouping_column.storage.scalar.isnull;
 		if (*valid)
 		{
-			output_key->len = VARSIZE_ANY_EXHDR(params.single_grouping_column.buffers[1]);
-			output_key->data =
-				(const uint8 *) VARDATA_ANY(params.single_grouping_column.buffers[1]);
+			output_key->len = VARSIZE_ANY_EXHDR(
+				DatumGetPointer(params.single_grouping_column.storage.scalar.value));
+			output_key->data = (const uint8 *) VARDATA_ANY(
+				DatumGetPointer(params.single_grouping_column.storage.scalar.value));
 		}
 		else
 		{
@@ -79,13 +81,13 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 		 * even for null rows, so this is safe.
 		 */
 		*output_key = get_bytes_view(&params.single_grouping_column, row);
-		*valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
+		*valid = arrow_row_is_valid(params.single_grouping_column.storage.buffers[0], row);
 	}
 	else if (params.single_grouping_column.decompression_type == DT_ArrowTextDict)
 	{
-		const int16 index = ((int16 *) params.single_grouping_column.buffers[3])[row];
+		const int16 index = ((int16 *) params.single_grouping_column.storage.buffers[3])[row];
 		*output_key = get_bytes_view(&params.single_grouping_column, index);
-		*valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
+		*valid = arrow_row_is_valid(params.single_grouping_column.storage.buffers[0], row);
 	}
 	else
 	{

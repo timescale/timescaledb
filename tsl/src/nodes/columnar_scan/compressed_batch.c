@@ -176,9 +176,9 @@ static void
 decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnull)
 {
 	column->decompression_type = DT_Scalar;
-	column->buffers[0] = DatumGetPointer(BoolGetDatum(isnull));
-	column->buffers[1] = DatumGetPointer(value);
-	column->by_ref_storage = DatumGetPointer(value);
+	column->storage.scalar.isnull = isnull;
+	column->storage.scalar.value = value;
+	column->by_ref_output_storage = DatumGetPointer(value);
 
 	*column->output_isnull = isnull;
 	*column->output_value = value;
@@ -194,10 +194,10 @@ compressed_column_values_from_arrow(CompressedColumnValues *column_values, Arrow
 	{
 		/* Fixed-width column. */
 		column_values->decompression_type = value_bytes;
-		column_values->buffers[0] = arrow->buffers[0];
-		column_values->buffers[1] = arrow->buffers[1];
-		column_values->buffers[2] = NULL;
-		column_values->buffers[3] = NULL;
+		column_values->storage.buffers[0] = arrow->buffers[0];
+		column_values->storage.buffers[1] = arrow->buffers[1];
+		column_values->storage.buffers[2] = NULL;
+		column_values->storage.buffers[3] = NULL;
 
 		if (typid == BOOLOID)
 		{
@@ -213,8 +213,8 @@ compressed_column_values_from_arrow(CompressedColumnValues *column_values, Arrow
 		 * doesn't have the varlena headers that Postgres expects for text.
 		 */
 		const int maxbytes = get_max_varlena_bytes(arrow);
-		column_values->by_ref_storage = MemoryContextAlloc(text_context, maxbytes);
-		*column_values->output_value = PointerGetDatum(column_values->by_ref_storage);
+		column_values->by_ref_output_storage = MemoryContextAlloc(text_context, maxbytes);
+		*column_values->output_value = PointerGetDatum(column_values->by_ref_output_storage);
 
 		/*
 		 * Set up the datum conversion based on whether we use the dictionary.
@@ -222,18 +222,18 @@ compressed_column_values_from_arrow(CompressedColumnValues *column_values, Arrow
 		if (arrow->dictionary == NULL)
 		{
 			column_values->decompression_type = DT_ArrowText;
-			column_values->buffers[0] = arrow->buffers[0];
-			column_values->buffers[1] = arrow->buffers[1];
-			column_values->buffers[2] = arrow->buffers[2];
-			column_values->buffers[3] = NULL;
+			column_values->storage.buffers[0] = arrow->buffers[0];
+			column_values->storage.buffers[1] = arrow->buffers[1];
+			column_values->storage.buffers[2] = arrow->buffers[2];
+			column_values->storage.buffers[3] = NULL;
 		}
 		else
 		{
 			column_values->decompression_type = DT_ArrowTextDict;
-			column_values->buffers[0] = arrow->buffers[0];
-			column_values->buffers[1] = arrow->dictionary->buffers[1];
-			column_values->buffers[2] = arrow->dictionary->buffers[2];
-			column_values->buffers[3] = arrow->buffers[1];
+			column_values->storage.buffers[0] = arrow->buffers[0];
+			column_values->storage.buffers[1] = arrow->dictionary->buffers[1];
+			column_values->storage.buffers[2] = arrow->dictionary->buffers[2];
+			column_values->storage.buffers[3] = arrow->buffers[1];
 		}
 	}
 }
@@ -325,7 +325,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		/* As a fallback, decompress row-by-row. */
 		column_values->decompression_type = DT_Iterator;
 		MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
-		column_values->buffers[0] =
+		column_values->storage.iterator =
 			tsl_get_decompression_iterator_init(header->compression_algorithm,
 												dcontext->reverse)(PointerGetDatum(header),
 																   column_description->typid);
@@ -441,8 +441,8 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		 * above, so pull it from there.
 		 */
 		vector = make_single_value_arrow(column_description->typid,
-										 PointerGetDatum(column_values->buffers[1]),
-										 DatumGetBool(PointerGetDatum(column_values->buffers[0])));
+										 column_values->storage.scalar.value,
+										 column_values->storage.scalar.isnull);
 
 		/*
 		 * We start from an all-valid bitmap, because the predicate is
@@ -1165,9 +1165,9 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 		for (int i = 0; i < num_data_columns; i++)
 		{
 			CompressedColumnValues *column = &batch_state->compressed_columns[i];
-			if (column->by_ref_storage != NULL)
+			if (column->by_ref_output_storage != NULL)
 			{
-				*column->output_value = PointerGetDatum(column->by_ref_storage);
+				*column->output_value = PointerGetDatum(column->by_ref_output_storage);
 			}
 		}
 		ExecStoreVirtualTuple(decompressed_scan_slot);
@@ -1245,7 +1245,7 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 				if (column_values->decompression_type == DT_Iterator)
 				{
 					DecompressionIterator *iterator =
-						(DecompressionIterator *) column_values->buffers[0];
+						(DecompressionIterator *) column_values->storage.iterator;
 					iterator->try_next(iterator);
 				}
 			}
@@ -1281,7 +1281,8 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 		if (column_values->decompression_type == DT_Iterator)
 		{
-			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
+			DecompressionIterator *iterator =
+				(DecompressionIterator *) column_values->storage.iterator;
 			DecompressResult result = iterator->try_next(iterator);
 			if (!result.is_done)
 			{

@@ -50,19 +50,32 @@ typedef struct CompressedColumnValues
 	Datum *output_value;
 	bool *output_isnull;
 
-	/* Storage area for by-reference types. */
-	void *by_ref_storage;
+	/* Storage area for output value for by-reference types. */
+	void *by_ref_output_storage;
 
 	/*
-	 * The flattened source buffers for getting the decompressed datum.
-	 * Depending on decompression type, they are as follows:
-	 * scalar:          isnull, value
-	 * iterator:        iterator
-	 * arrow fixed:     validity, value
-	 * arrow text:      validity, uint32* offsets, void* bodies
-	 * arrow dict text: validity, uint32* dict offsets, void* dict bodies, int16* indices
+	 * Column data storage depending on the type.
 	 */
-	const void *restrict buffers[4];
+	union
+	{
+		/* Scalar column storage. */
+		struct
+		{
+			bool isnull;
+			Datum value;
+		} scalar;
+
+		/* Iterator column storage. */
+		DecompressionIterator *iterator;
+
+		/*
+		 * Arrow column is stored as flattened buffers, depending on the type:
+		 * arrow fixed:     validity, value
+		 * arrow text:      validity, uint32* offsets, void* bodies
+		 * arrow dict text: validity, uint32* dict offsets, void* dict bodies, int16* indices
+		 */
+		const void *restrict buffers[4];
+	} storage;
 
 	/*
 	 * The source arrow array, if any. We don't use it for building the
@@ -210,15 +223,15 @@ extern void compressed_column_values_from_arrow(CompressedColumnValues *column_v
 inline static void
 store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 {
-	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
-	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
+	const uint32 start = ((uint32 *) column_values->storage.buffers[1])[arrow_row];
+	const int32 value_bytes = ((uint32 *) column_values->storage.buffers[1])[arrow_row + 1] - start;
 	Assert(value_bytes >= 0);
 
 	const int total_bytes = value_bytes + VARHDRSZ;
 	Assert(DatumGetPointer(*column_values->output_value) != NULL);
 	SET_VARSIZE(DatumGetPointer(*column_values->output_value), total_bytes);
 	memcpy(VARDATA(DatumGetPointer(*column_values->output_value)),
-		   &((uint8 *) column_values->buffers[2])[start],
+		   &((uint8 *) column_values->storage.buffers[2])[start],
 		   value_bytes);
 }
 
@@ -233,8 +246,7 @@ compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_dat
 		{
 			case DT_Iterator:
 			{
-				DecompressionIterator *iterator =
-					(DecompressionIterator *) column_values->buffers[0];
+				DecompressionIterator *iterator = column_values->storage.iterator;
 				DecompressResult result = iterator->try_next(iterator);
 
 				CheckCompressedData(!result.is_done);
@@ -254,10 +266,10 @@ compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_dat
 				 * such as UUID.
 				 */
 				const uint8 value_bytes = column_values->decompression_type;
-				const char *src = column_values->buffers[1];
+				const char *src = column_values->storage.buffers[1];
 				*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
 				*column_values->output_isnull =
-					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+					!arrow_row_is_valid(column_values->storage.buffers[0], arrow_row);
 				break;
 			}
 			case DT_ArrowBits:
@@ -267,9 +279,9 @@ compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_dat
 				 * stored as an Array of bits.
 				 */
 				*column_values->output_value =
-					BoolGetDatum(arrow_row_is_valid(column_values->buffers[1], arrow_row));
+					BoolGetDatum(arrow_row_is_valid(column_values->storage.buffers[1], arrow_row));
 				*column_values->output_isnull =
-					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+					!arrow_row_is_valid(column_values->storage.buffers[0], arrow_row);
 				break;
 			}
 			case 2:
@@ -288,25 +300,25 @@ compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_dat
 				 */
 				const uint8 value_bytes = column_values->decompression_type;
 				Assert(value_bytes <= SIZEOF_DATUM);
-				const char *src = column_values->buffers[1];
+				const char *src = column_values->storage.buffers[1];
 				memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
 				*column_values->output_isnull =
-					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+					!arrow_row_is_valid(column_values->storage.buffers[0], arrow_row);
 				break;
 			}
 			case DT_ArrowText:
 			{
 				store_text_datum(column_values, arrow_row);
 				*column_values->output_isnull =
-					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+					!arrow_row_is_valid(column_values->storage.buffers[0], arrow_row);
 				break;
 			}
 			case DT_ArrowTextDict:
 			{
-				const int16 index = ((int16 *) column_values->buffers[3])[arrow_row];
+				const int16 index = ((int16 *) column_values->storage.buffers[3])[arrow_row];
 				store_text_datum(column_values, index);
 				*column_values->output_isnull =
-					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+					!arrow_row_is_valid(column_values->storage.buffers[0], arrow_row);
 				break;
 			}
 			default:

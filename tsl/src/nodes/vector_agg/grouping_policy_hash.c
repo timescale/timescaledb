@@ -165,13 +165,13 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 		if (values.arrow != NULL)
 		{
 			arg_arrow = values.arrow;
-			arg_validity_bitmap = values.buffers[0];
+			arg_validity_bitmap = values.storage.buffers[0];
 		}
 		else
 		{
 			Assert(values.decompression_type == DT_Scalar);
-			arg_isnull = DatumGetBool(PointerGetDatum(values.buffers[0]));
-			arg_datum = PointerGetDatum(values.buffers[1]);
+			arg_isnull = values.storage.scalar.isnull;
+			arg_datum = values.storage.scalar.value;
 		}
 	}
 

@@ -2155,10 +2155,10 @@ row_decompressor_reset(RowDecompressor *decompressor)
 		CompressedColumnValues *column_values = &decompressor->column_values[i];
 		column_values->decompression_type = DT_Invalid;
 		column_values->arrow = NULL;
-		column_values->by_ref_storage = NULL;
+		column_values->by_ref_output_storage = NULL;
 		for (int j = 0; j < 4; j++)
 		{
-			column_values->buffers[j] = NULL;
+			column_values->storage.buffers[j] = NULL;
 		}
 	}
 	decompressor->batches_decompressed = 0;
@@ -2390,7 +2390,7 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 	 *
 	 * this saves us from having to detoast the compressed data again
 	 * when we need to re-initialize the iterator. */
-	const CompressedDataHeader *header = column_values->buffers[1];
+	const CompressedDataHeader *header = column_values->storage.buffers[1];
 	if (header == NULL)
 	{
 		Datum compressed_datum = PointerGetDatum(
@@ -2420,12 +2420,9 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 	if (decompress_all == NULL)
 	{
 		column_values->decompression_type = DT_Iterator;
-		column_values->buffers[0] =
+		column_values->storage.iterator =
 			definitions[header->compression_algorithm]
 				.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
-		/* the compressed data is kept in buffers[1] so we can re-initialize
-		 * the iterator if we need to decompress the column again in the same batch */
-		column_values->buffers[1] = header;
 		return;
 	}
 
@@ -2498,7 +2495,7 @@ row_decompressor_init_batch(RowDecompressor *decompressor, AttrNumber *attnos, i
 		if (column_values->decompression_type == DT_Iterator)
 		{
 			column_values->decompression_type = DT_Invalid;
-			column_values->buffers[0] = NULL;
+			column_values->storage.iterator = NULL;
 		}
 
 		/* Only initialize required columns if specified. */
@@ -2638,7 +2635,7 @@ decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attn
 		{
 			continue;
 		}
-		DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
+		DecompressionIterator *iterator = (DecompressionIterator *) column_values->storage.iterator;
 		const DecompressResult value = iterator->try_next(iterator);
 		CheckCompressedData(value.is_done);
 	}

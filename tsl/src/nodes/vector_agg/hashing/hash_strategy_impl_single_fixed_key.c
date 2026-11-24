@@ -31,14 +31,13 @@ FUNCTION_NAME(key_hashing_get_key)(BatchHashingParams params, int row,
 
 	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		*output_key =
-			DATUM_TO_OUTPUT_KEY(PointerGetDatum(params.single_grouping_column.buffers[1]));
-		*valid = !DatumGetBool(PointerGetDatum(params.single_grouping_column.buffers[0]));
+		*output_key = DATUM_TO_OUTPUT_KEY(params.single_grouping_column.storage.scalar.value);
+		*valid = !params.single_grouping_column.storage.scalar.isnull;
 	}
 	else if (params.single_grouping_column.decompression_type == sizeof(OUTPUT_KEY_TYPE))
 	{
-		const OUTPUT_KEY_TYPE *values = params.single_grouping_column.buffers[1];
-		*valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
+		const OUTPUT_KEY_TYPE *values = params.single_grouping_column.storage.buffers[1];
+		*valid = arrow_row_is_valid(params.single_grouping_column.storage.buffers[0], row);
 		*output_key = values[row];
 	}
 	else

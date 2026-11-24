@@ -149,13 +149,13 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 		if (values.arrow != NULL)
 		{
 			arg_arrow = values.arrow;
-			arg_validity_bitmap = values.buffers[0];
+			arg_validity_bitmap = values.storage.buffers[0];
 		}
 		else
 		{
 			Assert(values.decompression_type == DT_Scalar);
-			arg_isnull = DatumGetBool(PointerGetDatum(values.buffers[0]));
-			arg_datum = PointerGetDatum(values.buffers[1]);
+			arg_isnull = values.storage.scalar.isnull;
+			arg_datum = values.storage.scalar.value;
 		}
 	}
 
@@ -260,8 +260,8 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSl
 		 * means we're grouping by segmentby, and these values will be valid
 		 * until the next call to the vector agg node.
 		 */
-		policy->output_grouping_values[i] = PointerGetDatum(values.buffers[1]);
-		policy->output_grouping_isnull[i] = DatumGetBool(PointerGetDatum(values.buffers[0]));
+		policy->output_grouping_values[i] = values.storage.scalar.value;
+		policy->output_grouping_isnull[i] = DatumGetBool(values.storage.scalar.isnull);
 	}
 
 	policy->have_results = true;

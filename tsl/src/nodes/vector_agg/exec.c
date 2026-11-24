@@ -305,9 +305,10 @@ columnar_result_finalize(ColumnarResult *columnar_result, DecompressBatchState c
 
 	CompressedColumnValues result = {
 		.decompression_type = columnar_result->type,
-		.buffers = { arrow_result->buffers[0],
-					 arrow_result->buffers[1],
-					 columnar_result->type == DT_ArrowText ? arrow_result->buffers[2] : NULL },
+		.storage.buffers = { arrow_result->buffers[0],
+							 arrow_result->buffers[1],
+							 columnar_result->type == DT_ArrowText ? arrow_result->buffers[2] :
+																	 NULL },
 		.arrow = arrow_result,
 	};
 	return result;
@@ -357,8 +358,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			 * The values of the scalar columns have to be stored once at
 			 * initialization, they won't be updated per-row.
 			 */
-			*arg_value.output_value = PointerGetDatum(arg_value.buffers[1]);
-			*arg_value.output_isnull = DatumGetBool(PointerGetDatum(arg_value.buffers[0]));
+			*arg_value.output_value = arg_value.storage.scalar.value;
+			*arg_value.output_isnull = arg_value.storage.scalar.isnull;
 
 			have_null_scalars = *arg_value.output_isnull || have_null_scalars;
 		}
@@ -375,7 +376,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		pfree(fcinfo);
 		pfree(arg_values);
 		return (CompressedColumnValues){ .decompression_type = DT_Scalar,
-										 .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
+										 .storage.scalar.isnull = true };
 	}
 
 	/*
@@ -394,7 +395,16 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		arrow_validity_and(num_validity_words, combined_validity, filter);
 		for (int i = 0; i < nargs; i++)
 		{
-			arrow_validity_and(num_validity_words, combined_validity, arg_values[i].buffers[0]);
+			if (arg_values[i].decompression_type == DT_Scalar)
+			{
+				/* Already checked for null scalar columns above. */
+				continue;
+			}
+			Assert(arg_values[i].decompression_type != DT_Iterator);
+			Assert(arg_values[i].decompression_type != DT_Invalid);
+			arrow_validity_and(num_validity_words,
+							   combined_validity,
+							   arg_values[i].storage.buffers[0]);
 		}
 		input_validity = combined_validity;
 	}
@@ -584,9 +594,8 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 			 * For the scalar values, the value in Postgres Datum format must be
 			 * set once at initialization.
 			 */
-			*branch_values[i].output_value = PointerGetDatum(branch_values[i].buffers[1]);
-			*branch_values[i].output_isnull =
-				DatumGetBool(PointerGetDatum(branch_values[i].buffers[0]));
+			*branch_values[i].output_value = branch_values[i].storage.scalar.value;
+			*branch_values[i].output_isnull = branch_values[i].storage.scalar.isnull;
 		}
 	}
 
@@ -697,9 +706,8 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 		{
 			const Const *c = (const Const *) argument;
 			result = (CompressedColumnValues){ .decompression_type = DT_Scalar,
-											   .buffers[1] = DatumGetPointer(c->constvalue),
-											   .buffers[0] =
-												   DatumGetPointer(BoolGetDatum(c->constisnull)) };
+											   .storage.scalar.value = c->constvalue,
+											   .storage.scalar.isnull = c->constisnull };
 			break;
 		}
 		case T_Var:
@@ -1267,16 +1275,16 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		if (single_qual_result.decompression_type == DT_ArrowBits)
 		{
 			some_rows_are_filtered_out_by_this_qual |=
-				(get_vector_qual_summary(single_qual_result.buffers[0],
+				(get_vector_qual_summary(single_qual_result.storage.buffers[0],
 										 batch_state->total_batch_rows) != AllRowsPass);
 			some_rows_are_filtered_out_by_this_qual |=
-				(get_vector_qual_summary(single_qual_result.buffers[1],
+				(get_vector_qual_summary(single_qual_result.storage.buffers[1],
 										 batch_state->total_batch_rows) != AllRowsPass);
 		}
 		else if (single_qual_result.decompression_type == DT_Scalar)
 		{
-			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
-			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			const bool isnull = single_qual_result.storage.scalar.isnull;
+			const bool value = DatumGetBool(single_qual_result.storage.scalar.value);
 			some_rows_are_filtered_out_by_this_qual |= isnull;
 			some_rows_are_filtered_out_by_this_qual |= !value;
 		}
@@ -1309,15 +1317,19 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		 */
 		if (single_qual_result.decompression_type == DT_ArrowBits)
 		{
-			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[0]);
-			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[1]);
+			arrow_validity_and(num_words,
+							   combined_qual_result,
+							   single_qual_result.storage.buffers[0]);
+			arrow_validity_and(num_words,
+							   combined_qual_result,
+							   single_qual_result.storage.buffers[1]);
 		}
 		else
 		{
 			/* The other option is scalar bool as we have checked above. */
 			Assert(single_qual_result.decompression_type == DT_Scalar);
-			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
-			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			const bool isnull = single_qual_result.storage.scalar.isnull;
+			const bool value = DatumGetBool(single_qual_result.storage.scalar.value);
 			if (isnull || !value)
 			{
 				memset(combined_qual_result, 0x0, bitmap_bytes);
