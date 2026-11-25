@@ -344,11 +344,6 @@ jobs:
       run: |
         set -xeu
 
-        cd pg
-        make install
-        for ext in ${EXTENSIONS}; do
-          make -C contrib/${ext} install
-        done
         pg_config --version
 
         cd $GITHUB_WORKSPACE
