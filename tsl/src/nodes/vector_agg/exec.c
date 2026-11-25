@@ -143,7 +143,7 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 		 */
 		columnar_result->offset_buffer =
 			MemoryContextAllocZero(batch_state->per_batch_context,
-								   pad_to_multiple(1,
+								   pad_to_multiple(64,
 												   sizeof(*columnar_result->offset_buffer) *
 													   (nrows + 1)));
 		columnar_result->allocated_body_bytes = pad_to_multiple(64, 10);
@@ -383,7 +383,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	 * inputs.
 	 */
 	const int nrows = batch_state->total_batch_rows;
-	const size_t num_validity_words = (nrows + 62) / 64;
+	const size_t num_validity_words = (nrows + 63) / 64;
 	uint64 *input_validity = NULL;
 	if (have_null_bitmap || filter != NULL)
 	{
