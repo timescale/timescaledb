@@ -25,6 +25,7 @@
 #include "import/list.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
@@ -836,6 +837,17 @@ insert_vector_agg(Plan *plan, void *context)
 
 		return (Plan *) agg;
 	}
+
+	/*
+	 * The "first row from metadata" optimization is irrelevant for vectorized
+	 * aggregation, so mark is as disabled. It won't run in any case because
+	 * aggregation doesn't run the underlying columnar scan methods, but it
+	 * would lead to confusing EXPLAIN output.
+	 */
+	Assert(ts_is_columnar_scan_plan(aggregation_input));
+	List *columnar_scan_settings =
+		list_nth(castNode(CustomScan, aggregation_input)->custom_private, DCP_Settings);
+	lfirst_int(list_nth_cell(columnar_scan_settings, DCS_FirstRowFromMetadata)) = false;
 
 	return vector_agg_plan;
 }

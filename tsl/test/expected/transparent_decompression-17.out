@@ -1253,6 +1253,7 @@ LIMIT 100;
                      Rows Removed by Filter: 1125
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=1.00 loops=1)
                Output: _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.device_id_peer, _hyper_1_3_chunk.v0, _hyper_1_3_chunk.v1, _hyper_1_3_chunk."time"
+               First Row From Metadata: true
                Bulk Decompression: false
                ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _timescaledb_internal._hyper_1_3_chunk_compressed (actual rows=1.00 loops=1)
                      Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed.device_id_peer, _hyper_1_3_chunk_compressed._ts_meta_min_3, _hyper_1_3_chunk_compressed._ts_meta_max_3, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_v0, _hyper_1_3_chunk_compressed._ts_meta_v2_last_v0, _hyper_1_3_chunk_compressed.v0, _hyper_1_3_chunk_compressed._ts_meta_min_2, _hyper_1_3_chunk_compressed._ts_meta_max_2, _hyper_1_3_chunk_compressed._ts_meta_v2_first_v1, _hyper_1_3_chunk_compressed._ts_meta_v2_last_v1, _hyper_1_3_chunk_compressed.v1, _hyper_1_3_chunk_compressed.v2, _hyper_1_3_chunk_compressed.v3
@@ -1282,6 +1283,7 @@ LIMIT 100;
                      Rows Removed by Filter: 1125
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=1.00 loops=1)
                Output: _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.device_id_peer
+               First Row From Metadata: true
                Bulk Decompression: false
                ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _timescaledb_internal._hyper_1_3_chunk_compressed (actual rows=1.00 loops=1)
                      Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed.device_id_peer, _hyper_1_3_chunk_compressed._ts_meta_min_3, _hyper_1_3_chunk_compressed._ts_meta_max_3, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_v0, _hyper_1_3_chunk_compressed._ts_meta_v2_last_v0, _hyper_1_3_chunk_compressed.v0, _hyper_1_3_chunk_compressed._ts_meta_min_2, _hyper_1_3_chunk_compressed._ts_meta_max_2, _hyper_1_3_chunk_compressed._ts_meta_v2_first_v1, _hyper_1_3_chunk_compressed._ts_meta_v2_last_v1, _hyper_1_3_chunk_compressed.v1, _hyper_1_3_chunk_compressed.v2, _hyper_1_3_chunk_compressed.v3
@@ -4874,6 +4876,7 @@ LIMIT 100;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_10_chunk (actual rows=1.00 loops=1)
                Output: _hyper_2_10_chunk.device_id, _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.v0, _hyper_2_10_chunk.v1, _hyper_2_10_chunk."time"
                Filter: (_hyper_2_10_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               First Row From Metadata: true
                Bulk Decompression: false
                ->  Sort (actual rows=1.00 loops=1)
                      Output: _hyper_2_10_chunk_compressed._ts_meta_count, _hyper_2_10_chunk_compressed.device_id, _hyper_2_10_chunk_compressed.device_id_peer, _hyper_2_10_chunk_compressed._ts_meta_min_3, _hyper_2_10_chunk_compressed._ts_meta_max_3, _hyper_2_10_chunk_compressed._ts_meta_v2_first_time, _hyper_2_10_chunk_compressed._ts_meta_v2_last_time, _hyper_2_10_chunk_compressed."time", _hyper_2_10_chunk_compressed._ts_meta_min_1, _hyper_2_10_chunk_compressed._ts_meta_max_1, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_10_chunk_compressed.v0, _hyper_2_10_chunk_compressed._ts_meta_min_2, _hyper_2_10_chunk_compressed._ts_meta_max_2, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_10_chunk_compressed.v1, _hyper_2_10_chunk_compressed.v2, _hyper_2_10_chunk_compressed.v3
@@ -4885,6 +4888,7 @@ LIMIT 100;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_11_chunk (actual rows=1.00 loops=1)
                Output: _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk."time"
                Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               First Row From Metadata: true
                Bulk Decompression: false
                ->  Sort (actual rows=1.00 loops=1)
                      Output: _hyper_2_11_chunk_compressed._ts_meta_count, _hyper_2_11_chunk_compressed.device_id, _hyper_2_11_chunk_compressed.device_id_peer, _hyper_2_11_chunk_compressed._ts_meta_min_3, _hyper_2_11_chunk_compressed._ts_meta_max_3, _hyper_2_11_chunk_compressed._ts_meta_v2_first_time, _hyper_2_11_chunk_compressed._ts_meta_v2_last_time, _hyper_2_11_chunk_compressed."time", _hyper_2_11_chunk_compressed._ts_meta_min_1, _hyper_2_11_chunk_compressed._ts_meta_max_1, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_11_chunk_compressed.v0, _hyper_2_11_chunk_compressed._ts_meta_min_2, _hyper_2_11_chunk_compressed._ts_meta_max_2, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_11_chunk_compressed.v1, _hyper_2_11_chunk_compressed.v2, _hyper_2_11_chunk_compressed.v3
@@ -4924,6 +4928,7 @@ LIMIT 100;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_10_chunk (actual rows=1.00 loops=1)
                Output: _hyper_2_10_chunk.device_id, _hyper_2_10_chunk.device_id_peer
                Filter: (_hyper_2_10_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               First Row From Metadata: true
                Bulk Decompression: false
                ->  Sort (actual rows=1.00 loops=1)
                      Output: _hyper_2_10_chunk_compressed._ts_meta_count, _hyper_2_10_chunk_compressed.device_id, _hyper_2_10_chunk_compressed.device_id_peer, _hyper_2_10_chunk_compressed._ts_meta_min_3, _hyper_2_10_chunk_compressed._ts_meta_max_3, _hyper_2_10_chunk_compressed._ts_meta_v2_first_time, _hyper_2_10_chunk_compressed._ts_meta_v2_last_time, _hyper_2_10_chunk_compressed."time", _hyper_2_10_chunk_compressed._ts_meta_min_1, _hyper_2_10_chunk_compressed._ts_meta_max_1, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_10_chunk_compressed.v0, _hyper_2_10_chunk_compressed._ts_meta_min_2, _hyper_2_10_chunk_compressed._ts_meta_max_2, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_10_chunk_compressed.v1, _hyper_2_10_chunk_compressed.v2, _hyper_2_10_chunk_compressed.v3
@@ -4935,6 +4940,7 @@ LIMIT 100;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_11_chunk (actual rows=1.00 loops=1)
                Output: _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer
                Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               First Row From Metadata: true
                Bulk Decompression: false
                ->  Sort (actual rows=1.00 loops=1)
                      Output: _hyper_2_11_chunk_compressed._ts_meta_count, _hyper_2_11_chunk_compressed.device_id, _hyper_2_11_chunk_compressed.device_id_peer, _hyper_2_11_chunk_compressed._ts_meta_min_3, _hyper_2_11_chunk_compressed._ts_meta_max_3, _hyper_2_11_chunk_compressed._ts_meta_v2_first_time, _hyper_2_11_chunk_compressed._ts_meta_v2_last_time, _hyper_2_11_chunk_compressed."time", _hyper_2_11_chunk_compressed._ts_meta_min_1, _hyper_2_11_chunk_compressed._ts_meta_max_1, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_11_chunk_compressed.v0, _hyper_2_11_chunk_compressed._ts_meta_min_2, _hyper_2_11_chunk_compressed._ts_meta_max_2, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_11_chunk_compressed.v1, _hyper_2_11_chunk_compressed.v2, _hyper_2_11_chunk_compressed.v3
