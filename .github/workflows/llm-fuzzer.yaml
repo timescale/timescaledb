@@ -235,7 +235,8 @@ jobs:
       if: always()
       id: collectlogs-smoke
       run: |
-        tail -vn +1 build/tsl/test/log/initdb.log | tee installcheck.log
+        tail -vn +1 build/tsl/test/log/{initdb,postmaster}.log \
+            | tee -a installcheck.log
 
         find . -name regression.diffs -exec cat {} + > regression.log
 
