@@ -154,6 +154,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_custom.sql
+    bgw_tss_callbacks.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
     bgw_job_stat_history_errors.sql
@@ -270,6 +271,7 @@ set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
     bgw_custom
+    bgw_tss_callbacks
     bgw_scheduler_control
     bgw_scheduler_restart
     bgw_db_scheduler

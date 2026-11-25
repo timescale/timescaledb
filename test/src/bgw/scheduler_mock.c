@@ -232,9 +232,10 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 		PG_RETURN_VOID();
 	}
 
+	/* A short scheduler run can finish before we see it start */
 	BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
-	TestAssertTrue(BGWH_STARTED == status);
-	if (status != BGWH_STARTED)
+	TestAssertTrue(BGWH_STARTED == status || BGWH_STOPPED == status);
+	if (status != BGWH_STARTED && status != BGWH_STOPPED)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
@@ -273,9 +274,10 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 		PG_RETURN_VOID();
 	}
 
+	/* A short scheduler run can finish before we see it start */
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
-	TestAssertTrue(BGWH_STARTED == status);
-	if (status != BGWH_STARTED)
+	TestAssertTrue(BGWH_STARTED == status || BGWH_STOPPED == status);
+	if (status != BGWH_STARTED && status != BGWH_STOPPED)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));

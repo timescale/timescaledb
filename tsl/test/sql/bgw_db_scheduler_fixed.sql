@@ -120,11 +120,13 @@ CREATE TABLE public.bgw_log(
     msg TEXT
 );
 
+-- msg_no starts over in each scheduler process, so two schedulers can log
+-- the same msg_no at the same mock time. xmin orders them by insert.
 CREATE VIEW sorted_bgw_log AS
     SELECT msg_no,
     	   application_name,
     	   regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
-	   FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+	   FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no, xmin::text::bigint;
 
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
@@ -240,11 +242,15 @@ SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '800ms', INTERV
 
 SET timezone TO PST8PDT;
 
+-- A job that finishes before the scheduler sees it start can make the
+-- scheduler loop once more, so the log checks below leave out the wait
+-- lines and msg_no.
+
 --Run the first time and error
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
 
@@ -260,7 +266,7 @@ SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_i
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225); -- will see 2 failures now
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 -- as we have a job on a fixed_schedule, the next_start will not be more than the next scheduled slot
 -- If the calculated next_start is more than the next scheduled execution slot, then
@@ -269,18 +275,18 @@ SELECT * FROM sorted_bgw_log;
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425); -- will see 3 failures now
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 -- will see 4 failures now
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(625);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 -- will see 5 failures now because job executes again on its next scheduled slot (800ms after its initial start, which is 0)
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(825);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 -- Get status of failing job `test_job_2` to check it reached `max_retries` and
 -- the new `job_status` now is `Paused`
@@ -314,7 +320,8 @@ SELECT ts_bgw_params_mock_wait_returns_immediately(:IMMEDIATELY_SET_UNTIL);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
+-- The job can log before or after it is killed, so show only the scheduler
+SELECT * FROM sorted_bgw_log WHERE application_name = 'DB Scheduler';
 
 --Check that the scheduler does not kill a job with infinite timeout
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -348,6 +355,8 @@ SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', I
 --escalated priv needed for access to pg_stat_activity
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT ts_bgw_db_scheduler_test_run(300);
+-- Wait for the job to log before it sleeps, so the kill comes after it
+SELECT wait_for_logentry(id) FROM _timescaledb_catalog.bgw_job WHERE application_name = 'test_job_3_long';
 SELECT pg_terminate_backend(wait_application_pid('test_job_3_long'));
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 
@@ -377,10 +386,10 @@ SHOW timescaledb.shutdown_bgw_scheduler;
 
 ALTER SYSTEM SET timescaledb.shutdown_bgw_scheduler TO 'on';
 SELECT pg_reload_conf();
+-- Wait in this session, since only it knows the scheduler it started
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.shutdown_bgw_scheduler;
-
-SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 
 -- The scheduler may loop a few times before it sees the GUC change,
 -- so the number of wait messages is not deterministic. Filter them
@@ -404,9 +413,14 @@ SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', I
 
 SELECT ts_bgw_db_scheduler_test_run(500);
 SELECT wait_application_pid('test_job_3_long') IS NOT NULL ;
+-- The scheduler logs the new worker only after it sees the job start, so
+-- wait until it has logged that and gone back to waiting
+SELECT test.wait_for_log('DB Scheduler', '[TESTING] Wait until%');
 SELECT pg_terminate_backend(wait_application_pid('DB Scheduler Test'));
 
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+-- The scheduler does not wait for its jobs to exit, so wait for the job too
+SELECT wait_application_pid('test_job_3_long', false) IS NULL;
 
 SELECT job_id, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
@@ -451,11 +465,14 @@ CREATE FUNCTION wait_for_job_3_to_finish(runs INTEGER, spins INTEGER=:TEST_SPINW
 $BODY$
 DECLARE
 	num_runs INTEGER;
+	num_finished INTEGER;
 BEGIN
 	FOR i in 1..spins
 	LOOP
 	SELECT COUNT(*) from bgw_log where msg='After sleep job 3' INTO num_runs;
-	if (num_runs = runs) THEN
+	-- The job logs before it records the end of the run, so check the stats too
+	SELECT COALESCE(sum(total_successes), 0) FROM _timescaledb_internal.bgw_job_stat INTO num_finished;
+	if (num_runs = runs AND num_finished = runs) THEN
 		RETURN true;
 	ELSE
 		PERFORM pg_sleep(0.1);
@@ -598,6 +615,21 @@ BEGIN
 END
 $BODY$;
 
+-- The job logs before it records the end of the run, so wait for the stats too
+CREATE FUNCTION wait_for_job_successes(job INTEGER, successes INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	FOR i in 1..spins
+	LOOP
+	IF EXISTS (SELECT FROM _timescaledb_internal.bgw_job_stat WHERE job_id = job AND total_successes = successes) THEN
+		RETURN true;
+	END IF;
+	PERFORM pg_sleep(0.1);
+	END LOOP;
+	RETURN false;
+END
+$BODY$;
+
 select * from verify_refresh_correct();
 -- Should return the same table
 select * from verify_refresh_correct();
@@ -651,9 +683,13 @@ SELECT alter_job(:job_id,scheduled:=true);
 SELECT ts_bgw_params_reset_time(50000, true);
 SELECT wait_for_timer_to_run(50000);
 SELECT wait_for_job_1_to_run(1);
+SELECT wait_for_job_successes(:job_id, 1);
+-- The scheduler only sees the run end once the worker exits
+SELECT wait_application_pid('another', false) IS NULL;
 SELECT ts_bgw_params_reset_time(150000, true);
 SELECT wait_for_timer_to_run(150000);
 SELECT wait_for_job_1_to_run(2);
+SELECT wait_for_job_successes(:job_id, 2);
 
 select * from _timescaledb_internal.bgw_job_stat;
 SELECT delete_job(x.id) FROM (select * from _timescaledb_catalog.bgw_job) x;
@@ -679,13 +715,19 @@ SELECT alter_job(:job_id,scheduled:=true);
 SELECT ts_bgw_params_reset_time(450000, true);
 -- New job should be run once, for a total of 3 runs of this job in the log
 SELECT wait_for_job_1_to_run(3);
+SELECT wait_for_job_successes(:job_id, 1);
+-- The scheduler only sees the run end once the worker exits
+SELECT wait_application_pid('new_job', false) IS NULL;
 
 -- New job should be run again
 SELECT ts_bgw_params_reset_time(480000, true);
 SELECT wait_for_job_1_to_run(4);
+SELECT wait_for_job_successes(:job_id, 2);
 
 SELECT ts_bgw_params_reset_time(500000, true);
-SELECT * FROM sorted_bgw_log;
+-- The scheduler can wake up more often than the mock time moves, for
+-- example on an invalidation, so leave out its wait lines and msg_no.
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
 
 -- clean up jobs
@@ -738,7 +780,7 @@ initial_start => :'init'::timestamptz + interval '5 ms', timezone => 'Europe/Ath
 select * from _timescaledb_catalog.bgw_job;
 -- now wait for scheduler to run the policies
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
-SELECT * from _timescaledb_internal.bgw_job_stat;
+SELECT * from _timescaledb_internal.bgw_job_stat ORDER BY job_id;
 
 SELECT show_chunks('test_table_scheduler');
 select hypertable_schema, hypertable_name, chunk_schema, chunk_name, is_compressed from timescaledb_information.chunks ;

@@ -9,7 +9,7 @@
 SET LOCAL search_path TO pg_catalog, pg_temp;
 
 -- Disable parallel execution for the duration of the update process.
--- This avoids version mismatch errors that would have beeen triggered by the
+-- This avoids version mismatch errors that would have been triggered by the
 -- parallel workers in ts_extension_check_version().
 SET LOCAL max_parallel_workers = 0;
 
