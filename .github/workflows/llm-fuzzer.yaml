@@ -222,8 +222,9 @@ jobs:
     - name: make installcheck (smoke test)
       run: |
         set -o pipefail
-        make -k -C build installcheck TESTS=compression \
+        make -k -C build installcheck TESTS=vector_agg_text \
           | tee installcheck.log
+        grep 'vector_agg_text.*ok' installcheck.log
 
     - name: Show regression diffs
       if: always()
