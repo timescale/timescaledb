@@ -1024,3 +1024,119 @@ INFO:  Using index scan with scan keys: index 1, heap 4, memory 2.
 INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE nulls_not_distinct;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- unique index that exists only on the second chunk
+CREATE TABLE comp_update_chunk_index(time int NOT NULL, device text);
+SELECT table_name FROM create_hypertable('comp_update_chunk_index', 'time', chunk_time_interval => 1000);
+       table_name        
+-------------------------
+ comp_update_chunk_index
+
+INSERT INTO comp_update_chunk_index VALUES (1, 'd1'), (1, 'd2'), (1001, 'd1'), (1001, 'd2');
+SELECT pg_catalog.format('CREATE UNIQUE INDEX comp_update_chunk_index_uniq ON %s (time, device)', c)
+FROM show_chunks('comp_update_chunk_index') c OFFSET 1 \gexec
+CREATE UNIQUE INDEX comp_update_chunk_index_uniq ON _timescaledb_internal._hyper_17_21_chunk (time, device)
+ALTER TABLE comp_update_chunk_index SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_chunk_index') c;
+ count 
+-------
+     2
+
+\set ON_ERROR_STOP 0
+UPDATE comp_update_chunk_index SET device = 'd2' WHERE device = 'd1';
+ERROR:  duplicate key value violates unique constraint "comp_update_chunk_index_uniq"
+\set ON_ERROR_STOP 1
+SELECT * FROM comp_update_chunk_index ORDER BY time, device;
+ time | device 
+------+--------
+    1 | d1
+    1 | d2
+ 1001 | d1
+ 1001 | d2
+
+DROP TABLE comp_update_chunk_index;
+-- unique index that exists only on the uncompressed first chunk
+CREATE TABLE comp_update_chunk_index(time int NOT NULL, device text, value int);
+SELECT table_name FROM create_hypertable('comp_update_chunk_index', 'time', chunk_time_interval => 1000);
+       table_name        
+-------------------------
+ comp_update_chunk_index
+
+INSERT INTO comp_update_chunk_index VALUES (1, 'd1', 1), (1001, 'd1', 1), (1001, 'd2', 2);
+SELECT pg_catalog.format('CREATE UNIQUE INDEX comp_update_chunk_index_uniq ON %s (value)', c)
+FROM show_chunks('comp_update_chunk_index') c LIMIT 1 \gexec
+CREATE UNIQUE INDEX comp_update_chunk_index_uniq ON _timescaledb_internal._hyper_18_22_chunk (value)
+ALTER TABLE comp_update_chunk_index SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(c)) FROM (SELECT c FROM show_chunks('comp_update_chunk_index') c OFFSET 1) s;
+ count 
+-------
+     1
+
+UPDATE comp_update_chunk_index SET value = 3 WHERE device = 'd1';
+SELECT * FROM comp_update_chunk_index ORDER BY time, device;
+ time | device | value 
+------+--------+-------
+    1 | d1     |     3
+ 1001 | d1     |     3
+ 1001 | d2     |     2
+
+DROP TABLE comp_update_chunk_index;
+-- chunks with different column numbers
+CREATE TABLE comp_update_attno(dropped int, time int NOT NULL, device text, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_update_attno', 'time', chunk_time_interval => 1000);
+    table_name     
+-------------------
+ comp_update_attno
+
+INSERT INTO comp_update_attno(time, device) VALUES (1, 'd1'), (1, 'd2');
+ALTER TABLE comp_update_attno DROP COLUMN dropped;
+INSERT INTO comp_update_attno VALUES (1001, 'd1'), (1001, 'd2'), (1001, 'd3');
+ALTER TABLE comp_update_attno SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_attno') c;
+ count 
+-------
+     2
+
+UPDATE comp_update_attno SET device = 'd4' WHERE device = 'd3';
+\set ON_ERROR_STOP 0
+UPDATE comp_update_attno SET device = 'd2' WHERE device = 'd1';
+ERROR:  duplicate key value violates unique constraint "24_comp_update_attno_time_device_key"
+\set ON_ERROR_STOP 1
+SELECT * FROM comp_update_attno ORDER BY time, device;
+ time | device 
+------+--------
+    1 | d1
+    1 | d2
+ 1001 | d1
+ 1001 | d2
+ 1001 | d4
+
+DROP TABLE comp_update_attno;
+-- unique index with a whole-row expression
+CREATE FUNCTION comp_row_device(anyelement) RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT to_jsonb($1)->>'device' $$;
+CREATE TABLE comp_update_wholerow(time int NOT NULL, device text);
+CREATE UNIQUE INDEX ON comp_update_wholerow (time, comp_row_device(comp_update_wholerow));
+SELECT table_name FROM create_hypertable('comp_update_wholerow', 'time', chunk_time_interval => 1000);
+      table_name      
+----------------------
+ comp_update_wholerow
+
+INSERT INTO comp_update_wholerow VALUES (1, 'd1'), (1, 'd2');
+ALTER TABLE comp_update_wholerow SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_wholerow') c;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+UPDATE comp_update_wholerow SET device = 'd2' WHERE device = 'd1';
+ERROR:  cannot update column "device" of a compressed chunk
+\set ON_ERROR_STOP 1
+SELECT * FROM comp_update_wholerow ORDER BY time, device;
+ time | device 
+------+--------
+    1 | d1
+    1 | d2
+
+DROP TABLE comp_update_wholerow;
+DROP FUNCTION comp_row_device;
