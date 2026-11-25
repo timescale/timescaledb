@@ -18,13 +18,25 @@ setup
     -- Table used to pass R1's backend PID to the terminator session
     CREATE TABLE cancelpid (pid int);
 
-    -- Terminate R1's backend. Wrapped in a void-returning procedure (as in
-    -- cagg_cancel_kill_refresh.spec) so isolationtester's native blocked-step
-    -- synchronization can be used instead of polling pg_stat_activity.
+    -- Terminate R1's backend and wait until it has exited. The
+    -- (blocked_step) annotation only controls how the steps are reported, so
+    -- without this the next step could run while R1 is still alive.
+    -- pg_stat_activity is read from a snapshot kept for the whole
+    -- transaction, so it has to be cleared before every check.
     CREATE OR REPLACE PROCEDURE terminate_r1() AS
     $$
+    DECLARE
+        pids INT[] := ARRAY(SELECT pid FROM cancelpid);
     BEGIN
-        PERFORM pg_terminate_backend(pid) FROM cancelpid;
+        PERFORM pg_terminate_backend(pid) FROM unnest(pids) pid;
+        FOR i IN 1..3000 LOOP
+            PERFORM pg_stat_clear_snapshot();
+            IF NOT EXISTS (SELECT FROM pg_stat_activity WHERE pid = ANY(pids)) THEN
+                RETURN;
+            END IF;
+            PERFORM pg_sleep(0.01);
+        END LOOP;
+        RAISE EXCEPTION 'timeout waiting for R1 to exit';
     END;
     $$ LANGUAGE plpgsql;
 
@@ -86,9 +98,7 @@ step "WP_after_register_enable"  { SELECT debug_waitpoint_enable('cagg_refresh_a
 step "WP_after_register_disable"  { SELECT debug_waitpoint_release('cagg_refresh_after_register'); }
 
 # Session K1: terminate R1's backend so its PID becomes dead in the
-# registration table. Relies on isolationtester's native blocked-step
-# synchronization (see the "K1_terminate"("R1_refresh") annotation below)
-# rather than polling pg_stat_activity for the pid to disappear.
+# registration table. terminate_r1() waits until R1 has exited.
 session "K1"
 step "K1_terminate" {
     CALL terminate_r1();
@@ -223,7 +233,9 @@ permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"
 
 # Two refreshes wait for registration, one waits for cleanup before exiting. All blocked on an AccessExclusiveLock on continuous_aggs_jobs_refresh_ranges.
 # Refreshes waiting for registration overlap with each other, so one should fail.
-permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"("R2_refresh") "R4_overlapping_refresh"("R3_refresh") "check_locks" "check_jobs" "L1_unlock"("R4_overlapping_refresh") "check_locks" "check_jobs"
+# R3 stops after registering, so R4 always sees its window. Otherwise R3 can
+# finish and unregister before R4 checks, and R4 finds nothing to refresh.
+permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"("R2_refresh") "R4_overlapping_refresh"("R3_refresh") "check_locks" "check_jobs" "WP_after_register_enable" "L1_unlock"("R4_overlapping_refresh") "WP_after_register_disable" "check_locks" "check_jobs"
 
 ## Refresh registers . But fails in txn2. Gets into catch block. Cleanup should succeed
 permutation "WP_before_txn2_start_enable" "R3_refresh" "check_jobs" "A1_revoke_perm" "WP_before_txn2_start_disable"("A1_revoke_perm") "check_jobs"
