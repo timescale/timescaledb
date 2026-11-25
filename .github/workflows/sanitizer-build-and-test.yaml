@@ -54,14 +54,16 @@ env:
     telemetry
 
   EXTENSIONS: "postgres_fdw test_decoding"
+
 jobs:
   config:
-    runs-on: ubuntu-26.04
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -96,8 +98,17 @@ jobs:
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl jq ${{ env.extra_packages }}
+        sudo apt-get install \
+            bison \
+            cmake \
+            flex \
+            gdb \
+            jq  \
+            lcov \
+            libipc-run-perl \
+            libtest-most-perl \
+            systemd-coredump \
+            ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -107,7 +118,7 @@ jobs:
     - name: Get date for build caching
       id: get-date
       run: |
-        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> "$GITHUB_OUTPUT"
 
     # Create a directory for sanitizer logs. This directory is referenced by
     # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS
@@ -165,7 +176,7 @@ jobs:
         path: |
           install
           pg
-        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+        key: ${{ steps.restore-postgresql-cache.outputs.cache-primary-key }}
 
     - name: Upload config.log
       if: always() && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
@@ -178,7 +189,7 @@ jobs:
       run: |
         set -xeu
 
-        echo "$(readlink -f install/bin)" >> "${GITHUB_PATH}"
+        readlink -f install/bin >> "${GITHUB_PATH}"
 
     - name: Build TimescaleDB
       run: |
@@ -220,11 +231,11 @@ jobs:
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
-          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>"$GITHUB_OUTPUT"; fi
           # print OOM killer information
           sudo journalctl --system -q --facility=kern --grep "Killed process" || true
         fi
-        if [[ -s regression.log ]]; then echo "regression_diff=true" >> $GITHUB_OUTPUT; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >> "$GITHUB_OUTPUT"; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
