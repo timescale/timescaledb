@@ -173,20 +173,12 @@ get_max_varlena_bytes(ArrowArray *text_array)
 }
 
 static void
-decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnull, int value_bytes)
+decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnull)
 {
 	column->decompression_type = DT_Scalar;
 	column->storage.scalar.isnull = isnull;
 	column->storage.scalar.value = value;
-
-	if (value_bytes < 0)
-	{
-		column->by_ref_output_storage = DatumGetPointer(value);
-	}
-	else
-	{
-		column->by_ref_output_storage = NULL;
-	}
+	column->by_ref_output_storage = DatumGetPointer(value);
 
 	*column->output_isnull = isnull;
 	*column->output_value = value;
@@ -274,7 +266,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		Datum value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
 									 column_description->uncompressed_chunk_attno,
 									 &isnull);
-		decompress_scalar_column(column_values, value, isnull, value_bytes);
+		decompress_scalar_column(column_values, value, isnull);
 		return;
 	}
 
@@ -288,7 +280,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	/* First check if this is a block of NULL values. */
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
-		decompress_scalar_column(column_values, (Datum) NULL, /* isnull = */ true, value_bytes);
+		decompress_scalar_column(column_values, (Datum) NULL, /* isnull = */ true);
 		return;
 	}
 
@@ -1026,10 +1018,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 					AttrNumberGetAttrOffset(column_description->custom_scan_attno);
 				column_values->output_value = &decompressed_tuple->tts_values[attr];
 				column_values->output_isnull = &decompressed_tuple->tts_isnull[attr];
-				decompress_scalar_column(column_values,
-										 value,
-										 isnull,
-										 column_description->value_bytes);
+				decompress_scalar_column(column_values, value, isnull);
 				break;
 			}
 			case COUNT_COLUMN:
