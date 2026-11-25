@@ -89,6 +89,7 @@ jobs:
             #
             # In sanitizer builds on clang >= 17, Postgres itself requires -fno-sanitize=function (upstream decision).
             extra_cflags: "-g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
+            ldflags: "-fsanitize=address,undefined"
             pg_flags: "--enable-debug --enable-cassert"
             ts_flags: "-DCMAKE_BUILD_TYPE=Debug"
 
@@ -102,6 +103,7 @@ jobs:
 
     env:
         CFLAGS: "-march=armv8.2-a+crypto ${{ matrix.extra_cflags }}"
+        LDFLAGS: "${{ matrix.ldflags }}"
 
     steps:
     - name: Replace unreliable Azure APT mirror
