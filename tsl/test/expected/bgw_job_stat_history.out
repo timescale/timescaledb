@@ -19,12 +19,14 @@ $$;
 CREATE VIEW job_history_summary AS
 SELECT job_id, succeeded, count(*) AS record_count
   FROM _timescaledb_internal.bgw_job_stat_history
-GROUP BY job_id, succeeded;
+GROUP BY job_id, succeeded
+ORDER BY job_id, succeeded;
 CREATE VIEW recent_job_history_summary AS
 SELECT job_id, succeeded, count(*) AS record_count
   FROM _timescaledb_internal.bgw_job_stat_history
  WHERE execution_finish > now() - interval '30 days'
-GROUP BY job_id, succeeded;
+GROUP BY job_id, succeeded
+ORDER BY job_id, succeeded;
 -- Do not log all jobs, only FAILED executions
 SHOW timescaledb.enable_job_execution_logging;
  timescaledb.enable_job_execution_logging 
@@ -614,11 +616,8 @@ SELECT pg_reload_conf();
 ----------------
  t
 
-SELECT test.wait_for_job_to_run_or_fail(:job_id_6);
- wait_for_job_to_run_or_fail 
------------------------------
- t
-
+-- Wait for the failure to be recorded, not just for the job to start
+CALL test.wait_for_job_failure(:job_id_6);
 SELECT debug_waitpoint_release('cagg_policy_batch_3_after_refresh');
  debug_waitpoint_release 
 -------------------------
@@ -854,24 +853,24 @@ VALUES
 SELECT * FROM job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
-    403 | t         |            1
     401 | t         |            2
-    404 | t         |            1
     402 | t         |            2
+    403 | t         |            1
+    404 | t         |            1
 
 CALL run_job(3);
 SELECT * FROM job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
-    404 | t         |            1
     402 | t         |            1
+    404 | t         |            1
 
 -- Verify only recent records remain
 SELECT * FROM recent_job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
-    404 | t         |            1
     402 | t         |            1
+    404 | t         |            1
 
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 -- Test 5: Missing middle job id (gaps in sequence)
@@ -891,25 +890,25 @@ WHERE id IN (SELECT id FROM _timescaledb_internal.bgw_job_stat_history ORDER BY 
 SELECT * FROM job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
-    503 | t         |            3
-    502 | t         |            2
     501 | t         |            1
+    502 | t         |            2
+    503 | t         |            3
 
 CALL run_job(3);
 SELECT * FROM job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
-    503 | t         |            1
-    502 | t         |            1
     501 | t         |            1
+    502 | t         |            1
+    503 | t         |            1
 
 -- Verify only recent records remain
 SELECT * FROM recent_job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
-    503 | t         |            1
-    502 | t         |            1
     501 | t         |            1
+    502 | t         |            1
+    503 | t         |            1
 
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 -- Test 6: All records older than retention period
@@ -994,24 +993,24 @@ SELECT * FROM job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
     801 | t         |           21
-    803 | t         |            1
     802 | f         |           20
+    803 | t         |            1
 
 CALL run_job(3);
 SELECT * FROM job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
     801 | t         |           10
-    803 | t         |            1
     802 | f         |           15
+    803 | t         |            1
 
 -- Verify only recent records remain
 SELECT * FROM recent_job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
     801 | t         |           10
-    803 | t         |            1
     802 | f         |           15
+    803 | t         |            1
 
 -- Cleanup
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;

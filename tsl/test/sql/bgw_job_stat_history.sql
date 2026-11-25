@@ -24,13 +24,15 @@ $$;
 CREATE VIEW job_history_summary AS
 SELECT job_id, succeeded, count(*) AS record_count
   FROM _timescaledb_internal.bgw_job_stat_history
-GROUP BY job_id, succeeded;
+GROUP BY job_id, succeeded
+ORDER BY job_id, succeeded;
 
 CREATE VIEW recent_job_history_summary AS
 SELECT job_id, succeeded, count(*) AS record_count
   FROM _timescaledb_internal.bgw_job_stat_history
  WHERE execution_finish > now() - interval '30 days'
-GROUP BY job_id, succeeded;
+GROUP BY job_id, succeeded
+ORDER BY job_id, succeeded;
 
 -- Do not log all jobs, only FAILED executions
 SHOW timescaledb.enable_job_execution_logging;
@@ -337,7 +339,8 @@ SELECT add_continuous_aggregate_policy('metrics_10_fail', start_offset => 100, e
   schedule_interval => interval '1 hour', initial_start => now(),
   buckets_per_batch => 2) AS job_id_6 \gset
 SELECT pg_reload_conf();
-SELECT test.wait_for_job_to_run_or_fail(:job_id_6);
+-- Wait for the failure to be recorded, not just for the job to start
+CALL test.wait_for_job_failure(:job_id_6);
 SELECT debug_waitpoint_release('cagg_policy_batch_3_after_refresh');
 
 SELECT job_id - :job_id_6 AS job, succeeded, jsonb_pretty(data->'info') AS info,
