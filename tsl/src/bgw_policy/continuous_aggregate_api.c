@@ -492,7 +492,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 		end_offset = interval_to_int64(config->offset_end.value, config->offset_end.type);
 	}
 
-	bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
+	bucket_width = ts_continuous_agg_bucket_width(ts_continuous_agg_bucket_function(cagg));
 	Assert(bucket_width > 0);
 
 	if (ts_time_saturating_add(end_offset, bucket_width * 2, INT8OID) > start_offset)

@@ -138,21 +138,22 @@ cagg_compute_watermark(ContinuousAgg *cagg, int64 watermark, bool isnull)
 		 * max is the start of the last bucket. Add one bucket to move to the
 		 * point where the materialized data ends.
 		 */
-		if (cagg->bucket_function->bucket_fixed_interval == false)
+		if (ts_continuous_agg_bucket_function(cagg)->bucket_fixed_interval == false)
 		{
 			/*
 			 * Since `value` is already bucketed, `bucketed = true` flag can
 			 * be added to ts_cagg_variable_next_bucket_start() as
 			 * an optimization, if necessary.
 			 */
-			watermark = ts_cagg_variable_next_bucket_start(watermark, cagg->bucket_function);
+			watermark = ts_cagg_variable_next_bucket_start(watermark,
+														   ts_continuous_agg_bucket_function(cagg));
 		}
 		else
 		{
-			watermark =
-				ts_time_saturating_add(watermark,
-									   ts_continuous_agg_fixed_bucket_width(cagg->bucket_function),
-									   cagg->partition_type);
+			watermark = ts_time_saturating_add(watermark,
+											   ts_continuous_agg_fixed_bucket_width(
+												   ts_continuous_agg_bucket_function(cagg)),
+											   cagg->partition_type);
 		}
 	}
 

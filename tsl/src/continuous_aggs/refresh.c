@@ -708,7 +708,9 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 		if (refresh->bucketing_refresh_window)
 		{
 			bucketed_refresh_window =
-				compute_circumscribed_bucketed_refresh_window(&invalidation, cagg->bucket_function);
+				compute_circumscribed_bucketed_refresh_window(&invalidation,
+															  ts_continuous_agg_bucket_function(
+																  cagg));
 		}
 		(*exec_func)(&bucketed_refresh_window, context, count, seqnum, func_arg1);
 
@@ -1473,7 +1475,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 		!(refresh_window_arg->start_isnull && refresh_window_arg->end_isnull))
 	{
 		refresh_window =
-			compute_inscribed_bucketed_refresh_window(refresh_window_arg, cagg->bucket_function);
+			compute_inscribed_bucketed_refresh_window(refresh_window_arg,
+													  ts_continuous_agg_bucket_function(cagg));
 	}
 
 	/* If there is no other policy defined after this, the inscribed bucket calculated above
@@ -1485,8 +1488,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	 */
 	if (apply_extend && !(refresh_window_arg->start_isnull && refresh_window_arg->end_isnull))
 	{
-		refresh_window.end =
-			cagg_next_bucket_start(refresh_window.end, refresh_window.type, cagg->bucket_function);
+		refresh_window.end = cagg_next_bucket_start(refresh_window.end,
+													refresh_window.type,
+													ts_continuous_agg_bucket_function(cagg));
 	}
 
 	if (refresh_window.start >= refresh_window.end)
@@ -1599,7 +1603,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			computed_invalidation_threshold_for_cagg =
 				cagg_current_bucket_start(invalidation_threshold,
 										  refresh_window.type,
-										  cagg->bucket_function);
+										  ts_continuous_agg_bucket_function(cagg));
 		}
 
 		if (refresh_window.end > computed_invalidation_threshold_for_cagg)
@@ -1752,7 +1756,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		}
 		refresh_window.start = cagg_current_bucket_start(slice->fd.range_start,
 														 refresh_window.type,
-														 cagg->bucket_function);
+														 ts_continuous_agg_bucket_function(cagg));
 		refresh_window.start_isnull = false;
 	}
 
@@ -1794,15 +1798,18 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			return NIL;
 		}
 
-		refresh_window.end =
-			cagg_next_bucket_start(maxval, refresh_window.type, cagg->bucket_function);
+		refresh_window.end = cagg_next_bucket_start(maxval,
+													refresh_window.type,
+													ts_continuous_agg_bucket_function(cagg));
 		refresh_window.end_isnull = false;
 	}
 
 	/* Compute the inscribed bucket for the capped refresh window range */
-	const int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
+	const int64 bucket_width =
+		ts_continuous_agg_bucket_width(ts_continuous_agg_bucket_function(cagg));
 	refresh_window =
-		compute_inscribed_bucketed_refresh_window(&refresh_window, cagg->bucket_function);
+		compute_inscribed_bucketed_refresh_window(&refresh_window,
+												  ts_continuous_agg_bucket_function(cagg));
 
 	/* Check if the refresh size is large enough to produce bathes, if not then return no batches */
 	const int64 refresh_window_size = i64abs(refresh_window.end - refresh_window.start);
@@ -1931,7 +1938,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	 * A batch is emitted only when it overlaps both an active dimension slice and
 	 * an active invalidation range.
 	 */
-	const ContinuousAggBucketFunction *bf = cagg->bucket_function;
+	const ContinuousAggBucketFunction *bf = ts_continuous_agg_bucket_function(cagg);
 	int64 fixed_batch_size = bf->bucket_fixed_interval ? ts_continuous_agg_fixed_bucket_width(bf) *
 															 (int64) buckets_per_batch :
 														 0;

@@ -14,14 +14,6 @@
 #include "extension.h"
 #include "guc.h"
 
-static Const *check_time_bucket_argument(Node *arg, char *position, bool process_checks,
-										 StringInfo msg, bool for_rewrites);
-static void process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *arg,
-													bool *custom_origin);
-static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf,
-										  bool process_checks, bool is_cagg_create,
-										  AttrNumber htpartcolno, StringInfo msg,
-										  bool for_rewrites);
 static void caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause,
 									List *targetList, List *rtable, bool is_cagg_create);
 static Datum get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info);
@@ -37,40 +29,6 @@ static RangeTblEntry *makeRangeTblEntry(Query *subquery, const char *aliasname);
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
 #define INTERNAL_TO_TS_FUNCTION "to_timestamp_without_timezone"
 #define BOUNDARY_FUNCTION "cagg_watermark"
-
-static Const *
-check_time_bucket_argument(Node *arg, char *position, bool process_checks, StringInfo msg,
-						   bool for_rewrites)
-{
-	if (IsA(arg, NamedArgExpr))
-	{
-		arg = (Node *) castNode(NamedArgExpr, arg)->arg;
-	}
-
-	Node *expr = eval_const_expressions(NULL, arg);
-
-	if (process_checks && !IsA(expr, Const))
-	{
-		if (!for_rewrites)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("only immutable expressions allowed in time bucket function"),
-					 errhint("Use an immutable expression as %s argument to the time bucket "
-							 "function.",
-							 position)));
-		}
-		else if (msg)
-		{
-			appendStringInfo(msg,
-							 "non-immutable expression as %s argument to the time bucket function",
-							 position);
-		}
-		return NULL;
-	}
-
-	return castNode(Const, expr);
-}
 
 /*
  * Initialize caggtimebucket.
@@ -169,288 +127,6 @@ destroy_union_query(Query *q)
 }
 
 /*
- * Handle additional parameter of the timebucket function such as timezone, offset, or origin
- */
-static void
-process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *arg,
-										bool *custom_origin)
-{
-	char *tz_name;
-	switch (exprType((Node *) arg))
-	{
-		/* Timezone as text */
-		case TEXTOID:
-			if (!arg->constisnull)
-			{
-				tz_name = TextDatumGetCString(arg->constvalue);
-				if (!ts_is_valid_timezone_name(tz_name))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-							 errmsg("invalid timezone name \"%s\"", tz_name)));
-				}
-
-				bf->bucket_time_timezone = tz_name;
-			}
-			break;
-		case INTERVALOID:
-			/* Bucket offset as interval */
-			if (!arg->constisnull)
-			{
-				bf->bucket_time_offset = DatumGetIntervalP(arg->constvalue);
-			}
-			break;
-		case DATEOID:
-			/* Bucket origin as Date */
-			if (!arg->constisnull)
-			{
-				bf->bucket_time_origin =
-#if PG19_GE
-					date2timestamptz_safe(DatumGetDateADT(arg->constvalue), NULL);
-#else
-					date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
-#endif
-			}
-			*custom_origin = true;
-			break;
-		case TIMESTAMPOID:
-			/* Bucket origin as Timestamp */
-			bf->bucket_time_origin = DatumGetTimestamp(arg->constvalue);
-			*custom_origin = true;
-			break;
-		case TIMESTAMPTZOID:
-			/* Bucket origin as TimestampTZ */
-			bf->bucket_time_origin = DatumGetTimestampTz(arg->constvalue);
-			*custom_origin = true;
-			break;
-		case INT2OID:
-			/* Bucket offset as smallint */
-			bf->bucket_integer_offset = DatumGetInt16(arg->constvalue);
-			break;
-		case INT4OID:
-			/* Bucket offset as int */
-			bf->bucket_integer_offset = DatumGetInt32(arg->constvalue);
-			break;
-		case INT8OID:
-			/* Bucket offset as bigint */
-			bf->bucket_integer_offset = DatumGetInt64(arg->constvalue);
-			break;
-		default:
-			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
-					 errmsg("unable to handle time_bucket parameter of type: %s",
-							format_type_be(exprType((Node *) arg)))));
-			pg_unreachable();
-	}
-}
-
-/*
- * Process the FuncExpr node to fill the bucket function data structure. The other
- * parameters are used when `process_check` is true that means we need to raise errors
- * when invalid parameters are passed to the time bucket function when creating a cagg.
- */
-static void
-process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, bool process_checks,
-							  bool is_cagg_create, AttrNumber htpartcolno, StringInfo msg,
-							  bool for_rewrites)
-{
-	Node *width_arg;
-	Node *col_arg;
-	bool custom_origin = false;
-	TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
-	int nargs;
-
-	nargs = list_length(fe->args);
-	if (nargs < 2 || nargs > 5)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("unsupported time bucket function signature")));
-	}
-
-	/* Only column allowed : time_bucket('1day', <column> ) */
-	col_arg = lsecond(fe->args);
-
-	/* Could be a named argument */
-	if (IsA(col_arg, NamedArgExpr))
-	{
-		col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
-	}
-
-	if (process_checks && htpartcolno != InvalidAttrNumber &&
-		(!(IsA(col_arg, Var)) || castNode(Var, col_arg)->varattno != htpartcolno))
-	{
-		if (!for_rewrites)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("time bucket function must reference the primary hypertable "
-							"dimension column")));
-		}
-		else if (msg)
-		{
-			appendStringInfoString(msg,
-								   "time bucket function must reference the primary hypertable "
-								   "dimension column");
-		}
-		return;
-	}
-
-	/*
-	 * Process the third argument of the time bucket function. This could be `timezone`, `offset`,
-	 * or `origin`.
-	 *
-	 * Time bucket function variations with 3 and 5 arguments:
-	 *   - time_bucket(width SMALLINT, ts SMALLINT,    offset SMALLINT)
-	 *   - time_bucket(width INTEGER,  ts INTEGER,     offset INTEGER)
-	 *   - time_bucket(width BIGINT,   ts BIGINT,      offset BIGINT)
-	 *   - time_bucket(width INTERVAL, ts DATE,        offset INTERVAL)
-	 *   - time_bucket(width INTERVAL, ts DATE,        origin DATE)
-	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, offset INTERVAL)
-	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ)
-	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ,
-	 *                 offset INTERVAL)
-	 *   - time_bucket(width INTERVAL, ts TIMESTAMP,   offset INTERVAL)
-	 *   - time_bucket(width INTERVAL, ts TIMESTAMP,   origin TIMESTAMP)
-	 */
-	if (nargs >= 3)
-	{
-		Const *arg = check_time_bucket_argument(lthird(fe->args),
-												"third",
-												process_checks,
-												msg,
-												for_rewrites);
-		if (!arg)
-		{
-			return;
-		}
-		process_additional_timebucket_parameter(bf, arg, &custom_origin);
-	}
-
-	/*
-	 * Process the fourth and fifth arguments of the time bucket function. This could be `origin` or
-	 * `offset`.
-	 *
-	 * Time bucket function variation with 5 arguments:
-	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ,
-	 *                 offset INTERVAL)
-	 */
-	if (nargs >= 4)
-	{
-		Const *arg = check_time_bucket_argument(lfourth(fe->args),
-												"fourth",
-												process_checks,
-												msg,
-												for_rewrites);
-		if (!arg)
-		{
-			return;
-		}
-		process_additional_timebucket_parameter(bf, arg, &custom_origin);
-	}
-
-	if (nargs == 5)
-	{
-		Const *arg = check_time_bucket_argument(lfifth(fe->args),
-												"fifth",
-												process_checks,
-												msg,
-												for_rewrites);
-		if (!arg)
-		{
-			return;
-		}
-		process_additional_timebucket_parameter(bf, arg, &custom_origin);
-	}
-
-	if (process_checks && custom_origin && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-	{
-		if (!for_rewrites)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid origin value: infinity")));
-		}
-		else if (msg)
-		{
-			appendStringInfoString(msg, "invalid time bucket origin value: infinity");
-		}
-		return;
-	}
-
-	/*
-	 * We constify width expression here so any immutable expression will be allowed.
-	 * Otherwise it would make it harder to create caggs for hypertables with e.g. int8
-	 * partitioning column as int constants default to int4 and so expression would
-	 * have a cast and not be a Const.
-	 */
-	width_arg = linitial(fe->args);
-
-	if (IsA(width_arg, NamedArgExpr))
-	{
-		width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
-	}
-
-	width_arg = eval_const_expressions(NULL, width_arg);
-	if (IsA(width_arg, Const))
-	{
-		Const *width = castNode(Const, width_arg);
-		bf->bucket_width_type = width->consttype;
-
-		if (width->constisnull)
-		{
-			if (process_checks && !for_rewrites)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("invalid bucket width for time bucket function")));
-			}
-			return;
-		}
-
-		if (width->consttype == INTERVALOID)
-		{
-			bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
-		}
-
-		if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
-		{
-			bf->bucket_integer_width =
-				ts_interval_value_to_internal(width->constvalue, width->consttype);
-		}
-	}
-	else if (process_checks)
-	{
-		if (!for_rewrites)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("only immutable expressions allowed in time bucket function"),
-					 errhint("Use an immutable expression as first argument to the time bucket "
-							 "function.")));
-		}
-		else if (msg)
-		{
-			appendStringInfoString(msg,
-								   "non-immutable expression as first argument to the time bucket "
-								   "function");
-		}
-		return;
-	}
-
-	bf->bucket_function = fe->funcid;
-	bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
-	bf->bucket_fixed_interval = time_bucket_info_has_fixed_width(bf);
-
-	if (process_checks && is_cagg_create && ts_continuous_agg_bucket_width(bf) <= 0)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("time bucket width must be greater than zero")));
-	}
-}
-
-/*
  * Check if the group-by clauses has exactly 1 time_bucket(.., <col>) where
  * <col> is the hypertable's partitioning column and other invariants. Then fill
  * the `bucket_width` and other fields of `tbinfo`.
@@ -538,13 +214,13 @@ caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List *groupClaus
 				found = true;
 			}
 
-			process_timebucket_parameters(fe,
-										  bf,
-										  true,
-										  is_cagg_create,
-										  ht_partcolno,
-										  msg,
-										  for_rewrites);
+			ts_cagg_process_timebucket_parameters(fe,
+												  bf,
+												  true,
+												  is_cagg_create,
+												  ht_partcolno,
+												  msg,
+												  for_rewrites);
 			if (!OidIsValid(bf->bucket_function))
 			{
 				return false;
@@ -573,7 +249,7 @@ caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List *groupClaus
 		return false;
 	}
 
-	if (!time_bucket_info_has_fixed_width(bf))
+	if (!ts_cagg_bucket_function_has_fixed_width(bf))
 	{
 		/* Variable-sized buckets can be used only with intervals. */
 		Assert(bf->bucket_time_width != NULL);
@@ -1341,8 +1017,8 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 								is_cagg_create);
 
 		/* Cannot create cagg with fixed bucket on top of variable bucket. */
-		if (time_bucket_info_has_fixed_width(bucket_info_parent.bf) == false &&
-			time_bucket_info_has_fixed_width(bucket_info.bf) == true)
+		if (ts_cagg_bucket_function_has_fixed_width(bucket_info_parent.bf) == false &&
+			ts_cagg_bucket_function_has_fixed_width(bucket_info.bf) == true)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1902,24 +1578,6 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	return query;
 }
 
-/*
- * Returns true if the time bucket size is fixed
- */
-bool
-time_bucket_info_has_fixed_width(const ContinuousAggBucketFunction *bf)
-{
-	if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
-	{
-		return true;
-	}
-	else
-	{
-		/* Historically, we treat all buckets with timezones as variable. Buckets with only days are
-		 * treated as fixed. */
-		return bf->bucket_time_width->month == 0 && bf->bucket_time_timezone == NULL;
-	}
-}
-
 ContinuousAgg *
 cagg_get_by_relid_or_fail(const Oid cagg_relid)
 {
@@ -1952,68 +1610,6 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 	}
 
 	return cagg;
-}
-
-/* Get time bucket function info based on the view definition */
-ContinuousAggBucketFunction *
-ts_cagg_get_bucket_function_info(Oid view_oid)
-{
-	Relation view_rel = relation_open(view_oid, AccessShareLock);
-	Query *query = copyObject(get_view_query(view_rel));
-	relation_close(view_rel, NoLock);
-
-	Assert(query != NULL);
-	Assert(query->commandType == CMD_SELECT);
-
-	ContinuousAggBucketFunction *bf = palloc0(sizeof(ContinuousAggBucketFunction));
-
-	ListCell *l;
-	foreach (l, query->groupClause)
-	{
-		SortGroupClause *sgc = lfirst_node(SortGroupClause, l);
-		TargetEntry *tle = get_sortgroupclause_tle(sgc, query->targetList);
-
-		Expr *expr = tle->expr;
-#if PG18_GE
-		/* PG18 introduced RTEs for group clauses so
-		 * we can use rtable to look up GROUP BY expressions.
-		 *
-		 * https://github.com/postgres/postgres/commit/247dea89
-		 */
-		if (IsA(expr, Var))
-		{
-			Var *var = castNode(Var, tle->expr);
-			Assert((int) var->varno <= list_length(query->rtable));
-			RangeTblEntry *rte = list_nth(query->rtable, var->varno - 1);
-			Assert(rte->rtekind == RTE_GROUP);
-			Assert(var->varattno > 0);
-			Expr *node = list_nth(rte->groupexprs, var->varattno - 1);
-			if (IsA(node, FuncExpr))
-			{
-				expr = node;
-			}
-		}
-#endif
-
-		if (IsA(expr, FuncExpr))
-		{
-			FuncExpr *fe = castNode(FuncExpr, expr);
-
-			/* Filter any non bucketing functions */
-			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
-			if (finfo == NULL)
-			{
-				continue;
-			}
-
-			Assert(finfo->is_bucketing_func);
-
-			process_timebucket_parameters(fe, bf, false, false, InvalidAttrNumber, NULL, false);
-			break;
-		}
-	}
-
-	return bf;
 }
 
 /*

@@ -32,3 +32,7 @@ $$;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.get_segmentby_defaults(regclass);
 DROP FUNCTION IF EXISTS _timescaledb_functions.get_orderby_defaults(regclass, text[]);
+
+-- The bucket function of a continuous aggregate is now read from its direct view
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
+DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
