@@ -5816,8 +5816,14 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 												 time_type,
 												 &interval_type);
 
-		int64 chunk_interval = ts_interval_value_to_internal(interval, interval_type);
-		ts_dimension_set_chunk_interval(dim, chunk_interval);
+		/* Validate the interval the same way as set_chunk_time_interval() */
+		ts_dimension_update(ht,
+							&dim->fd.column_name,
+							DIMENSION_TYPE_OPEN,
+							&interval,
+							&interval_type,
+							NULL,
+							NULL);
 	}
 
 	if (!parse_results[AlterTableFlagColumnstore].is_default ||

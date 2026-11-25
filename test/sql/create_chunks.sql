@@ -177,6 +177,18 @@ SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_na
 ALTER TABLE t_with SET (tsdb.chunk_interval = '1 hour');
 SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 't_with';
 
+-- invalid intervals are rejected like in set_chunk_time_interval()
+CREATE TABLE t_with_date(time date not null, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
+CREATE TABLE t_with_int(time int8 not null, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=1000);
+\set ON_ERROR_STOP 0
+ALTER TABLE t_with SET (tsdb.chunk_interval = '0 seconds');
+ALTER TABLE t_with SET (tsdb.chunk_interval = '-1 day');
+ALTER TABLE t_with_date SET (tsdb.chunk_interval = '36 hours');
+ALTER TABLE t_with_int SET (tsdb.chunk_interval = 0);
+ALTER TABLE t_with_int SET (tsdb.chunk_interval = -5);
+\set ON_ERROR_STOP 1
+SELECT hypertable_name, time_interval, integer_interval FROM timescaledb_information.dimensions WHERE hypertable_name IN ('t_with', 't_with_date', 't_with_int') ORDER BY 1;
+
 
 
 -- chunk created by a user with only INSERT gets the replica identity of the hypertable
