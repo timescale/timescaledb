@@ -127,4 +127,7 @@ step "S4_drop_index" {
     DROP INDEX metrics_device_time_idx;
 }
 
-permutation S1_lock S3_vacuum S2_lock S1_commit S4_drop_index S2_commit
+# VACUUM ANALYZE releases the chunk lock between VACUUM and ANALYZE, so
+# DROP INDEX can finish first. Report it after the VACUUM for a stable
+# output.
+permutation S1_lock S3_vacuum S2_lock S1_commit S4_drop_index(S3_vacuum) S2_commit

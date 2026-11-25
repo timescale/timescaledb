@@ -34,7 +34,7 @@ See [`log.c`](log.c) for more detail.
 ## Timer
 
 We virtualize the timer to allow deterministic execution by tests. Our timer
-store a virtual microsecond counter in shared memory, backround processes can
+store a virtual microsecond counter in shared memory, background processes can
 read this counter to determine the current time. The scheduler can "wait" on
 this timer which optionally waits for a process to finish and updates the counter
 to the waited time. The timer can be reset manually (for instance, to allow multiple

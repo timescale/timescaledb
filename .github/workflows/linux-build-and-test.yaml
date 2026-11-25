@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix_advisory: ${{ steps.set-matrix.outputs.matrix_advisory }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -69,8 +70,6 @@ jobs:
     name: ${{ !matrix.installcheck && 'Build-only ' || '' }}PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
     runs-on: ${{ matrix.runner || matrix.os }}
-    # The flaky check is advisory, so its failure must not fail the summary.
-    continue-on-error: ${{ contains(matrix.name, 'Flaky') }}
 
     env:
       CLANG: ${{ matrix.clang }}
@@ -84,7 +83,7 @@ jobs:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
 
-    steps:
+    steps: &regress_steps
     - name: Replace unreliable Azure APT mirror
       if: runner.os == 'Linux'
       run: |
@@ -109,6 +108,22 @@ jobs:
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
           libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
+
+    # Ubuntu 26.04 uses uutils coreutils. Its mkdir (before 0.11.0) can report
+    # success for a directory that a concurrent mkdir just created, which
+    # breaks the mkdir locks in the test runners. Use GNU coreutils instead,
+    # like on the other runners. Remove this step once the runner image ships
+    # uutils 0.11.0 or newer.
+    - name: Use GNU coreutils
+      if: runner.os == 'Linux'
+      run: |
+        if mkdir --version | grep -q uutils; then
+          # Remove the uutils package in the same step, or apt keeps it and
+          # refuses to install the conflicting GNU one.
+          sudo apt-get install -y --allow-remove-essential \
+            coreutils-from-gnu coreutils-from-uutils-
+        fi
+        mkdir --version | head -1
 
     - name: Check macOS Build Dependencies
       if: runner.os == 'macOS'
@@ -263,8 +278,20 @@ jobs:
       run: |
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
+            SKIPS="${{ join(matrix.skipped_tests, ' ') }} ${{ contains(matrix.os, 'ubuntu') && 'net telemetry' || '' }}" \
+            ${{ matrix.installcheck_args }} \
             | tee installcheck.log
+
+    # The net and telemetry tests check the certificates of real servers, and
+    # those look expired when the clock is moved ahead with faketime. They are
+    # skipped above and run here with the real time instead.
+    - name: Run network tests without faketime
+      if: >-
+        matrix.installcheck && matrix.build_type == 'Debug' && contains(matrix.os, 'ubuntu')
+        && !contains(matrix.ignored_tests, 'net')
+      run: |
+        set -o pipefail
+        FAKETIME= make -C build regresscheck TESTS="net telemetry" | tee -a installcheck.log
 
     - name: Wait for checks to finish
       wait-all:
@@ -442,6 +469,32 @@ jobs:
         fi
         export GITHUB_PR_NUMBER
         scripts/upload_ci_stats.sh
+
+  # Some checks like Flaky Check are advisory and don't influence the summary.
+  # We run them in a separate kind of job here so that the summary doesn't have
+  # to wait for them.
+  regress_advisory:
+    if: >-
+      needs.check_paths.outputs.run_ci == 'true'
+      && fromJson(needs.matrixbuilder.outputs.matrix_advisory).include[0] != null
+    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+    needs: [matrixbuilder, check_paths]
+    runs-on: ${{ matrix.runner || matrix.os }}
+    continue-on-error: true
+
+    env:
+      CLANG: ${{ matrix.clang }}
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
+      FAKETIME: |
+        ${{ contains(matrix.os, 'ubuntu') && 'faketime -f +379d' || '' }}
+
+    strategy:
+      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix_advisory) }}
+      fail-fast: false
+
+    steps: *regress_steps
 
   report_status:
     name: Regression summary

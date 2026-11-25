@@ -645,7 +645,8 @@ job_alter(PG_FUNCTION_ARGS)
 			/* last finish time plus schedule interval */
 			BgwJobStat *stat = ts_bgw_job_stat_find(job->fd.id);
 
-			if (stat != NULL)
+			/* Keep the wait stored after a crash */
+			if (stat != NULL && stat->fd.consecutive_crashes == 0)
 			{
 				next_start_calculated = DatumGetTimestampTz(
 					DirectFunctionCall2(timestamptz_pl_interval,

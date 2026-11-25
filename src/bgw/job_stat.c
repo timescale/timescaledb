@@ -12,6 +12,7 @@
 #include <utils/fmgrprotos.h>
 #include <utils/resowner.h>
 
+#include "debug_point.h"
 #include "guc.h"
 #include "job.h"
 #include "job_stat.h"
@@ -39,6 +40,8 @@ bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 
 	*job_stat_pp = STRUCT_FROM_SLOT(ti->slot, ti->mctx, BgwJobStat, FormData_bgw_job_stat);
 
+	DEBUG_WAITPOINT("bgw_job_stat_find_during_scan");
+
 	/*
 	 * Return SCAN_CONTINUE because we check for multiple tuples as an error
 	 * condition.
@@ -48,7 +51,8 @@ bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 
 static bool
 bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func tuple_found,
-					  tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
+					  tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode,
+					  bool use_catalog_snapshot)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
@@ -62,9 +66,20 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found
 		.data = data,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = use_catalog_snapshot,
 	};
 
 	return ts_scanner_scan_one(&scanctx, false, "bgw job stat");
+}
+
+static inline void
+bgw_job_stat_scankey_init(ScanKeyData *scankey, int32 bgw_job_id)
+{
+	ScanKeyInit(scankey,
+				Anum_bgw_job_stat_pkey_idx_job_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(bgw_job_id));
 }
 
 static inline bool
@@ -73,30 +88,37 @@ bgw_job_stat_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found,
 {
 	ScanKeyData scankey[1];
 
-	ScanKeyInit(&scankey[0],
-				Anum_bgw_job_stat_pkey_idx_job_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(bgw_job_id));
+	bgw_job_stat_scankey_init(&scankey[0], bgw_job_id);
 	return bgw_job_stat_scan_one(BGW_JOB_STAT_PKEY_IDX,
 								 scankey,
 								 1,
 								 tuple_found,
 								 tuple_filter,
 								 data,
-								 lockmode);
+								 lockmode,
+								 false);
 }
 
 TSDLLEXPORT BgwJobStat *
 ts_bgw_job_stat_find(int32 bgw_job_id)
 {
 	BgwJobStat *job_stat = NULL;
+	ScanKeyData scankey[1];
 
-	bgw_job_stat_scan_job_id(bgw_job_id,
-							 bgw_job_stat_tuple_found,
-							 NULL,
-							 (void *) &job_stat,
-							 AccessShareLock);
+	/*
+	 * Readers do not block job workers that update the stats, and a
+	 * SnapshotSelf scan can see both the old and the new row if the update
+	 * commits during the scan. An MVCC snapshot sees only one of them.
+	 */
+	bgw_job_stat_scankey_init(&scankey[0], bgw_job_id);
+	bgw_job_stat_scan_one(BGW_JOB_STAT_PKEY_IDX,
+						  scankey,
+						  1,
+						  bgw_job_stat_tuple_found,
+						  NULL,
+						  (void *) &job_stat,
+						  AccessShareLock,
+						  true);
 
 	return job_stat;
 }
@@ -542,6 +564,9 @@ bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
 
 	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
+	/* Replaces any next_start written by the run that crashed */
+	fd->next_start = *(TimestampTz *) data;
+
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
 
@@ -687,13 +712,13 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
 }
 
 void
-ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result)
+ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result, TimestampTz next_start)
 {
 	if (!bgw_job_stat_scan_job_id(job->fd.id,
 								  bgw_job_stat_tuple_mark_crash_reported,
 								  NULL,
-								  NULL,
-								  RowExclusiveLock))
+								  &next_start,
+								  ShareRowExclusiveLock))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -805,13 +830,40 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
 
 	if (jobstat->fd.consecutive_crashes > 0)
 	{
-		/* Update the errors table regarding the crash */
+		TimestampTz next_start;
+
+		/*
+		 * The wait is stored when the crash is reported, so reloading the
+		 * job list reads it back instead of starting it over.
+		 */
 		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
-			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE_IN_EXECUTION);
+			next_start = calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE_IN_EXECUTION, next_start);
+			return next_start;
 		}
 
-		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+		if (jobstat->fd.next_start != DT_NOBEGIN)
+		{
+			return jobstat->fd.next_start;
+		}
+
+		/*
+		 * No stored wait: a schedule change cleared it, or an older version
+		 * reported the crash. Store a new one.
+		 */
+		next_start = calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+		if (!bgw_job_stat_scan_job_id(job->fd.id,
+									  bgw_job_stat_tuple_set_next_start,
+									  NULL,
+									  &next_start,
+									  ShareRowExclusiveLock))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unable to find job statistics for job %d", job->fd.id)));
+		}
+		return next_start;
 	}
 
 	/*

@@ -33,6 +33,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
        with_clause_parser.sql)
   list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
+  # Checks that cached plans are reused. Catalog changes from parallel tests can
+  # reset the plan cache and cause a replan, so run it alone.
+  list(APPEND SOLO_TESTS constify_now-${TEST_VERSION_SUFFIX}.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

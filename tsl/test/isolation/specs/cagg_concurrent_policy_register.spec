@@ -195,12 +195,12 @@ step "s5_show_running_jobs" {
   ORDER BY ca.user_view_name, start_range;
 }
 
-## TEST: when 3 concurrent refresh policies execute, they serialize on registration, then execute succesfully
+## TEST: when 3 concurrent refresh policies execute, they serialize on registration, then execute successfully
 ## since these are adjacent policies 2 concurrent refresh processes, the extend last bucket behavior will apply
 ## observe the ranges recorded for each policy run
 permutation "s1_select" "s3_lock_before_register" "s1_run_pol7d_3d_refresh" "s12_run_pol3d_1d_refresh"("s1_run_pol7d_3d_refresh") "s13_run_pol1d_refresh"("s12_run_pol3d_1d_refresh") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"
 
 ## TEST: two concurrent refresh policies on the hierarchical L2 CAgg serialize on registration,
-## then both execute succesfully. 
+## then both execute successfully. 
 permutation "s3_lock_before_register" "s1_run_l2_hist" "s12_run_l2_recent"("s1_run_l2_hist") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations" 
 

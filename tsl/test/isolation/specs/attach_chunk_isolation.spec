@@ -48,7 +48,7 @@ step "s4_detach" { CALL detach_chunk('chunk_to_attach'); }
 step "s4_drop" { DROP TABLE chunk_to_attach; }
 step "s4_violate" { INSERT INTO chunk_to_attach VALUES ('2025-08-01 20:00', 1, 34); }
 
-# Create another chunk with overlaping slices before attach takes locks so attach fails
+# Create another chunk with overlapping slices before attach takes locks so attach fails
 permutation "s3_wait_before_lock" "s1b" "s1_attach" "s4_insert" "s3_release_lock" "s1c" "s3_show_num_chunks"
 # Attach takes locks before trying to insert
 permutation "s1b" "s1_attach" "s3_show_num_rows" "s4_insert" "s1c" "s3_show_num_chunks" "s3_show_num_rows"

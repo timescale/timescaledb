@@ -30,14 +30,45 @@
 #include "ts_catalog/chunk_column_stats.h"
 #include "utils.h"
 
+/*
+ * The values are kept in a Datum array rather than a List of pointers,
+ * because a Datum can be wider than a pointer on 32-bit platforms.
+ */
 typedef struct DimensionValues
 {
-	List *values;
+	Datum *values;
+	int num_values;
 	bool use_or; /* ORed or ANDed values */
 	Oid type;	 /* Oid type for values */
 } DimensionValues;
 
-static DimensionValues *dimension_values_create(List *values, Oid type, bool use_or);
+static DimensionValues *dimension_values_create(Datum *values, int num_values, Oid type,
+												bool use_or);
+
+/* Collect the non-null elements of an array. */
+static Datum *
+array_get_nonnull_values(Datum array, int *num_values)
+{
+	ArrayType *arr = DatumGetArrayTypeP(array);
+	int nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
+	Datum *values = palloc(sizeof(Datum) * Max(nitems, 1));
+	ArrayIterator iterator = array_create_iterator(arr, 0, NULL);
+	Datum elem;
+	bool isnull;
+	int n = 0;
+
+	while (array_iterate(iterator, &elem, &isnull))
+	{
+		if (!isnull)
+		{
+			values[n++] = elem;
+		}
+	}
+	array_free_iterator(iterator);
+
+	*num_values = n;
+	return values;
+}
 
 static DimensionRestrictInfoOpen *
 dimension_restrict_info_open_create(const Dimension *d)
@@ -130,7 +161,6 @@ static bool
 dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy,
 								 DimensionValues *dimvalues)
 {
-	ListCell *item;
 	bool restriction_added = false;
 
 	/*
@@ -139,7 +169,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 	 * This may include extra chunks, which PG constraint exclusion
 	 * will prune later. Much better than returning all chunks.
 	 */
-	if (dimvalues->use_or && list_length(dimvalues->values) > 1)
+	if (dimvalues->use_or && dimvalues->num_values > 1)
 	{
 		if (strategy != BTEqualStrategyNumber)
 		{
@@ -148,10 +178,9 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 
 		int64 min_val = PG_INT64_MAX;
 		int64 max_val = PG_INT64_MIN;
-		ListCell *lc;
-		foreach (lc, dimvalues->values)
+		for (int i = 0; i < dimvalues->num_values; i++)
 		{
-			int64 value = DatumGetInt64(PointerGetDatum(lfirst(lc)));
+			int64 value = DatumGetInt64(dimvalues->values[i]);
 			if (value < min_val)
 			{
 				min_val = value;
@@ -162,14 +191,14 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 			}
 		}
 
-		DimensionValues range_values =
-			(DimensionValues){ .values = list_make1(DatumGetPointer(Int64GetDatum(min_val))),
-							   .use_or = false,
-							   .type = dimvalues->type };
+		Datum range_value = Int64GetDatum(min_val);
+		DimensionValues range_values = (DimensionValues){
+			.values = &range_value, .num_values = 1, .use_or = false, .type = dimvalues->type
+		};
 
 		dimension_restrict_info_open_add(dri, BTGreaterEqualStrategyNumber, &range_values);
 
-		linitial(range_values.values) = DatumGetPointer(Int64GetDatum(max_val));
+		range_value = Int64GetDatum(max_val);
 		dimension_restrict_info_open_add(dri, BTLessEqualStrategyNumber, &range_values);
 
 		/*
@@ -179,11 +208,11 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 		return false;
 	}
 
-	Assert(list_length(dimvalues->values) == 1 || !dimvalues->use_or);
+	Assert(dimvalues->num_values == 1 || !dimvalues->use_or);
 
-	foreach (item, dimvalues->values)
+	for (int i = 0; i < dimvalues->num_values; i++)
 	{
-		int64 value = DatumGetInt64(PointerGetDatum(lfirst(item)));
+		int64 value = DatumGetInt64(dimvalues->values[i]);
 
 		switch (strategy)
 		{
@@ -222,17 +251,16 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 
 static List *
 dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, Oid collation,
-									   List *values, Oid value_type)
+									   DimensionValues *dimvalues)
 {
 	List *partitions = NIL;
-	ListCell *item;
 
-	foreach (item, values)
+	for (int i = 0; i < dimvalues->num_values; i++)
 	{
 		Datum value = ts_dimension_transform_value(dri->base.dimension,
 												   collation,
-												   PointerGetDatum(lfirst(item)),
-												   value_type,
+												   dimvalues->values[i],
+												   dimvalues->type,
 												   NULL);
 
 		partitions = list_append_unique_int(partitions, DatumGetInt32(value));
@@ -253,8 +281,7 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 		return false;
 	}
 
-	partitions =
-		dimension_restrict_info_get_partitions(dri, collation, dimvalues->values, dimvalues->type);
+	partitions = dimension_restrict_info_get_partitions(dri, collation, dimvalues);
 
 	/* the intersection is empty when using ALL operator (ANDing values)  */
 	if (list_length(partitions) > 1 && !dimvalues->use_or)
@@ -472,28 +499,21 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 
 		if (is_array)
 		{
-			ArrayIterator iterator =
-				array_create_iterator(DatumGetArrayTypeP(c->constvalue), 0, NULL);
-			Datum elem = (Datum) NULL;
-			bool isnull;
-			List *values = NIL;
+			int num_values;
+			Datum *values = array_get_nonnull_values(c->constvalue, &num_values);
 
-			while (array_iterate(iterator, &elem, &isnull))
+			for (int i = 0; i < num_values; i++)
 			{
-				if (!isnull)
-				{
-					Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, elem);
-					values = lappend(values, DatumGetPointer(coerced));
-				}
+				values[i] = OidFunctionCall1Coll(funcid, c->constcollid, values[i]);
 			}
-			array_free_iterator(iterator);
-			dimvalues = dimension_values_create(values, columntype, use_or);
+			dimvalues = dimension_values_create(values, num_values, columntype, use_or);
 		}
 		else
 		{
-			Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
-			dimvalues =
-				dimension_values_create(list_make1(DatumGetPointer(coerced)), columntype, use_or);
+			Datum *values = palloc(sizeof(Datum));
+
+			values[0] = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
+			dimvalues = dimension_values_create(values, 1, columntype, use_or);
 		}
 	}
 	else
@@ -514,14 +534,12 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	}
 	else
 	{
-		/* Open and stats dimensions: convert values to int64 */
-		List *int64_values = NIL;
-		ListCell *lc;
+		/* Open and stats dimensions: convert values to int64 in place */
 		Oid valuetype = dimvalues->type;
 
-		foreach (lc, dimvalues->values)
+		for (int i = 0; i < dimvalues->num_values; i++)
 		{
-			Datum value = PointerGetDatum(lfirst(lc));
+			Datum value = dimvalues->values[i];
 			int64 internal;
 
 			if (dri->dimension->partitioning != NULL)
@@ -539,9 +557,8 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 			{
 				internal = ts_time_value_to_internal_or_infinite(value, valuetype);
 			}
-			int64_values = lappend(int64_values, DatumGetPointer(Int64GetDatum(internal)));
+			dimvalues->values[i] = Int64GetDatum(internal);
 		}
-		dimvalues->values = int64_values;
 		dimvalues->type = INT8OID;
 
 		proven_true_by_hri = dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
@@ -558,12 +575,13 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 }
 
 static DimensionValues *
-dimension_values_create(List *values, Oid type, bool use_or)
+dimension_values_create(Datum *values, int num_values, Oid type, bool use_or)
 {
 	DimensionValues *dimvalues;
 
 	dimvalues = palloc(sizeof(DimensionValues));
 	dimvalues->values = values;
+	dimvalues->num_values = num_values;
 	dimvalues->use_or = use_or;
 	dimvalues->type = type;
 
@@ -573,19 +591,9 @@ dimension_values_create(List *values, Oid type, bool use_or)
 static DimensionValues *
 dimension_values_create_from_array(Const *c, bool user_or)
 {
-	ArrayIterator iterator = array_create_iterator(DatumGetArrayTypeP(c->constvalue), 0, NULL);
-	Datum elem = (Datum) NULL;
-	bool isnull;
-	List *values = NIL;
+	int num_values;
+	Datum *values = array_get_nonnull_values(c->constvalue, &num_values);
 	Oid base_el_type;
-
-	while (array_iterate(iterator, &elem, &isnull))
-	{
-		if (!isnull)
-		{
-			values = lappend(values, DatumGetPointer(elem));
-		}
-	}
 
 	/* it's an array type, lets get the base element type */
 	base_el_type = get_element_type(c->consttype);
@@ -596,15 +604,16 @@ dimension_values_create_from_array(Const *c, bool user_or)
 			 format_type_be(c->consttype));
 	}
 
-	return dimension_values_create(values, base_el_type, user_or);
+	return dimension_values_create(values, num_values, base_el_type, user_or);
 }
 
 static DimensionValues *
 dimension_values_create_from_single_element(Const *c, bool user_or)
 {
-	return dimension_values_create(list_make1(DatumGetPointer(c->constvalue)),
-								   c->consttype,
-								   user_or);
+	Datum *values = palloc(sizeof(Datum));
+
+	values[0] = c->constvalue;
+	return dimension_values_create(values, 1, c->consttype, user_or);
 }
 
 bool

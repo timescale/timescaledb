@@ -23,11 +23,12 @@ $$ LANGUAGE plpgsql;
 
 SELECT add_job('job_fail', '4 minutes', initial_start => now()) as job_fail_id \gset
 
+-- custom_proc1 holds the row until the test releases the advisory lock
 CREATE OR REPLACE PROCEDURE custom_proc1(jobid int, config jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
   UPDATE my_table SET b = 1 WHERE a = 0;
-  PERFORM pg_sleep(5);
+  PERFORM pg_advisory_xact_lock(4242);
   COMMIT;
 END
 $$;
@@ -36,21 +37,32 @@ SELECT add_job('custom_proc1', '2 min', initial_start => now()) as custom_proc1_
 
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 
+-- custom_proc2 waits until the test lets it update the row
 CREATE OR REPLACE PROCEDURE custom_proc2(jobid int, config jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
+  PERFORM pg_advisory_xact_lock(4243);
   UPDATE my_table SET b = 2 WHERE a = 0;
-  PERFORM pg_sleep(5);
   COMMIT;
 END
 $$;
 
--- to make sure custom_log is first updated by custom_proc_1
-select add_job('custom_proc2', '2 min', initial_start => now() + interval '1 seconds') as custom_proc2_id \gset
+select add_job('custom_proc2', '2 min', initial_start => now()) as custom_proc2_id \gset
 
 SET ROLE :ROLE_SUPERUSER;
+SELECT pg_advisory_lock(4242);
+SELECT pg_advisory_lock(4243);
 SELECT _timescaledb_functions.start_background_workers();
-SELECT pg_sleep(6);
+
+-- Once custom_proc1 has updated the row, let custom_proc2 update it too,
+-- and release custom_proc1 once custom_proc2 waits for that row
+CALL test.wait_for_lock_waiter('advisory', 2);
+SELECT pg_advisory_unlock(4243);
+CALL test.wait_for_lock_waiter('transactionid');
+SELECT pg_advisory_unlock(4242);
+
+CALL test.wait_for_job_failure(:job_fail_id);
+CALL test.wait_for_job_failure(:custom_proc2_id);
 
 \d timescaledb_information.job_errors
 

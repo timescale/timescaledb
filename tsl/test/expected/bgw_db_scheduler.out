@@ -95,11 +95,13 @@ CREATE TABLE public.bgw_log(
     application_name TEXT,
     msg TEXT
 );
+-- msg_no starts over in each scheduler process, so two schedulers can log
+-- the same msg_no at the same mock time. xmin orders them by insert.
 CREATE VIEW sorted_bgw_log AS
     SELECT msg_no,
     	   application_name,
     	   regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
-	   FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+	   FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no, xmin::text::bigint;
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
@@ -392,6 +394,9 @@ SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_catalog.bgw_job;
 SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', INTERVAL '100ms') AS test_job_2_id \gset
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- A job that finishes before the scheduler sees it start can make the
+-- scheduler loop once more, so the log checks below leave out the wait
+-- lines and msg_no.
 --Run the first time and error
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -404,13 +409,12 @@ FROM _timescaledb_internal.bgw_job_stat;
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | f                |          1 |               0 |              1 |             0
 
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                    msg                     
+------------------+--------------------------------------------
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
 
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
          last_finish          | last_successful_finish | last_run_success 
@@ -429,18 +433,15 @@ FROM _timescaledb_internal.bgw_job_stat;
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | f                |          2 |               0 |              2 |             0
 
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                    msg                     
+------------------+--------------------------------------------
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
 
 --The job runs and fails again a few more times increasing the wait time each time.
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225);
@@ -454,23 +455,18 @@ FROM _timescaledb_internal.bgw_job_stat;
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | f                |          3 |               0 |              3 |             0
 
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                    msg                     
+------------------+--------------------------------------------
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -483,28 +479,21 @@ FROM _timescaledb_internal.bgw_job_stat;
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | f                |          4 |               0 |              4 |             0
 
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                    msg                     
+------------------+--------------------------------------------
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
 
 --Once the wait time reaches 500ms it stops increasion
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
@@ -518,34 +507,25 @@ FROM _timescaledb_internal.bgw_job_stat;
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | f                |          5 |               0 |              5 |             0
 
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                            msg                            
---------+------------------+-----------------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 reached max_retries after 5 consecutive failures
-      2 | test_job_2       | job 1001 threw an error
-      3 | test_job_2       | Error job 2
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                            msg                            
+------------------+-----------------------------------------------------------
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
+ DB Scheduler     | [TESTING] Registered new background worker
+ test_job_2       | job 1001 reached max_retries after 5 consecutive failures
+ test_job_2       | job 1001 threw an error
+ test_job_2       | Error job 2
 
 -- Get status of failing job `test_job_2` to check it reached `max_retries` and
 -- the new `job_status` now is `Paused`
@@ -621,7 +601,8 @@ FROM _timescaledb_internal.bgw_job_stat;
 --------+------------------+------------+-----------------+----------------+---------------+---------------------
    1002 | f                |          1 |               0 |              1 |             0 |                   0
 
-SELECT * FROM sorted_bgw_log;
+-- The job can log before or after it is killed, so show only the scheduler
+SELECT * FROM sorted_bgw_log WHERE application_name = 'DB Scheduler';
  msg_no | application_name |                        msg                         
 --------+------------------+----------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -696,6 +677,12 @@ SELECT ts_bgw_db_scheduler_test_run(300);
  ts_bgw_db_scheduler_test_run 
 ------------------------------
  
+
+-- Wait for the job to log before it sleeps, so the kill comes after it
+SELECT wait_for_logentry(id) FROM _timescaledb_catalog.bgw_job WHERE application_name = 'test_job_3_long';
+ wait_for_logentry  
+--------------------
+ Before sleep job 3
 
 SELECT pg_terminate_backend(wait_application_pid('test_job_3_long'));
  pg_terminate_backend 
@@ -779,23 +766,25 @@ SELECT pg_reload_conf();
 ----------------
  t
 
+-- Wait in this session, since only it knows the scheduler it started
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.shutdown_bgw_scheduler;
  timescaledb.shutdown_bgw_scheduler 
 ------------------------------------
  on
 
-SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
- ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
-----------------------------------------------------
- 
-
 -- The number of scheduler restarts is not deterministic during [..]_wait_for_scheduler_finish().
 -- Therefore, we filter these messages to get a deterministic test output.
-SELECT * FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
- msg_no | application_name |                      msg                      
---------+------------------+-----------------------------------------------
-      0 | DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
+-- msg_no counts the filtered messages too, so leave it out.
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                      msg                      
+------------------+-----------------------------------------------
+ DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
@@ -839,6 +828,13 @@ SELECT wait_application_pid('test_job_3_long') IS NOT NULL ;
 ----------
  t
 
+-- The scheduler logs the new worker only after it sees the job start, so
+-- wait until it has logged that and gone back to waiting
+SELECT test.wait_for_log('DB Scheduler', '[TESTING] Wait until%');
+ wait_for_log 
+--------------
+ t
+
 SELECT pg_terminate_backend(wait_application_pid('DB Scheduler Test'));
  pg_terminate_backend 
 ----------------------
@@ -848,6 +844,12 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
  ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
 ----------------------------------------------------
  
+
+-- The scheduler does not wait for its jobs to exit, so wait for the job too
+SELECT wait_application_pid('test_job_3_long', false) IS NULL;
+ ?column? 
+----------
+ t
 
 SELECT job_id, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
@@ -873,21 +875,22 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
 
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
- job_id | last_finish | next_start | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
---------+-------------+------------+------------------+------------+-----------------+----------------+---------------+---------------------
-   1005 | -infinity   | -infinity  | f                |          1 |               0 |              0 |             1 |                   1
+ job_id | last_finish |          next_start          | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
+--------+-------------+------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
+   1005 | -infinity   | Fri Dec 31 16:05:00 1999 PST | f                |          1 |               0 |              0 |             1 |                   1
 
---But after the 5 min period the job is again run
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
+--But after the 5 min period the job is again run. Stop when the job's
+--max_runtime ends, so it does not run a second time.
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(399500);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
 
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
- job_id |          last_finish           |           next_start           | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
---------+--------------------------------+--------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
-   1005 | Fri Dec 31 16:05:00.5 1999 PST | Fri Dec 31 16:05:05.5 1999 PST | t                |          2 |               1 |              0 |             1 |                   0
+ job_id |         last_finish          |          next_start          | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
+--------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
+   1005 | Fri Dec 31 16:05:00 1999 PST | Fri Dec 31 16:05:05 1999 PST | t                |          2 |               1 |              0 |             1 |                   0
 
 SELECT * FROM sorted_bgw_log;
  msg_no | application_name |                         msg                         
@@ -927,11 +930,14 @@ CREATE FUNCTION wait_for_job_3_to_finish(runs INTEGER, spins INTEGER=:TEST_SPINW
 $BODY$
 DECLARE
 	num_runs INTEGER;
+	num_finished INTEGER;
 BEGIN
 	FOR i in 1..spins
 	LOOP
 	SELECT COUNT(*) from bgw_log where msg='After sleep job 3' INTO num_runs;
-	if (num_runs = runs) THEN
+	-- The job logs before it records the end of the run, so check the stats too
+	SELECT COALESCE(sum(total_successes), 0) FROM _timescaledb_internal.bgw_job_stat INTO num_finished;
+	if (num_runs = runs AND num_finished = runs) THEN
 		RETURN true;
 	ELSE
 		PERFORM pg_sleep(0.1);
@@ -1171,6 +1177,20 @@ BEGIN
 	RETURN false;
 END
 $BODY$;
+-- The job logs before it records the end of the run, so wait for the stats too
+CREATE FUNCTION wait_for_job_successes(job INTEGER, successes INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	FOR i in 1..spins
+	LOOP
+	IF EXISTS (SELECT FROM _timescaledb_internal.bgw_job_stat WHERE job_id = job AND total_successes = successes) THEN
+		RETURN true;
+	END IF;
+	PERFORM pg_sleep(0.1);
+	END LOOP;
+	RETURN false;
+END
+$BODY$;
 select * from verify_refresh_correct();
  verify_refresh_correct 
 ------------------------
@@ -1303,6 +1323,17 @@ SELECT wait_for_job_1_to_run(1);
 -----------------------
  t
 
+SELECT wait_for_job_successes(:job_id, 1);
+ wait_for_job_successes 
+------------------------
+ t
+
+-- The scheduler only sees the run end once the worker exits
+SELECT wait_application_pid('another', false) IS NULL;
+ ?column? 
+----------
+ t
+
 SELECT ts_bgw_params_reset_time(150000, true);
  ts_bgw_params_reset_time 
 --------------------------
@@ -1316,6 +1347,11 @@ SELECT wait_for_timer_to_run(150000);
 SELECT wait_for_job_1_to_run(2);
  wait_for_job_1_to_run 
 -----------------------
+ t
+
+SELECT wait_for_job_successes(:job_id, 2);
+ wait_for_job_successes 
+------------------------
  t
 
 \x on
@@ -1400,6 +1436,17 @@ SELECT wait_for_job_1_to_run(3);
 -----------------------
  t
 
+SELECT wait_for_job_successes(:job_id, 1);
+ wait_for_job_successes 
+------------------------
+ t
+
+-- The scheduler only sees the run end once the worker exits
+SELECT wait_application_pid('new_job', false) IS NULL;
+ ?column? 
+----------
+ t
+
 -- New job should be run again
 SELECT ts_bgw_params_reset_time(480000, true);
  ts_bgw_params_reset_time 
@@ -1411,30 +1458,29 @@ SELECT wait_for_job_1_to_run(4);
 -----------------------
  t
 
+SELECT wait_for_job_successes(:job_id, 2);
+ wait_for_job_successes 
+------------------------
+ t
+
 SELECT ts_bgw_params_reset_time(500000, true);
  ts_bgw_params_reset_time 
 --------------------------
  
 
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | another          | Execute job 1
-      3 | DB Scheduler     | [TESTING] Registered new background worker
-      4 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | another          | Execute job 1
-      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      6 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      7 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      8 | DB Scheduler     | [TESTING] Registered new background worker
-      9 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | new_job          | Execute job 1
-     10 | DB Scheduler     | [TESTING] Registered new background worker
-     11 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | new_job          | Execute job 1
+-- The scheduler can wake up more often than the mock time moves, for
+-- example on an invalidation, so leave out its wait lines and msg_no.
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+ application_name |                    msg                     
+------------------+--------------------------------------------
+ DB Scheduler     | [TESTING] Registered new background worker
+ another          | Execute job 1
+ DB Scheduler     | [TESTING] Registered new background worker
+ another          | Execute job 1
+ DB Scheduler     | [TESTING] Registered new background worker
+ new_job          | Execute job 1
+ DB Scheduler     | [TESTING] Registered new background worker
+ new_job          | Execute job 1
 
 \x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
@@ -1573,6 +1619,431 @@ FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :failover_job_id;
  job_ran | next_start_recovered | last_finish_recovered | crash_counter_cleared 
 ---------+----------------------+-----------------------+-----------------------
  t       | t                    | t                     | t
+
+--
+-- Test that the 5 minute wait after a crash does not start over when the
+-- scheduler reloads its job list during the wait.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+-- Altering this unscheduled job makes the scheduler reload its job list
+SELECT insert_job('test_reload_jobs', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS reload_job_id \gset
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+ schedule_interval 
+-------------------
+ @ 1 min 40 secs
+
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '-infinity',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+SELECT ts_bgw_db_scheduler_test_run(400000);
+ ts_bgw_db_scheduler_test_run 
+------------------------------
+ 
+
+SELECT wait_for_timer_to_run(0);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+SELECT ts_bgw_params_reset_time(100000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_timer_to_run(100000000);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+ schedule_interval 
+-------------------
+ @ 1 min 40 secs
+
+SELECT ts_bgw_params_reset_time(200000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_timer_to_run(200000000);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+-- Changing the crashed job itself should not restart the wait either
+SELECT schedule_interval FROM alter_job(:crash_job_id, schedule_interval => INTERVAL '200s');
+ schedule_interval 
+-------------------
+ @ 3 mins 20 secs
+
+-- Not started yet
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_runs 
+------------
+          1
+
+-- The wait ends at second 300, so the job runs then
+SELECT ts_bgw_params_reset_time(300000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_job_1_to_run(1);
+ wait_for_job_1_to_run 
+-----------------------
+ t
+
+SELECT wait_for_job_successes(:crash_job_id, 1);
+ wait_for_job_successes 
+------------------------
+ t
+
+SELECT ts_bgw_params_reset_time(400000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_successes | consecutive_crashes 
+-----------------+---------------------
+               1 |                   0
+
+--
+-- Test that a next_start written before the crash is ignored, but one set
+-- with alter_job during the wait is used.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+SELECT insert_job('test_reload_jobs', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS reload_job_id \gset
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+ schedule_interval 
+-------------------
+ @ 1 min 40 secs
+
+-- next_start at second 10 was written by the run that crashed
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '2000-01-01 00:00:10+00',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+SELECT ts_bgw_db_scheduler_test_run(400000);
+ ts_bgw_db_scheduler_test_run 
+------------------------------
+ 
+
+SELECT wait_for_timer_to_run(0);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+SELECT ts_bgw_params_reset_time(50000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_timer_to_run(50000000);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+-- The reload must not pick up the next_start from the crashed run
+SELECT schedule_interval FROM alter_job(:reload_job_id, scheduled => false);
+ schedule_interval 
+-------------------
+ @ 1 min 40 secs
+
+SELECT ts_bgw_params_reset_time(100000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_timer_to_run(100000000);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+-- Still waiting after the crash
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_runs 
+------------
+          1
+
+SELECT next_start FROM alter_job(:crash_job_id, next_start => '2000-01-01 00:02:30+00');
+          next_start          
+------------------------------
+ Fri Dec 31 16:02:30 1999 PST
+
+SELECT ts_bgw_params_reset_time(200000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_job_1_to_run(1);
+ wait_for_job_1_to_run 
+-----------------------
+ t
+
+SELECT wait_for_job_successes(:crash_job_id, 1);
+ wait_for_job_successes 
+------------------------
+ t
+
+SELECT ts_bgw_params_reset_time(400000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_successes | consecutive_crashes 
+-----------------+---------------------
+               1 |                   0
+
+--
+-- Test that a restarted scheduler keeps the wait stored after a crash.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '-infinity',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+-- The first scheduler reports the crash and stops at second 100
+SELECT ts_bgw_db_scheduler_test_run(100000);
+ ts_bgw_db_scheduler_test_run 
+------------------------------
+ 
+
+SELECT wait_for_timer_to_run(0);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+SELECT ts_bgw_params_reset_time(100000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+
+-- The second scheduler waits until second 300, as the first one did
+SELECT ts_bgw_db_scheduler_test_run(400000);
+ ts_bgw_db_scheduler_test_run 
+------------------------------
+ 
+
+SELECT wait_for_timer_to_run(100000000);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+SELECT ts_bgw_params_reset_time(250000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_timer_to_run(250000000);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+-- Not started yet
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_runs 
+------------
+          1
+
+SELECT ts_bgw_params_reset_time(300000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_job_1_to_run(1);
+ wait_for_job_1_to_run 
+-----------------------
+ t
+
+SELECT wait_for_job_successes(:crash_job_id, 1);
+ wait_for_job_successes 
+------------------------
+ t
+
+SELECT ts_bgw_params_reset_time(500000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_successes | consecutive_crashes 
+-----------------+---------------------
+               1 |                   0
+
+--
+-- Test that a next_start set with alter_job during the wait is kept after a
+-- scheduler restart.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+
+SELECT insert_job('test_crash_wait', 'bgw_test_job_1', INTERVAL '100s', INTERVAL '100s', INTERVAL '1s') AS crash_job_id \gset
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:crash_job_id, '-infinity', '-infinity', '-infinity',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+SELECT ts_bgw_db_scheduler_test_run(100000);
+ ts_bgw_db_scheduler_test_run 
+------------------------------
+ 
+
+SELECT wait_for_timer_to_run(0);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+SELECT next_start FROM alter_job(:crash_job_id, next_start => '2000-01-01 00:02:30+00');
+          next_start          
+------------------------------
+ Fri Dec 31 16:02:30 1999 PST
+
+SELECT ts_bgw_params_reset_time(100000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+
+SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_runs 
+------------
+          1
+
+-- The second scheduler runs the job at second 150 instead of starting a new wait
+SELECT ts_bgw_db_scheduler_test_run(400000);
+ ts_bgw_db_scheduler_test_run 
+------------------------------
+ 
+
+SELECT wait_for_timer_to_run(100000000);
+ wait_for_timer_to_run 
+-----------------------
+ t
+
+SELECT ts_bgw_params_reset_time(150000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT wait_for_job_1_to_run(1);
+ wait_for_job_1_to_run 
+-----------------------
+ t
+
+SELECT wait_for_job_successes(:crash_job_id, 1);
+ wait_for_job_successes 
+------------------------
+ t
+
+SELECT ts_bgw_params_reset_time(500000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+
+SELECT total_successes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :crash_job_id;
+ total_successes | consecutive_crashes 
+-----------------+---------------------
+               1 |                   0
 
 --
 -- Test that jobs with the same fixed schedule start time are not starved when
