@@ -264,7 +264,9 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 		}
 		else
 		{
-			return cagg_next_bucket_start(maxval, refresh_window->type, cagg->bucket_function);
+			return cagg_next_bucket_start(maxval,
+										  refresh_window->type,
+										  ts_continuous_agg_bucket_function(cagg));
 		}
 	}
 

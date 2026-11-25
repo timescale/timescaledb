@@ -1,0 +1,1 @@
+Fixes: #11206 Remove the continuous aggregate bucket function catalog table and stop using the session time zone for a date origin

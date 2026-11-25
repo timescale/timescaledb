@@ -330,7 +330,8 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 	{
 		ContinuousAgg *cagg = lfirst(l);
 		/* Can only rewrite with Caggs with matching bucket */
-		if (!cagg_timebucket_equal(cagg->bucket_function, cagg_rewrite_ctx->tbinfo.bf))
+		if (!cagg_timebucket_equal(ts_continuous_agg_bucket_function(cagg),
+								   cagg_rewrite_ctx->tbinfo.bf))
 		{
 			add_optional_debug_info(cagg, &nonmatching_buckets, "Buckets do not match:");
 			continue;

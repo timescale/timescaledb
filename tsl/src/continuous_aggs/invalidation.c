@@ -1049,7 +1049,8 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 		invalidation_entry_set_from_cagg_invalidation(&logentry,
 													  ti,
 													  state->cagg->partition_type,
-													  state->cagg->bucket_function);
+													  ts_continuous_agg_bucket_function(
+														  state->cagg));
 
 		/* Skip entries completely before the refresh window — nothing to do */
 		if (logentry.greatest_modified_value < refresh_window->start)
@@ -1508,7 +1509,7 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 		invalidation_entry_set_from_cagg_invalidation(&logentry,
 													  ti,
 													  cagg->partition_type,
-													  cagg->bucket_function);
+													  ts_continuous_agg_bucket_function(cagg));
 		/* Entries which cannot be invalidations */
 		if (logentry.greatest_modified_value == INVAL_NEG_INFINITY ||
 			logentry.lowest_modified_value >= watermark)

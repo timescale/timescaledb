@@ -116,9 +116,6 @@ typedef struct ContinuousAggRefreshContext
 	ContinuousAggRefreshExecutionState execution;
 } ContinuousAggRefreshContext;
 
-#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
-	(bucket_function->bucket_width_type == INTERVALOID)
-
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
 	{                                                                                              \
@@ -151,7 +148,7 @@ extern List *cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht);
 static inline int64
 cagg_get_time_min(const ContinuousAgg *cagg)
 {
-	if (cagg->bucket_function->bucket_fixed_interval == false)
+	if (ts_continuous_agg_bucket_function(cagg)->bucket_fixed_interval == false)
 	{
 		/*
 		 * To determine inscribed/circumscribed refresh window for variable-sized
@@ -173,8 +170,6 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 	return ts_time_get_min(cagg->partition_type);
 }
 
-ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
-
 /* Methods checking validity of Caggs and Cagg rewrites */
 extern bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								 const bool for_rewrites);
@@ -189,7 +184,6 @@ extern void caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hype
 									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval,
 									int32 parent_mat_hypertable_id);
-extern bool time_bucket_info_has_fixed_width(const ContinuousAggBucketFunction *bf);
 
 extern bool cagg_timebucket_equal(ContinuousAggBucketFunction *bf1,
 								  ContinuousAggBucketFunction *bf2);

@@ -8,6 +8,8 @@
 #include <commands/view.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
+#include <utils/date.h>
+#include <utils/lsyscache.h>
 #include <utils/regproc.h>
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
@@ -276,8 +278,25 @@ create_cagg_get_bucket_function_datum(TupleDesc tupdesc, ContinuousAggBucketFunc
 
 		if (!TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 		{
-			bucket_origin = DatumGetCString(
-				DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(bf->bucket_time_origin)));
+			/* Print the origin in the type of the time column */
+			Oid *argtypes;
+			int nargs;
+			get_func_signature(bf->bucket_function, &argtypes, &nargs);
+			Datum origin = TimestampTzGetDatum(bf->bucket_time_origin);
+
+			switch (argtypes[1])
+			{
+				case DATEOID:
+					bucket_origin = DatumGetCString(
+						DirectFunctionCall1(date_out, DirectFunctionCall1(timestamp_date, origin)));
+					break;
+				case TIMESTAMPOID:
+					bucket_origin = DatumGetCString(DirectFunctionCall1(timestamp_out, origin));
+					break;
+				default:
+					bucket_origin = DatumGetCString(DirectFunctionCall1(timestamptz_out, origin));
+					break;
+			}
 		}
 
 		if (bf->bucket_time_offset != NULL)

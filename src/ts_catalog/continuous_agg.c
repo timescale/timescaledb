@@ -14,18 +14,24 @@
 #include <access/htup_details.h>
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_rewrite.h>
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
 #include <executor/spi.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
+#include <optimizer/tlist.h>
 #include <replication/slot.h>
+#include <rewrite/rewriteSupport.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
@@ -40,6 +46,7 @@
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
+#include "timezones.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
@@ -48,7 +55,6 @@
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
 
-#define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
 
 static void
@@ -58,21 +64,6 @@ init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertabl
 
 	ts_scan_iterator_scan_key_init(iterator,
 								   Anum_continuous_agg_pkey_mat_hypertable_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(mat_hypertable_id));
-}
-
-static void
-init_scan_cagg_bucket_function_by_mat_hypertable_id(ScanIterator *iterator,
-													const int32 mat_hypertable_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CONTINUOUS_AGGS_BUCKET_FUNCTION,
-											CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id,
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(mat_hypertable_id));
@@ -208,22 +199,6 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 													CurrentMemoryContext);
 
 	init_invalidation_threshold_scan_by_hypertable_id(&iterator, raw_hypertable_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-}
-
-static void
-cagg_bucket_function_delete(int32 mat_hypertable_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BUCKET_FUNCTION,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -398,156 +373,341 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 	}
 }
 
-/*
- * Fill the fields of a integer based bucketing function
- */
-static void
-cagg_fill_bucket_function_integer_based(ContinuousAggBucketFunction *bf, bool *isnull,
-										Datum *values)
+static Const *
+check_time_bucket_argument(Node *arg, char *position, StringInfo msg, bool for_rewrites)
 {
-	/* Bucket width */
-	Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	const char *bucket_width_str = TextDatumGetCString(
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	Assert(strlen(bucket_width_str) > 0);
-	bf->bucket_integer_width = pg_strtoint64(bucket_width_str);
-
-	/* Bucket origin cannot be used with integer based buckets */
-	Assert(isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] ==
-		   true);
-
-	/* Bucket offset */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)])
+	if (IsA(arg, NamedArgExpr))
 	{
-		const char *offset_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)]);
-		bf->bucket_integer_offset = pg_strtoint64(offset_str);
+		arg = (Node *) castNode(NamedArgExpr, arg)->arg;
 	}
 
-	/* Timezones cannot be used with integer based buckets */
-	Assert(isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] ==
-		   true);
+	Node *expr = eval_const_expressions(NULL, arg);
+
+	if (!IsA(expr, Const))
+	{
+		if (!for_rewrites)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("only immutable expressions allowed in time bucket function"),
+					 errhint("Use an immutable expression as %s argument to the time bucket "
+							 "function.",
+							 position)));
+		}
+		else if (msg)
+		{
+			appendStringInfo(msg,
+							 "non-immutable expression as %s argument to the time bucket function",
+							 position);
+		}
+		return NULL;
+	}
+
+	return castNode(Const, expr);
 }
 
 /*
- * Fill the fields of a time based bucketing function
+ * Handle additional parameter of the timebucket function such as timezone, offset, or origin
  */
 static void
-cagg_fill_bucket_function_time_based(ContinuousAggBucketFunction *bf, bool *isnull, Datum *values)
+process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *arg,
+										bool *custom_origin, bool process_checks)
 {
-	/*
-	 * bucket_width
-	 *
-	 * The value is stored as TEXT since we have to store the interval value of time
-	 * buckets and also the number value of integer based buckets.
-	 */
-	Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	const char *bucket_width_str = TextDatumGetCString(
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	Assert(strlen(bucket_width_str) > 0);
-	bf->bucket_time_width = DatumGetIntervalP(
-		DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
-
-	/* Bucket origin */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)])
+	char *tz_name;
+	switch (exprType((Node *) arg))
 	{
-		const char *origin_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)]);
-		bf->bucket_time_origin = DatumGetTimestamp(DirectFunctionCall3(timestamptz_in,
-																	   CStringGetDatum(origin_str),
-																	   ObjectIdGetDatum(InvalidOid),
-																	   Int32GetDatum(-1)));
+		/* Timezone as text */
+		case TEXTOID:
+			if (!arg->constisnull)
+			{
+				tz_name = TextDatumGetCString(arg->constvalue);
+				if (process_checks && !ts_is_valid_timezone_name(tz_name))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("invalid timezone name \"%s\"", tz_name)));
+				}
+
+				bf->bucket_time_timezone = tz_name;
+			}
+			break;
+		case INTERVALOID:
+			/* Bucket offset as interval */
+			if (!arg->constisnull)
+			{
+				bf->bucket_time_offset = DatumGetIntervalP(arg->constvalue);
+			}
+			break;
+		case DATEOID:
+			/* Bucket origin as Date, converted without the session time zone */
+			if (!arg->constisnull)
+			{
+				bf->bucket_time_origin =
+					DatumGetTimestamp(DirectFunctionCall1(date_timestamp, arg->constvalue));
+			}
+			*custom_origin = true;
+			break;
+		case TIMESTAMPOID:
+			/* Bucket origin as Timestamp */
+			bf->bucket_time_origin = DatumGetTimestamp(arg->constvalue);
+			*custom_origin = true;
+			break;
+		case TIMESTAMPTZOID:
+			/* Bucket origin as TimestampTZ */
+			bf->bucket_time_origin = DatumGetTimestampTz(arg->constvalue);
+			*custom_origin = true;
+			break;
+		case INT2OID:
+			/* Bucket offset as smallint */
+			bf->bucket_integer_offset = DatumGetInt16(arg->constvalue);
+			break;
+		case INT4OID:
+			/* Bucket offset as int */
+			bf->bucket_integer_offset = DatumGetInt32(arg->constvalue);
+			break;
+		case INT8OID:
+			/* Bucket offset as bigint */
+			bf->bucket_integer_offset = DatumGetInt64(arg->constvalue);
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("unable to handle time_bucket parameter of type: %s",
+							format_type_be(exprType((Node *) arg)))));
+			pg_unreachable();
+	}
+}
+
+/*
+ * Returns true if the time bucket size is fixed
+ */
+bool
+ts_cagg_bucket_function_has_fixed_width(const ContinuousAggBucketFunction *bf)
+{
+	if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
+	{
+		return true;
 	}
 	else
 	{
-		TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
-	}
-
-	/* Bucket offset */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)])
-	{
-		const char *offset_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)]);
-		bf->bucket_time_offset = DatumGetIntervalP(
-			DirectFunctionCall3(interval_in, CStringGetDatum(offset_str), InvalidOid, -1));
-	}
-
-	/* Bucket timezone */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)])
-	{
-		bf->bucket_time_timezone = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)]);
+		/* Historically, we treat all buckets with timezones as variable. Buckets with only days are
+		 * treated as fixed. */
+		return bf->bucket_time_width->month == 0 && bf->bucket_time_timezone == NULL;
 	}
 }
 
-static void
-continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggBucketFunction *bf)
+/*
+ * Process the FuncExpr node to fill the bucket function data structure. The other
+ * parameters are used when `process_check` is true that means we need to raise errors
+ * when invalid parameters are passed to the time bucket function when creating a cagg.
+ */
+void
+ts_cagg_process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf,
+									  bool process_checks, bool is_cagg_create,
+									  AttrNumber htpartcolno, StringInfo msg, bool for_rewrites)
 {
-	ScanIterator iterator;
-	int count = 0;
+	Node *width_arg;
+	Node *col_arg;
+	bool custom_origin = false;
+	TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
+	int nargs;
 
-	iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BUCKET_FUNCTION,
-									   AccessShareLock,
-									   CurrentMemoryContext);
-	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
-	ts_scanner_foreach(&iterator)
+	nargs = list_length(fe->args);
+	if (nargs < 2 || nargs > 5)
 	{
-		Datum values[Natts_continuous_aggs_bucket_function];
-		bool isnull[Natts_continuous_aggs_bucket_function];
-		bool should_free;
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("unsupported time bucket function signature")));
+	}
 
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+	/* Only column allowed : time_bucket('1day', <column> ) */
+	col_arg = lsecond(fe->args);
 
-		/*
-		 * Our usual GETSTRUCT() approach doesn't work when TEXT fields are involved,
-		 * thus a more robust approach with heap_deform_tuple() is used here.
-		 */
-		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, isnull);
+	/* Could be a named argument */
+	if (IsA(col_arg, NamedArgExpr))
+	{
+		col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
+	}
 
-		/* Bucket function */
-		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
-		const char *bucket_function_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
-		bf->bucket_function = DatumGetObjectId(
-			DirectFunctionCall1(regprocedurein, CStringGetDatum(bucket_function_str)));
-
-		bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
-
-		if (bf->bucket_time_based)
+	if (process_checks && htpartcolno != InvalidAttrNumber &&
+		(!(IsA(col_arg, Var)) || castNode(Var, col_arg)->varattno != htpartcolno))
+	{
+		if (!for_rewrites)
 		{
-			cagg_fill_bucket_function_time_based(bf, isnull, values);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("time bucket function must reference the primary hypertable "
+							"dimension column")));
 		}
-		else
+		else if (msg)
 		{
-			cagg_fill_bucket_function_integer_based(bf, isnull, values);
+			appendStringInfoString(msg,
+								   "time bucket function must reference the primary hypertable "
+								   "dimension column");
 		}
+		return;
+	}
 
-		/* Bucket fixed width */
-		Assert(!isnull[AttrNumberGetAttrOffset(
-			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
-		bf->bucket_fixed_interval = DatumGetBool(values[AttrNumberGetAttrOffset(
-			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
-
-		count++;
-
-		if (should_free)
+	/* The arguments after the column are the timezone, the origin and the offset */
+	static char *const position[] = { "third", "fourth", "fifth" };
+	for (int i = 2; i < nargs; i++)
+	{
+		Const *arg =
+			check_time_bucket_argument(list_nth(fe->args, i), position[i - 2], msg, for_rewrites);
+		if (!arg)
 		{
-			heap_freetuple(tuple);
+			return;
 		}
+		process_additional_timebucket_parameter(bf, arg, &custom_origin, process_checks);
+	}
+
+	if (process_checks && custom_origin && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
+	{
+		if (!for_rewrites)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid origin value: infinity")));
+		}
+		else if (msg)
+		{
+			appendStringInfoString(msg, "invalid time bucket origin value: infinity");
+		}
+		return;
 	}
 
 	/*
-	 * This function should never be called unless we know that the corresponding
-	 * cagg exists and uses a variable-sized bucket. There should be exactly one
-	 * entry in .continuous_aggs_bucket_function catalog table for such a cagg.
+	 * We constify width expression here so any immutable expression will be allowed.
+	 * Otherwise it would make it harder to create caggs for hypertables with e.g. int8
+	 * partitioning column as int constants default to int4 and so expression would
+	 * have a cast and not be a Const.
 	 */
-	if (count != 1)
+	width_arg = linitial(fe->args);
+
+	if (IsA(width_arg, NamedArgExpr))
+	{
+		width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
+	}
+
+	width_arg = eval_const_expressions(NULL, width_arg);
+	if (IsA(width_arg, Const))
+	{
+		Const *width = castNode(Const, width_arg);
+		bf->bucket_width_type = width->consttype;
+
+		if (width->constisnull)
+		{
+			if (process_checks && !for_rewrites)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid bucket width for time bucket function")));
+			}
+			return;
+		}
+
+		if (width->consttype == INTERVALOID)
+		{
+			bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
+		}
+
+		if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
+		{
+			bf->bucket_integer_width =
+				ts_interval_value_to_internal(width->constvalue, width->consttype);
+		}
+	}
+	else
+	{
+		if (!for_rewrites)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("only immutable expressions allowed in time bucket function"),
+					 errhint("Use an immutable expression as first argument to the time bucket "
+							 "function.")));
+		}
+		else if (msg)
+		{
+			appendStringInfoString(msg,
+								   "non-immutable expression as first argument to the time bucket "
+								   "function");
+		}
+		return;
+	}
+
+	bf->bucket_function = fe->funcid;
+	bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
+	bf->bucket_fixed_interval = ts_cagg_bucket_function_has_fixed_width(bf);
+
+	if (process_checks && is_cagg_create && ts_continuous_agg_bucket_width(bf) <= 0)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("invalid or missing information about the bucketing function for cagg"),
-				 errdetail("%d", mat_hypertable_id)));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("time bucket width must be greater than zero")));
 	}
+}
+
+/* Get time bucket function info based on the view definition */
+ContinuousAggBucketFunction *
+ts_cagg_get_bucket_function_info(Oid view_oid)
+{
+	ContinuousAggBucketFunction *bf = palloc0(sizeof(ContinuousAggBucketFunction));
+
+	/* Read the view rule from the catalog so that no lock on the view is needed */
+	HeapTuple rule = SearchSysCache2(RULERELNAME,
+									 ObjectIdGetDatum(view_oid),
+									 CStringGetDatum(ViewSelectRuleName));
+	if (!HeapTupleIsValid(rule))
+	{
+		return bf;
+	}
+
+	bool isnull;
+	Datum action = SysCacheGetAttr(RULERELNAME, rule, Anum_pg_rewrite_ev_action, &isnull);
+	Ensure(!isnull, "view rule of relation %u has no action", view_oid);
+	List *actions = castNode(List, stringToNode(TextDatumGetCString(action)));
+	ReleaseSysCache(rule);
+
+	Ensure(list_length(actions) == 1, "unexpected number of actions in view rule");
+	Query *query = linitial_node(Query, actions);
+	Assert(query->commandType == CMD_SELECT);
+
+	List *group_exprs = get_sortgrouplist_exprs(query->groupClause, query->targetList);
+#if PG18_GE
+	/* Replace references to the grouping RTE with the grouping expressions */
+	if (query->hasGroupRTE)
+	{
+		group_exprs = (List *) flatten_group_exprs(NULL, query, (Node *) group_exprs);
+	}
+#endif
+
+	ListCell *lc;
+	foreach (lc, group_exprs)
+	{
+		FuncExpr *fe = lfirst(lc);
+
+		if (!IsA(fe, FuncExpr))
+		{
+			continue;
+		}
+
+		/* Skip functions that cannot be the time bucket of a continuous aggregate */
+		FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
+		if (finfo != NULL && finfo->allowed_in_cagg_definition)
+		{
+			ts_cagg_process_timebucket_parameters(fe,
+												  bf,
+												  false,
+												  false,
+												  InvalidAttrNumber,
+												  NULL,
+												  false);
+			break;
+		}
+	}
+
+	return bf;
 }
 
 static void
@@ -578,8 +738,33 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	Assert(OidIsValid(cagg->relid));
 	Assert(OidIsValid(cagg->partition_type));
 
-	cagg->bucket_function = palloc0(sizeof(ContinuousAggBucketFunction));
-	continuous_agg_fill_bucket_function(cagg->data.mat_hypertable_id, cagg->bucket_function);
+	cagg->bucket_function_cache = NULL;
+	cagg->mctx = CurrentMemoryContext;
+}
+
+/*
+ * Get the bucket function of a continuous aggregate. It is read from the
+ * direct view on first use.
+ */
+ContinuousAggBucketFunction *
+ts_continuous_agg_bucket_function(const ContinuousAgg *cagg)
+{
+	if (cagg->bucket_function_cache == NULL)
+	{
+		MemoryContext oldctx = MemoryContextSwitchTo(cagg->mctx);
+		Oid direct_view = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
+												NameStr(cagg->data.direct_view_name),
+												false);
+		ContinuousAggBucketFunction *bf = ts_cagg_get_bucket_function_info(direct_view);
+		MemoryContextSwitchTo(oldctx);
+
+		Ensure(OidIsValid(bf->bucket_function),
+			   "no time bucket function found for continuous aggregate \"%s\"",
+			   NameStr(cagg->data.user_view_name));
+		((ContinuousAgg *) cagg)->bucket_function_cache = bf;
+	}
+
+	return cagg->bucket_function_cache;
 }
 
 TSDLLEXPORT ContinuousAggInfo
@@ -601,7 +786,7 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 		ContinuousAgg *cagg = lfirst(lc);
 
 		all_caggs_info.bucket_functions =
-			lappend(all_caggs_info.bucket_functions, cagg->bucket_function);
+			lappend(all_caggs_info.bucket_functions, ts_continuous_agg_bucket_function(cagg));
 
 		all_caggs_info.mat_hypertable_ids =
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
@@ -1041,8 +1226,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		/* Delete any refresh ranges registered for this CAgg */
 		ts_cagg_jobs_refresh_ranges_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
-
-	cagg_bucket_function_delete(cadata->mat_hypertable_id);
 
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))

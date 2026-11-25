@@ -37,14 +37,7 @@ typedef enum ContinuousAggInvalidateUsing
  */
 typedef struct ContinuousAggBucketFunction
 {
-	/* Oid of the bucketing function. In the catalog table, the regprocedure is used. This ensures
-	 * that the Oid is mapped to a string when a backup is taken and the string is converted back to
-	 * the Oid when the backup is restored. This way, we can use an Oid in the catalog table even
-	 * when a backup is restored and the Oid may have changed. However, the dependency management in
-	 * PostgreSQL does not track the Oid. If the function is dropped and a new one is created, the
-	 * Oid changes and this value points to a non-existing Oid. This can not happen in real-world
-	 * situations since PostgreSQL protects the bucket_function from deletion until the CAgg is
-	 * defined. */
+	/* Oid of the bucketing function, taken from the direct view of the cagg */
 	Oid bucket_function;
 	Oid bucket_width_type; /* type of bucket_width */
 
@@ -78,12 +71,16 @@ typedef struct ContinuousAggBucketFunction
 
 } ContinuousAggBucketFunction;
 
+#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
+	(bucket_function->bucket_width_type == INTERVALOID)
+
 typedef struct ContinuousAgg
 {
 	FormData_continuous_agg data;
 
-	/* Info about the time bucketing function */
-	ContinuousAggBucketFunction *bucket_function;
+	/* Filled on first use, read it with ts_continuous_agg_bucket_function() */
+	ContinuousAggBucketFunction *bucket_function_cache;
+	MemoryContext mctx;
 
 	/* Relid of the user-facing view */
 	Oid relid;
@@ -163,6 +160,15 @@ extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, c
 extern TSDLLEXPORT void ts_continuous_agg_invalidate_chunk(Hypertable *ht, Chunk *chunk);
 
 extern TSDLLEXPORT bool ts_continuous_agg_bucket_on_interval(Oid bucket_function);
+extern TSDLLEXPORT ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+extern TSDLLEXPORT ContinuousAggBucketFunction *
+ts_continuous_agg_bucket_function(const ContinuousAgg *cagg);
+extern TSDLLEXPORT void
+ts_cagg_process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf,
+									  bool process_checks, bool is_cagg_create,
+									  AttrNumber htpartcolno, StringInfo msg, bool for_rewrites);
+extern TSDLLEXPORT bool
+ts_cagg_bucket_function_has_fixed_width(const ContinuousAggBucketFunction *bf);
 
 extern TSDLLEXPORT void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,

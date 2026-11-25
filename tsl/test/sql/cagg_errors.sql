@@ -538,3 +538,29 @@ SELECT time_bucket(0::bigint, timec), avg(val)
 FROM int_ht
 GROUP BY 1
 WITH NO DATA;
+
+-- time bucket arguments that are no longer immutable are rejected
+CREATE FUNCTION bucket_width_fn() RETURNS interval LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RETURN '1 day'::interval; END $$;
+CREATE FUNCTION bucket_origin_fn() RETURNS timestamptz LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RETURN '2000-01-03 00:00:00+00'::timestamptz; END $$;
+CREATE TABLE volatile_bucket(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('volatile_bucket', 'time');
+INSERT INTO volatile_bucket VALUES ('2020-01-01 00:00:00+00', 1);
+CREATE MATERIALIZED VIEW volatile_width_cagg WITH (timescaledb.continuous) AS
+    SELECT time_bucket(bucket_width_fn(), time) AS bucket, sum(value) FROM volatile_bucket GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW volatile_origin_cagg WITH (timescaledb.continuous) AS
+    SELECT time_bucket('1 day', time, bucket_origin_fn()) AS bucket, sum(value) FROM volatile_bucket GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW immutable_bucket_cagg WITH (timescaledb.continuous) AS
+    SELECT time_bucket('1 day', time) AS bucket, sum(value) FROM volatile_bucket GROUP BY 1 WITH NO DATA;
+ALTER FUNCTION bucket_width_fn() STABLE;
+ALTER FUNCTION bucket_origin_fn() STABLE;
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('volatile_width_cagg', NULL, NULL);
+CALL refresh_continuous_aggregate('volatile_origin_cagg', NULL, NULL);
+-- refresh of a cagg with immutable arguments fails too while the other caggs exist
+CALL refresh_continuous_aggregate('immutable_bucket_cagg', NULL, NULL);
+\set ON_ERROR_STOP 1
+DROP MATERIALIZED VIEW volatile_width_cagg;
+DROP MATERIALIZED VIEW volatile_origin_cagg;
+CALL refresh_continuous_aggregate('immutable_bucket_cagg', NULL, NULL);
+SELECT * FROM immutable_bucket_cagg;
+DROP MATERIALIZED VIEW immutable_bucket_cagg;
