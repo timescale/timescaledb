@@ -5,6 +5,8 @@
 use strict;
 use warnings;
 use TimescaleNode;
+use PostgreSQL::Test::Utils qw(slurp_file);
+use Time::HiRes             qw(usleep);
 use Test::More tests => 5;
 
 # This test checks that a job crash is reported in the job errors table
@@ -58,11 +60,29 @@ my $pid = $node->safe_psql('postgres', "$query_pid");
 isnt($pid, "", "check the pid is not null");
 # now kill the one backend
 my $int_pid = int($pid);
+
+# The server log can be outside the data directory and shared with other
+# servers, so look for the lines from this postmaster only.
+my $logdir = $node->safe_psql('postgres', 'SHOW log_directory');
+$logdir = $node->data_dir . "/$logdir" unless $logdir =~ m{^/};
+my $pglog = "$logdir/" . $node->safe_psql('postgres', 'SHOW log_filename');
+my ($postmaster_pid) =
+  split /\n/, slurp_file($node->data_dir . '/postmaster.pid');
+my $log_offset = -s $pglog;
 kill 9, $int_pid;
 
-# Wait till server restarts
-is($node->poll_query_until('postgres', 'SELECT 1', '1'),
-	1, "reconnected after SIGQUIT");
+# Wait for the postmaster to notice the crash and restart. Send no query
+# while polling, since psql can exit before reading it while the server
+# is still starting up.
+my $attempts = 10 * $PostgreSQL::Test::Utils::timeout_default;
+while (slurp_file($pglog, $log_offset) !~
+	/\[$postmaster_pid\].*all server processes terminated; reinitializing/)
+{
+	die "server did not restart after the crash" if --$attempts <= 0;
+	usleep(100_000);
+}
+is($node->poll_query_until('postgres', undef, ''),
+	1, "reconnected after SIGKILL");
 
 my $errlog = $node->safe_psql('postgres',
 	'select count(*) from _timescaledb_internal.bgw_job_stat_history where job_id = 1000 and succeeded is false'

@@ -208,19 +208,45 @@ ts_initialize_timer_latch()
 	}
 }
 
+/*
+ * Wait until another process moves the mock time on from started_at. The
+ * latch is reset after waking, not before waiting, so a time change made
+ * just before the wait is not lost. Give up after 10 seconds without a
+ * wake-up, like before.
+ */
 void
-ts_reset_and_wait_timer_latch()
+ts_wait_for_timer_advance(int64 started_at)
 {
 	bool do_close;
 	TestParamsWrapper *wrapper = params_open_wrapper(&do_close);
 
 	TestAssertTrue(wrapper != NULL);
 
-	ResetLatch(&wrapper->params.timer_latch);
-	WaitLatch(&wrapper->params.timer_latch,
-			  WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
-			  10000,
-			  PG_WAIT_EXTENSION);
+	for (;;)
+	{
+		int64 now;
+		int rc;
+
+		SpinLockAcquire(&wrapper->mutex);
+		now = wrapper->params.current_time;
+		SpinLockRelease(&wrapper->mutex);
+
+		if (now != started_at)
+		{
+			break;
+		}
+
+		rc = WaitLatch(&wrapper->params.timer_latch,
+					   WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
+					   10000,
+					   PG_WAIT_EXTENSION);
+		ResetLatch(&wrapper->params.timer_latch);
+
+		if (rc & (WL_TIMEOUT | WL_POSTMASTER_DEATH))
+		{
+			break;
+		}
+	}
 
 	if (do_close)
 	{

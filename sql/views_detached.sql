@@ -140,7 +140,8 @@ BEGIN
       NULL::timestamptz AS finish_time,
       NULL::jsonb AS config,
       NULL::text AS sqlerrcode,
-      NULL::text AS err_message;
+      NULL::text AS err_message,
+      NULL::jsonb AS execution_info;
     END IF;
 END
 $$;

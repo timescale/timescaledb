@@ -737,3 +737,20 @@ SELECT conname, convalidated FROM pg_constraint
 WHERE contype = 'f' AND conrelid IN (SELECT show_chunks('fk_owner_child'));
 DROP TABLE fk_owner_child;
 DROP TABLE fk_owner_parent;
+
+-- Dimension constraints do not use operators from the search_path
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA op_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE FUNCTION op_schema.op_true(timestamptz, timestamptz) RETURNS bool LANGUAGE sql IMMUTABLE AS 'SELECT true';
+CREATE OPERATOR op_schema.>= (LEFTARG = timestamptz, RIGHTARG = timestamptz, FUNCTION = op_schema.op_true);
+CREATE OPERATOR op_schema.< (LEFTARG = timestamptz, RIGHTARG = timestamptz, FUNCTION = op_schema.op_true);
+CREATE TABLE op_ht(time timestamptz NOT NULL, v int);
+SELECT create_hypertable('op_ht', 'time');
+SET search_path TO op_schema, pg_catalog, public;
+INSERT INTO op_ht VALUES ('2025-01-01 00:00:00+00', 1);
+RESET search_path;
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+WHERE contype = 'c' AND conrelid IN (SELECT show_chunks('op_ht'));
+DROP TABLE op_ht;
+DROP SCHEMA op_schema CASCADE;

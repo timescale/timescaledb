@@ -323,6 +323,15 @@ ts_debug_point_raise_error_oneshot(const char *name)
 	DebugPoint point;
 	LockAcquireResult lock_acquire_result;
 
+	/*
+	 * Do nothing while the transaction aborts. We can't raise an error there,
+	 * and we might not be allowed to take a lock either.
+	 */
+	if (!IsTransactionState())
+	{
+		return;
+	}
+
 	debug_point_init(&point, name);
 
 	lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);

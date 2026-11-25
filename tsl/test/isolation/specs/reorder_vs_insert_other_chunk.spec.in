@@ -10,7 +10,7 @@ setup
  INSERT INTO ts_reorder_test VALUES (1, 23.4, 1),
        (11, 21.3, 2),
        (21, 19.5, 3);
- -- we need to use the waiting variant of reorder in order to work in a tranaction
+ -- we need to use the waiting variant of reorder in order to work in a transaction
  CREATE TABLE waiter(i INTEGER);
  CREATE OR REPLACE FUNCTION reorder_chunk_i(
       chunk REGCLASS,

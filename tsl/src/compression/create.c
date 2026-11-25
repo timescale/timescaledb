@@ -1890,32 +1890,6 @@ validate_hypertable_for_compression(Hypertable *ht)
 	table_close(rel, AccessShareLock);
 }
 
-typedef struct DefaultFnSecurityContext
-{
-	Oid save_userid;
-	int save_sec_context;
-	int save_nestlevel;
-} DefaultFnSecurityContext;
-
-static void
-default_fn_security_enter(const Hypertable *ht, DefaultFnSecurityContext *ctx)
-{
-	GetUserIdAndSecContext(&ctx->save_userid, &ctx->save_sec_context);
-	SetUserIdAndSecContext(ts_rel_get_owner(ht->main_table_relid),
-						   ctx->save_sec_context | SECURITY_RESTRICTED_OPERATION);
-	ctx->save_nestlevel = NewGUCNestLevel();
-	RestrictSearchPath();
-}
-
-static void
-default_fn_security_exit(const DefaultFnSecurityContext *ctx)
-{
-	/* Roll back any GUC changes made by the default function */
-	AtEOXact_GUC(false, ctx->save_nestlevel);
-	/* Restore the caller's identity and security context */
-	SetUserIdAndSecContext(ctx->save_userid, ctx->save_sec_context);
-}
-
 /*
  * Get the default segment by value for a hypertable
  */
@@ -1923,26 +1897,19 @@ ArrayType *
 tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 {
 	StringInfoData command;
-	StringInfoData result;
 	int res;
 	ArrayType *column_res = NULL;
 	Datum datum;
-	text *message;
 	bool isnull;
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
-	int32 confidence = -1;
 
 	TSSecurityContext secctx;
-	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), &secctx);
+	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), 0, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
-					 "SELECT "
-					 " (SELECT array_agg(x)  "
-					 " FROM jsonb_array_elements_text(seg_by->'columns') t(x))::text[], "
-					 " seg_by->>'message', "
-					 " (seg_by->>'confidence')::int "
+					 "SELECT NULLIF(seg_by, '{}'::text[]) "
 					 "FROM " FUNCTIONS_SCHEMA_NAME ".get_segmentby_defaults(%d) seg_by",
 					 ht->main_table_relid);
 
@@ -1969,22 +1936,6 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 	}
 	MemoryContextSwitchTo(old);
 
-	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
-
-	if (!isnull)
-	{
-		message = DatumGetTextPP(datum);
-		elog(LOG_SERVER_ONLY,
-			 "there was some uncertainty picking the default segment by for the hypertable: %s",
-			 text_to_cstring(message));
-	}
-
-	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
-	if (!isnull)
-	{
-		confidence = DatumGetInt32(datum);
-	}
-
 	pfree(command.data);
 
 	ts_security_context_exit(&secctx);
@@ -1995,16 +1946,6 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 	}
 
-	initStringInfo(&result);
-	ts_array_append_stringinfo(column_res, &result);
-
-	elog(LOG_SERVER_ONLY,
-		 "segment_by default: hypertable=\"%s\" columns=\"%s\" function: \"" FUNCTIONS_SCHEMA_NAME
-		 ".get_segmentby_defaults\" confidence=%d",
-		 get_rel_name(ht->main_table_relid),
-		 result.data,
-		 confidence);
-	pfree(result.data);
 	return column_res;
 }
 
@@ -2018,30 +1959,23 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	int res;
 	text *column_res = NULL;
 	Datum datum;
-	text *message;
 	bool isnull;
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
 	char *orderby;
-	int32 confidence = -1;
 
 	Oid types[] = { TEXTARRAYOID };
 	Datum values[] = { PointerGetDatum(segmentby) };
 	char nulls[] = { segmentby == NULL ? 'n' : 'v' };
 
-	DefaultFnSecurityContext secctx;
-	default_fn_security_enter(ht, &secctx);
+	TSSecurityContext secctx;
+	ts_security_context_enter(ts_rel_get_owner(ht->main_table_relid), 0, &secctx);
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
-					 "SELECT "
-					 " (SELECT string_agg(x, ', ') FROM "
-					 "jsonb_array_elements_text(seg_by->'clauses') "
-					 "t(x))::text, "
-					 " seg_by->>'message', "
-					 " (seg_by->>'confidence')::int "
+					 "SELECT pg_catalog.array_to_string(order_by, ', ') "
 					 "FROM " FUNCTIONS_SCHEMA_NAME
-					 ".get_orderby_defaults(%d, coalesce($1, array[]::text[])) seg_by",
+					 ".get_orderby_defaults(%d, coalesce($1, array[]::text[])) order_by",
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -2073,22 +2007,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	}
 	MemoryContextSwitchTo(old);
 
-	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
-
-	if (!isnull)
-	{
-		message = DatumGetTextPP(datum);
-		elog(LOG_SERVER_ONLY,
-			 "there was some uncertainty picking the default order by for the hypertable: %s",
-			 text_to_cstring(message));
-	}
-	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
-	if (!isnull)
-	{
-		confidence = DatumGetInt32(datum);
-	}
-
-	default_fn_security_exit(&secctx);
+	ts_security_context_exit(&secctx);
 
 	pfree(command.data);
 
@@ -2106,13 +2025,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	{
 		orderby = "";
 	}
-
-	elog(LOG_SERVER_ONLY,
-		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"" FUNCTIONS_SCHEMA_NAME
-		 ".get_orderby_defaults\" confidence=%d",
-		 get_rel_name(ht->main_table_relid),
-		 orderby,
-		 confidence);
 
 	if (*orderby == '\0')
 	{

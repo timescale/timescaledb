@@ -4,58 +4,88 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+-- A new launcher briefly starts schedulers in databases without the
+-- extension, so only show the launcher and this database. A starting
+-- scheduler has no database yet, so don't match on a missing database.
 CREATE VIEW tsdb_bgw AS
        SELECT datname, pid, backend_type, application_name
          FROM pg_stat_activity
         WHERE backend_type LIKE '%TimescaleDB%'
+          AND (backend_type LIKE '%Launcher%' OR datname = current_database())
      ORDER BY datname, backend_type, application_name;
 
+-- The procedures below poll pg_stat_activity in a single transaction,
+-- which keeps returning the first snapshot it took unless it is cleared.
+
 -- Wait for at least one background worker matching pattern to have
--- started.
+-- started. Checks every poll_time seconds. A worker shows its registered
+-- name until it sets its application name, so wait for that as well.
 CREATE PROCEDURE wait_for_some_started(
-       min_time double precision,
+       poll_time double precision,
        timeout double precision,
        pattern text
 ) AS $$
 DECLARE
    backend_count int;
 BEGIN
-    FOR i IN 0..(timeout / min_time)::int
+    FOR i IN 0..(timeout / poll_time)::int
     LOOP
-        PERFORM pg_sleep(min_time);
-        SELECT count(*) INTO backend_count FROM tsdb_bgw WHERE backend_type LIKE pattern;
+        PERFORM pg_stat_clear_snapshot();
+        SELECT count(*) INTO backend_count FROM tsdb_bgw
+         WHERE backend_type LIKE pattern AND application_name = backend_type;
         IF backend_count > 0 THEN
             RETURN;
         END IF;
+        PERFORM pg_sleep(poll_time);
     END LOOP;
     RAISE EXCEPTION 'backend matching % did not start before timeout', pattern;
 END;
 $$ LANGUAGE plpgsql;
 
 -- Wait for the number of background workers matching pattern to be
--- zero.
+-- zero. Checks every poll_time seconds.
 CREATE PROCEDURE wait_for_all_stopped(
-       min_time double precision,
+       poll_time double precision,
        timeout double precision,
        pattern text
 ) AS $$
 DECLARE
    backend_count int;
 BEGIN
-    FOR i IN 0..(timeout / min_time)::int
+    FOR i IN 0..(timeout / poll_time)::int
     LOOP
-        PERFORM pg_sleep(min_time);
+        PERFORM pg_stat_clear_snapshot();
         SELECT count(*) INTO backend_count FROM tsdb_bgw WHERE backend_type LIKE pattern;
         IF backend_count = 0 THEN
             RETURN;
         END IF;
+        PERFORM pg_sleep(poll_time);
     END LOOP;
-    RAISE EXCEPTION 'backend matching % did not start before timeout', pattern;
+    RAISE EXCEPTION 'backend matching % did not stop before timeout', pattern;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Wait for the scheduler of this database to be replaced by a new one
+CREATE PROCEDURE wait_for_new_scheduler(old_pid int, timeout double precision) AS $$
+BEGIN
+    FOR i IN 0..(timeout / 0.1)::int
+    LOOP
+        PERFORM pg_stat_clear_snapshot();
+        IF NOT EXISTS (SELECT FROM tsdb_bgw WHERE pid = old_pid) AND
+           EXISTS (SELECT FROM tsdb_bgw WHERE datname = current_database()
+                   AND backend_type LIKE '%Scheduler%'
+                   AND application_name = backend_type) THEN
+            RETURN;
+        END IF;
+        PERFORM pg_sleep(0.1);
+    END LOOP;
+    RAISE EXCEPTION 'scheduler % was not replaced before timeout', old_pid;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Terminate the launcher and wait for it to exit
 CREATE PROCEDURE ts_terminate_launcher() AS $$
-SELECT pg_terminate_backend(pid) FROM tsdb_bgw
+SELECT pg_terminate_backend(pid, 60000) FROM tsdb_bgw
  WHERE backend_type LIKE '%Launcher%';
 $$ LANGUAGE SQL;
 
@@ -83,8 +113,10 @@ SHOW timescaledb.bgw_scheduler_restart_time;
 SELECT datname, application_name FROM tsdb_bgw;
 CALL ts_terminate_launcher();
 
--- It will restart automatically, but we wait for it to start.
-CALL wait_for_some_started(1, 50, '%Launcher%');
+-- It will restart automatically, but we wait for it and the scheduler
+-- it starts.
+CALL wait_for_some_started(0.1, 50, '%Launcher%');
+CALL wait_for_some_started(0.1, 50, '%Scheduler%');
 
 -- Make sure that the new value of the scheduler restart time is
 -- correct or the rest of the tests will fail.
@@ -98,7 +130,7 @@ SELECT datname, application_name FROM tsdb_bgw;
 SELECT _timescaledb_functions.start_background_workers();
 
 -- They should start immediately, but let's wait for them to start.
-CALL wait_for_some_started(1, 50, '%Scheduler%');
+CALL wait_for_some_started(0.1, 50, '%Scheduler%');
 
 -- Check that the schedulers are running. If they are not, the rest of
 -- the test is meaningless.
@@ -109,13 +141,13 @@ SELECT pg_terminate_backend(pid) FROM tsdb_bgw
  WHERE datname = :'TEST_DBNAME' AND backend_type LIKE '%Scheduler%';
 
 -- Wait for scheduler to exit, they should exit immediately.
-CALL wait_for_all_stopped(1, 50, '%Scheduler%');
+CALL wait_for_all_stopped(0.1, 50, '%Scheduler%');
 
 -- Check that the schedulers really exited.
 SELECT datname, application_name FROM tsdb_bgw;
 
--- Wait for scheduler to restart.
-CALL wait_for_some_started(10, 100, '%Scheduler%');
+-- Wait for scheduler to restart, which takes the 10 second restart time.
+CALL wait_for_some_started(0.1, 100, '%Scheduler%');
 
 -- Make sure that the launcher and schedulers are running. Otherwise
 -- the test will fail.
@@ -128,15 +160,18 @@ SELECT datname, application_name FROM tsdb_bgw;
 
 -- Get the PID of the launcher to be able to compare it after the restart
 SELECT pid AS orig_pid FROM tsdb_bgw WHERE backend_type LIKE '%Launcher%' \gset
+SELECT pid AS orig_scheduler_pid FROM tsdb_bgw
+ WHERE datname = :'TEST_DBNAME' AND backend_type LIKE '%Scheduler%' \gset
 
 -- Kill the launcher. Since there are new restarted schedulers, the
 -- handle could not be used to terminate them, and they would be left
 -- running.
 CALL ts_terminate_launcher();
 
--- Launcher will restart immediately, but we wait one second to give
--- it a chance to start.
-CALL wait_for_some_started(1, 50, '%Launcher%');
+-- Launcher will restart immediately. Wait for it and for the old
+-- scheduler to be replaced by a new one.
+CALL wait_for_some_started(0.1, 50, '%Launcher%');
+CALL wait_for_new_scheduler(:orig_scheduler_pid, 50);
 
 -- Check that the launcher is running and that there are exactly one
 -- scheduler per database. Here the old schedulers are killed, so it

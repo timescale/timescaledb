@@ -17,10 +17,12 @@
 #include <utils/date.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/json.h>
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
 
+#include "bgw/job_stat_history.h"
 #include "bgw_policy/policies_v2.h"
 #include "debug_point.h"
 #include "dimension.h"
@@ -762,7 +764,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	 */
 
 	TSSecurityContext sctx;
-	ts_security_context_enter(ts_rel_get_owner(cagg->relid), &sctx);
+	ts_security_context_enter(ts_rel_get_owner(cagg->relid), 0, &sctx);
 
 	continuous_agg_refresh_init(&refresh,
 								cagg,
@@ -799,6 +801,97 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 }
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
+
+/*
+ * Add a boundary of the range a refresh processed so far.
+ *
+ * The boundary is reported in the time type of the refreshed hypertable, so
+ * integer based ranges show up as JSON numbers. The timestamp types are
+ * rendered as ISO-8601 strings, the same representation `to_jsonb` produces,
+ * so that the value does not depend on the DateStyle of the background worker
+ * that happened to run the refresh.
+ */
+static void
+cagg_refresh_stats_add_boundary(JsonbInState *state, const char *key, Oid range_type,
+								int64 boundary)
+{
+	switch (range_type)
+	{
+		case DATEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			ts_jsonb_add_str(state,
+							 key,
+							 JsonEncodeDateTime(NULL,
+												ts_internal_to_time_value(boundary, range_type),
+												range_type,
+												NULL));
+			break;
+
+		default:
+			/* The internal time of an integer type is its value */
+			ts_jsonb_add_int64(state, key, boundary);
+			break;
+	}
+}
+
+/*
+ * Collect what a refresh did so far in the execution history of the job that
+ * runs it.
+ *
+ * Called after each batch, so that a job that fails in a later batch still
+ * shows how far it got. The batches commit individually, so what is collected
+ * was committed. Nothing is collected until a batch materialized something, so
+ * an up-to-date refresh leaves no information.
+ */
+static void
+cagg_refresh_stats_collect(int32 job_id, const CaggRefreshStats *stats)
+{
+	/* Only jobs have an execution history, manual refreshes don't have a job id */
+	if (job_id <= 0 || ts_guc_cagg_refresh_stats_level == CAGG_REFRESH_STATS_OFF)
+	{
+		return;
+	}
+
+	JsonbInState state = { 0 };
+	JsonbValue key = {
+		.type = jbvString,
+		.val.string.val = "cagg_refresh",
+		.val.string.len = strlen("cagg_refresh"),
+	};
+
+	/* Nested under its own key so that the information of a refresh can be
+	 * told apart from what other parts of a job record */
+	pushJsonbValueCompat(&state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&state, WJB_KEY, &key);
+	pushJsonbValueCompat(&state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(&state, "total_batches", stats->total_batches);
+	ts_jsonb_add_int32(&state, "batches_processed", stats->batches_processed);
+	cagg_refresh_stats_add_boundary(&state, "range_start", stats->range_type, stats->range_start);
+	cagg_refresh_stats_add_boundary(&state, "range_end", stats->range_type, stats->range_end);
+	ts_jsonb_add_int64(&state, "rows_materialized", (int64) stats->mat_stats.rows_materialized);
+	ts_jsonb_add_int64(&state, "rows_deleted", (int64) stats->mat_stats.rows_deleted);
+
+	/* If granluar refresh is enabled, track whether it was used or not */
+	if (stats->granular_enabled && (stats->mat_stats.any_granular || stats->mat_stats.any_full))
+	{
+		const char *granular_refresh = "none";
+
+		if (stats->mat_stats.any_granular)
+		{
+			granular_refresh = stats->mat_stats.any_full ? "partial" : "full";
+		}
+
+		ts_jsonb_add_str(&state, "granular_refresh", granular_refresh);
+	}
+
+	pushJsonbValueCompat(&state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&state, WJB_END_OBJECT, NULL);
+
+	Jsonb *info = JsonbValueToJsonb(state.result);
+	ts_bgw_job_execution_set_info(info);
+	pfree(info);
+}
 
 /*
  * Report what a refresh did.
@@ -889,6 +982,10 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 
 	context->execution.number_of_batches = list_length(refresh_window_list);
 
+	stats.total_batches = context->execution.number_of_batches;
+	stats.range_type = refresh_window->type;
+	stats.granular_enabled = cagg->data.granular_refresh_enabled;
+
 	/*
 	 * The list is always built oldest-first. When refresh_newest_first is true we
 	 * iterate from the last element down to the first using index-based access so
@@ -944,6 +1041,15 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 														 context,
 														 apply_extend,
 														 &stats.mat_stats);
+
+		stats.batches_processed = context->execution.processing_batch;
+		stats.range_start = processed_range_start;
+		stats.range_end = processed_range_end;
+		if (any_refreshed)
+		{
+			cagg_refresh_stats_collect(context->options.job_id, &stats);
+		}
+
 		DEBUG_ERROR_INJECTION(
 			psprintf("cagg_policy_batch_%d_after_refresh", context->execution.processing_batch));
 
@@ -966,13 +1072,6 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	}
 	else
 	{
-		stats.granular_enabled = cagg->data.granular_refresh_enabled;
-		stats.total_batches = context->execution.number_of_batches;
-		stats.batches_processed = context->execution.processing_batch;
-		stats.range_type = refresh_window->type;
-		stats.range_start = processed_range_start;
-		stats.range_end = processed_range_end;
-
 		cagg_refresh_stats_report(&stats);
 	}
 }

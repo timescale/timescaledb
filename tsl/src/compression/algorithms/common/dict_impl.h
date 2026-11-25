@@ -16,6 +16,7 @@
  *
  *   cm_dict_probe_{CM_DICT_TY}
  *   cm_dict_reconstruct_{CM_DICT_TY}
+ *   cm_dict_reconstruct_plain_{CM_DICT_TY}
  */
 
 #if !defined(CM_DICT_TY)
@@ -114,6 +115,30 @@ CM_DICT_TFN(cm_dict_probe_)(const CM_DICT_TY *values, uint32 n, int32 k_cap, boo
 	return idx_cost;
 }
 
+static pg_noinline void
+CM_DICT_TFN(cm_dict_reconstruct_plain_)(CM_DICT_TY *v, const CM_DICT_TY *keys, const uint8 *idx,
+										uint32 n, uint32 idx_mask)
+{
+	size_t m = idx_mask;
+	size_t i = 0;
+
+	for (; i + 8 <= n; i += 8)
+	{
+		v[i] = keys[idx[i] & m];
+		v[i + 1] = keys[idx[i + 1] & m];
+		v[i + 2] = keys[idx[i + 2] & m];
+		v[i + 3] = keys[idx[i + 3] & m];
+		v[i + 4] = keys[idx[i + 4] & m];
+		v[i + 5] = keys[idx[i + 5] & m];
+		v[i + 6] = keys[idx[i + 6] & m];
+		v[i + 7] = keys[idx[i + 7] & m];
+	}
+	for (; i < n; ++i)
+	{
+		v[i] = keys[idx[i] & m];
+	}
+}
+
 /* cm_dict_reconstruct_.. : write each element's dictionary value,
  * selected by its unpacked index, into dest.
  *
@@ -149,11 +174,7 @@ CM_DICT_TFN(cm_dict_reconstruct_)(uint8 *dest, const CM_DICT_TY *keys, const uin
 	}
 	else
 	{
-		const uint8 *idx = (const uint8 *) idx_area;
-		for (uint32 i = 0; i < n; ++i)
-		{
-			v[i] = keys[(uint32) idx[i] & idx_mask];
-		}
+		CM_DICT_TFN(cm_dict_reconstruct_plain_)(v, keys, (const uint8 *) idx_area, n, idx_mask);
 	}
 }
 

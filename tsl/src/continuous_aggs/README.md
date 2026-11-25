@@ -134,7 +134,7 @@ to use functions from the corresponding file.
 like creating hypertable, catalog_entry, view, etc.</dd>
 
 <dt>`finalize.c`</dt>
-<dd>This file contains the specific functions for the case when continous aggregates are created in old format.</dd>
+<dd>This file contains the specific functions for the case when continuous aggregates are created in old format.</dd>
 
 <dt>`materialize.c`</dt>
 <dd>This file contains the functions directly dealing with the materialization of the continuous aggregates.</dd>

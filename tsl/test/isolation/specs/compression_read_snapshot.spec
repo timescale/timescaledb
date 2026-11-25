@@ -38,6 +38,17 @@ setup
     ALTER TABLE metrics_dc SET (timescaledb.compress,
                                 timescaledb.compress_segmentby = 'device');
     SELECT count(compress_chunk(c)) FROM show_chunks('metrics_dc') c;
+
+    -- Fully compressed chunk and a plain table with the same rows. Both are
+    -- read in one statement, i.e. with the same snapshot.
+    CREATE TABLE metrics_ins(time INT NOT NULL, device INT, value INT);
+    SELECT create_hypertable('metrics_ins', 'time', chunk_time_interval => 100);
+    INSERT INTO metrics_ins SELECT i, 1, i FROM generate_series(1,3) i;
+    ALTER TABLE metrics_ins SET (timescaledb.compress,
+                                 timescaledb.compress_segmentby = 'device');
+    SELECT count(compress_chunk(c)) FROM show_chunks('metrics_ins') c;
+    CREATE TABLE plain_ins(time INT NOT NULL, device INT, value INT);
+    INSERT INTO plain_ins SELECT i, 1, i FROM generate_series(1,3) i;
 }
 
 teardown
@@ -46,6 +57,8 @@ teardown
     DROP TABLE metrics_safe;
     DROP TABLE metrics_rr;
     DROP TABLE metrics_dc;
+    DROP TABLE metrics_ins;
+    DROP TABLE plain_ins;
 }
 
 session "R"
@@ -89,10 +102,27 @@ step "dc_rows_read" {
     COMMIT;
 }
 
+step "ins_legacy" {
+    SET timescaledb.scan_uncompressed_chunks = off;
+    SELECT (SELECT count(*) FROM metrics_ins) AS hypertable,
+           (SELECT count(*) FROM plain_ins) AS plain;
+}
+step "ins_safe" {
+    SET timescaledb.scan_uncompressed_chunks = on;
+    SELECT (SELECT count(*) FROM metrics_ins) AS hypertable,
+           (SELECT count(*) FROM plain_ins) AS plain;
+}
+
 session "W"
 step "w_legacy" { DELETE FROM metrics_legacy WHERE time <= 7; }
 step "w_safe" { DELETE FROM metrics_safe WHERE time <= 7; }
 step "w_dc" { DELETE FROM metrics_dc WHERE time <= 3 AND device = 1; }
+step "w_ins" {
+    BEGIN;
+    INSERT INTO metrics_ins VALUES (50, 1, 100);
+    INSERT INTO plain_ins VALUES (50, 1, 100);
+    COMMIT;
+}
 step "w_recompress" {
     SET client_min_messages = error;
     SELECT count(compress_chunk(c)) FROM show_chunks('metrics_rr') c;
@@ -105,6 +135,8 @@ step "enable_safe" { SELECT debug_waitpoint_enable('columnar_scan_uncompressed_p
 step "release_safe" { SELECT debug_waitpoint_release('columnar_scan_uncompressed_part_decided'); }
 step "enable_dc" { SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided'); }
 step "release_dc" { SELECT debug_waitpoint_release('columnar_scan_uncompressed_part_decided'); }
+step "enable_ins" { SELECT debug_waitpoint_enable('columnar_scan_uncompressed_part_decided'); }
+step "release_ins" { SELECT debug_waitpoint_release('columnar_scan_uncompressed_part_decided'); }
 
 # The writer commits after the reader planned, before it executes.
 permutation "enable_legacy" "r_legacy" "w_legacy" "release_legacy"
@@ -119,3 +151,8 @@ permutation "rr_begin_safe" "w_recompress" "rr_count" "rr_commit"
 # from the first chunk are read through the pooled uncompressed scans.
 permutation "enable_dc" "dc_legacy" "w_dc" "release_dc" "dc_rows_read"
 permutation "enable_dc" "dc_safe" "w_dc" "release_dc" "dc_rows_read"
+
+# An INSERT into a fully compressed chunk commits after the reader planned,
+# before it executes. Both counts use the same snapshot, so they must match.
+permutation "enable_ins" "ins_legacy" "w_ins" "release_ins"
+permutation "enable_ins" "ins_safe" "w_ins" "release_ins"

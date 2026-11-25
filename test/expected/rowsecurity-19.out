@@ -4229,10 +4229,16 @@ INSERT INTO r2 VALUES (10), (20);
 CREATE POLICY p1 ON r2 USING (false);
 ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
--- Errors due to rows in r2
-DELETE FROM r1;
-ERROR:  update or delete on table "r1" violates foreign key constraint "r2_a_fkey" on table "r2"
-DETAIL:  Key (a)=(10) is still referenced from table "r2".
+-- Errors due to rows in r2. The error names r2 or one of its chunks,
+-- depending on the order of the foreign key triggers, so only show that
+-- the delete was refused.
+DO $$
+BEGIN
+  DELETE FROM r1;
+EXCEPTION WHEN foreign_key_violation THEN
+  RAISE NOTICE 'delete from r1 refused by foreign key on r2';
+END $$;
+NOTICE:  delete from r1 refused by foreign key on r2
 -- Reset r2 to no-RLS
 DROP POLICY p1 ON r2;
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;

@@ -331,34 +331,26 @@ INSERT INTO metrics2 SELECT '2000-01-01';
 ---- status should be 3
 SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
--- Capture relfilenode BEFORE the third run_job
-SELECT c.relfilenode AS "INDEX_RELFILENODE_BEFORE"
+-- REINDEX keeps the index OID but writes the index to a new relfilenode
+CREATE TEMP TABLE chunk_indexes_before AS
+SELECT c.oid, c.relfilenode
 FROM pg_index ix JOIN pg_class c ON c.oid = ix.indexrelid
-WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass
-ORDER BY c.relfilenode LIMIT 1 \gset
+WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass;
 
 -- should recompress
 CALL run_job(:JOB_COMPRESS);
 
--- Did REINDEX physically run? REINDEX changes relfilenode; VACUUM/ANALYZE don't.
-SELECT c.relfilenode != :INDEX_RELFILENODE_BEFORE AS reindex_ran
-FROM pg_index ix JOIN pg_class c ON c.oid = ix.indexrelid
-WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass
-ORDER BY c.relfilenode LIMIT 1;
-
--- Is the chunk's uncompressed heap empty?
+-- chunk should be fully compressed now (status = 1)
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 SELECT count(*) AS live_in_chunk_heap FROM ONLY :RECOMPRESS_CHUNK_NAME;
 
--- chunk should be fully compressed now (status = 1) so reindex can run
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
-
--- index size should decrease due to reindexing (8kB or 16kB)
-VACUUM ANALYZE metrics2;
-SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') as index_size \gset
-
--- Show the actual index size if its larger than expected
-SELECT :index_size <= 16384 as size_empty,
-CASE WHEN :index_size <= 16384 THEN 0 ELSE :index_size END idx_size;
+-- all chunk indexes should have been reindexed. Index size is not checked
+-- since rows deleted by recompression still go into the new index while
+-- another snapshot can see them.
+SELECT count(*) AS indexes,
+       count(*) FILTER (WHERE c.relfilenode <> b.relfilenode) AS reindexed
+FROM chunk_indexes_before b JOIN pg_class c ON c.oid = b.oid;
+DROP TABLE chunk_indexes_before;
 DROP TABLE metrics2;
 
 --TEST 8

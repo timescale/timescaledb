@@ -218,7 +218,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.bgw_job_id_seq'
   -- We put columns that can be null or have variable length
   -- last. This allow us to read the important fields above in the
   -- scheduler without materializing these fields below, which the
-  -- scheduler does not neeed.
+  -- scheduler does not need.
 CREATE TABLE _timescaledb_catalog.bgw_job (
   id integer NOT NULL DEFAULT nextval('_timescaledb_catalog.bgw_job_id_seq'),
   application_name name NOT NULL,
@@ -443,7 +443,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
 
--- Per-tenant invalidation tracking, used in granular refresh of contiuous aggregates.
+-- Per-tenant invalidation tracking, used in granular refresh of continuous aggregates.
 CREATE TABLE _timescaledb_catalog.continuous_aggs_tenant_tracking (
   hypertable_id integer NOT NULL,
   tenant_id text,
@@ -518,7 +518,7 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
 
--- Create index on the compressed_chunk_id to speed up maintainance
+-- Create index on the compressed_chunk_id to speed up maintenance
 -- operations during upgrades. This is mostly relevant for very large
 -- number of chunks.
 CREATE INDEX compression_chunk_size_idx ON _timescaledb_catalog.compression_chunk_size (compressed_chunk_id);
