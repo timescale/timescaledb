@@ -1072,7 +1072,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				/* The aggregate should be a partial aggregate */
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
-				Node *original_argument = (Node *) castNode(TargetEntry, linitial(aggref->args))->expr;
+				Node *original_argument =
+					(Node *) castNode(TargetEntry, linitial(aggref->args))->expr;
 				Node *constified_argument = estimate_expression_value(&root, original_argument);
 				def->argument = (Expr *) constified_argument;
 			}
