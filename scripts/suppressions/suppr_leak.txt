@@ -5,7 +5,7 @@ leak:fe_memutils.c
 leak:fe-connect.c
 leak:fe-exec.c
 leak:initdb.c
-#annoingly have to supress strdup because it leaks in PostmasterMain -D option
+#annoyingly have to suppress strdup because it leaks in PostmasterMain -D option
 leak:strdup
 leak:ProcessConfigFileInternal
 leak:internal_load_library

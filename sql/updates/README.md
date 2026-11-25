@@ -69,8 +69,8 @@ To support downgrades to previous versions of the extension, it is
 necessary to execute CMake from a Git repository since the generation
 of a downgrade script requires access to the previous version files
 that are used to generate an update script. In addition, we only
-generate a downgrade script to the immediate preceeding version and
-not to any other preceeding versions.
+generate a downgrade script to the immediate preceding version and
+not to any other preceding versions.
 
 The source and target versions are found in be found in the file
 `version.config` file in the root of the source tree, where `version`
@@ -94,6 +94,6 @@ The epilog consists of the files in variables `SOURCE_FILES` and
 Note that, in contrast to update scripts, downgrade scripts are not
 built by composing several downgrade scripts into a more extensive
 downgrade script. We only build a downgrade script to the immediate
-preceeding version. To downgrade multiple versions multiple downgrades
+preceding version. To downgrade multiple versions multiple downgrades
 need to be chained.
 

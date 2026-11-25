@@ -10,14 +10,19 @@ name: LLM fuzzer
     branches:
       - main
       - trigger/llm-fuzzer
+  pull_request:
+    paths:
+        - ".github/workflows/llm-fuzzer.yaml"
+        - ".github/workflows/llm-fuzzer/**"
 
 env:
-  PG_SRC_DIR: "pgbuild"
-  PG_INSTALL_DIR: "postgresql"
-  extra_packages: "clang-19 llvm-19 llvm-19-dev llvm-19-tools"
-  CC: "clang-19"
-  CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
-  CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
+  CC: "clang-15"
+  # Clang 17 and later include the function type check in -fsanitize=undefined.
+  # PostgreSQL calls some functions through a pointer of a different type, for
+  # example string_compare in dynahash.c. Disable this check.
+  CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
 
   # We do not link libasan dynamically to avoid problems with libdl and our libraries.
   # clang does this by default, but we need to explicitly state that for gcc.
@@ -44,7 +49,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       have_key: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
@@ -69,7 +74,7 @@ jobs:
   fuzzer:
     if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    runs-on: "timescaledb-runner-arm64"
     needs: config
     permissions:
       contents: read
@@ -78,6 +83,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        pg: ["${{ fromJson(needs.config.outputs.pg_latest) }}"]
+        oracle: ["internal-error", "optimizations", "hypertable"]
         include:
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
@@ -104,8 +111,16 @@ jobs:
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get install ccache cmake flex bison icu-devtools systemd-coredump \
-          gdb jq postgresql-client ${{ env.extra_packages }}
+        sudo apt-get install \
+            bison \
+            ccache \
+            cmake \
+            flex \
+            gdb \
+            icu-devtools \
+            jq \
+            systemd-coredump \
+            ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,7 +139,7 @@ jobs:
     - name: Get date for build caching
       id: get-date
       run: |
-        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> "$GITHUB_OUTPUT"
 
     # Create a directory for sanitizer logs. This directory is referenced by
     # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS
@@ -132,70 +147,104 @@ jobs:
       run: |
         mkdir ${{ github.workspace }}/sanitizer_logs
 
-    # we cache the build directory instead of the install directory here
-    # because extension installation will write files to install directory
-    # leading to a tainted cache
-    - name: Restore PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
-      id: cache-postgresql
+    - name: Restore PostgreSQL ${{ matrix.pg }} Cache
+      id: restore-postgresql-cache
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: "llm-fuzzer-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
-         -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+        path: |
+          install
+          pg
+        key: "llm-fuzzer-postgres-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
-    - name: Build PostgreSQL ${{ needs.config.outputs.pg_latest }} if not in cache
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+    - name: Build PostgreSQL ${{ matrix.pg }}
+      if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       run: |
+        set -xeu
+
         wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
-          https://ftp.postgresql.org/pub/source/v${{ needs.config.outputs.pg_latest }}/postgresql-${{ needs.config.outputs.pg_latest }}.tar.bz2
-        mkdir -p ~/$PG_SRC_DIR
-        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+          https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        mkdir -p pg build-pg install
+        tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
+
         # Add instrumentation to the Postgres memory contexts. For more details, see
         # https://github.com/timescale/eng-database/wiki/Using-Address-Sanitizer#adding-more-instrumentation
-        PG_MAJOR=$(echo "${{ needs.config.outputs.pg_latest }}" | sed -e 's![.].*!!')
+        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         if [ ${PG_MAJOR} -lt 18 ]; then
-          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
+          patch -F5 -p1 -d pg < test/postgres-asan-instrumentation.patch
         else
-          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
+          patch -F5 -p1 -d pg < test/postgres-asan-instrumentation-PG18GE.patch
         fi
-        cd ~/$PG_SRC_DIR
-        ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
+
+        cd build-pg
+
+        ../pg/configure --prefix="$(readlink -f ../install)" --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
-        make -j$(getconf _NPROCESSORS_ONLN)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${EXTENSIONS}; do
-          make -j$(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
-    - name: Save PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
-
-    - name: Upload config.log
-      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: ${{ matrix.display_name }} config.log for PostgreSQL
-        path: ~/${{ env.PG_SRC_DIR }}/config.log
-
-    - name: Install PostgreSQL ${{ needs.config.outputs.pg_latest }}
-      run: |
-        cd ~/$PG_SRC_DIR
         make install
         for ext in ${EXTENSIONS}; do
           make -C contrib/${ext} install
         done
-        ~/$PG_INSTALL_DIR/bin/pg_config --version
+        make install-tests
+
+    - name: Save PostgreSQL ${{ matrix.pg }} Cache
+      if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          install
+          pg
+        key: ${{ steps.restore-postgresql-cache.outputs.cache-primary-key }}
+
+    - name: Upload config.log
+      if: always() && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ matrix.display_name }} config.log for PostgreSQL
+        path: build-pg/config.log
+
+    - name: Set up PATH
+      run: |
+        set -xeu
+
+        readlink -f install/bin >> "${GITHUB_PATH}"
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
-          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF \
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
-        make -j$(getconf _NPROCESSORS_ONLN) -C build
+        make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
+
+    - name: make installcheck (smoke test)
+      run: |
+        set -o pipefail
+        make -k -C build installcheck TESTS=compression \
+          | tee installcheck.log
+
+    - name: Show regression diffs
+      if: always()
+      id: collectlogs-smoke
+      run: |
+        tail -vn +1 build/tsl/test/log/initdb.log | tee installcheck.log
+
+        find . -name regression.diffs -exec cat {} + > regression.log
+
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >> "$GITHUB_OUTPUT"; fi
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
+        cat regression.log
+
+    - name: Upload installcheck smoke test log
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ matrix.display_name }} installcheck smoke test log
+        path: |
+          regression.log
+          installcheck.log
 
     - name: Install Claude Code
       run: npm install -g @anthropic-ai/claude-code@2.1.215
@@ -203,7 +252,9 @@ jobs:
     - name: LLM Fuzzing
       id: llm-fuzzing
       env:
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        ANTHROPIC_BASE_URL: https://api.concentrate.ai
+        ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+        ANTHROPIC_API_KEY: ""
         EVENT_WHAT: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
         EVENT_BRANCH: ${{ github.head_ref || github.ref_name }}
         EVENT_BASE: ${{ github.base_ref || format('{0}~', github.ref_name) }}
@@ -212,8 +263,12 @@ jobs:
         ORACLE_NAME: ${{ matrix.oracle }}
       timeout-minutes: 60
       run: |
-        export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         export PGDATABASE=postgres
+
+        # The workflow can be terminated if the fuzzer runs very slow commands.
+        # Help it guess this by setting a smallish timeout on commands.
+        export BASH_DEFAULT_TIMEOUT_MS=30000
+        export BASH_MAX_TIMEOUT_MS=60000
 
         rc=0
         claude -p --output-format stream-json --verbose \
@@ -279,20 +334,22 @@ jobs:
       if: steps.repro.outputs.found == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
+        path: |
+            install
+            pg
+        key: ${{ steps.restore-postgresql-cache.outputs.cache-primary-key }}
 
     - name: Reinstall PostgreSQL and TimescaleDB
       if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
 
-        cd ~/$PG_SRC_DIR
+        cd pg
         make install
         for ext in ${EXTENSIONS}; do
           make -C contrib/${ext} install
         done
-        ~/$PG_INSTALL_DIR/bin/pg_config --version
+        pg_config --version
 
         cd $GITHUB_WORKSPACE
         git checkout -f ${{ github.sha }}
@@ -308,11 +365,9 @@ jobs:
         sudo journalctl --rotate --vacuum-time=1s
         sudo rm -f /var/lib/systemd/coredump/*
 
-        export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
-
         export PGDATA=repro_pgdata
 
-        PGPORT=$(( 6600 + $RANDOM % 100 ))
+        PGPORT=$(( 6600 + RANDOM % 100 ))
         export PGPORT
 
         initdb
@@ -392,7 +447,7 @@ jobs:
       run: |
         # wait in case there are in-progress coredumps
         sleep 10
-        if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+        if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>"$GITHUB_OUTPUT"; fi
         # print OOM killer information
         sudo journalctl --system -q --facility=kern --grep "Killed process" || true
 

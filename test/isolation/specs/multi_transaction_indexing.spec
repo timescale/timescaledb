@@ -67,11 +67,11 @@ permutation "CI" "RI" "Bc" "P" "Ic" "Sc"
 # Ideally we would declare these functions in setup, and use them to check that the actual index
 # exist on the relevant chunks in these tests. Unfortunately, in older versions of postgres
 # (IIRC until 10.4) there was an arbitrary limit that each SQL statement in an isolation test could
-# be no longer than 1024 characters. Instead, we currently use the number of bytes indexs take
+# be no longer than 1024 characters. Instead, we currently use the number of bytes indexes take
 # as a proxy. Once we deprecate the old version, or add some other way to get index info we should
 # switch to this.
 #
-#   -- functions from testsupport.sql duplicated here becasue we cannot include sql files
+#   -- functions from testsupport.sql duplicated here because we cannot include sql files
 #    CREATE OR REPLACE FUNCTION show_columns(rel regclass)
 #    RETURNS TABLE("Column" name,
 #                "Type" text,

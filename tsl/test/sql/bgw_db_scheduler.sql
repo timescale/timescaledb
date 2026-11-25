@@ -397,6 +397,9 @@ SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', I
 
 SELECT ts_bgw_db_scheduler_test_run(500);
 SELECT wait_application_pid('test_job_3_long') IS NOT NULL ;
+-- The scheduler logs the new worker only after it sees the job start, so
+-- wait until it has logged that and gone back to waiting
+SELECT test.wait_for_log('DB Scheduler', '[TESTING] Wait until%');
 SELECT pg_terminate_backend(wait_application_pid('DB Scheduler Test'));
 
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();

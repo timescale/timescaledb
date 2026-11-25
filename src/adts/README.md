@@ -2,7 +2,7 @@
 
 This directory contains a collection of Abstract Data Types.
 These ADTS are containers that can store data of any other type.
-These ADTs use macros as oppossed to void pointers for performance
+These ADTs use macros as opposed to void pointers for performance
 reasons, as well as for better type safety. This approach to
 ADTs follows Postgres convention.
 

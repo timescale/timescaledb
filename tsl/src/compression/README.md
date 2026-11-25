@@ -39,7 +39,7 @@ is paramount here as it is used as a primitive in all the other compression algo
 
 ### DeltaDelta
 
-for each integer, it takes the delta-of-deltas with the pervious integer,
+for each integer, it takes the delta-of-deltas with the previous integer,
 zigzag encodes this deltadelta, then finally simple8b_rle encodes this
 zigzagged result. This algorithm performs very well when the magnitude of the
 delta between adjacent values tends not to vary much, and is optimal for
@@ -87,7 +87,7 @@ algorithm. The second part of the UUID is stored without compression, as a seque
 uint64 values.
 
 The algorithm checks the cardinality of the values in the compressed batch and based on
-the cardinality it decides wether it is worth to recompress the batch using the dictionary
+the cardinality it decides whether it is worth to recompress the batch using the dictionary
 compression algorithm. In that case it recompresses and stores the UUIDs as a dictionary.
 
 # Merging chunks while compressing #
@@ -126,7 +126,7 @@ This function determines a segment-by column to use. It returns an array of colu
 
 The intuition is as follows:
 
-we use 3 criterias:
+we use 3 criteria:
 - We want to pick an "important" column for querying. We measure "importance", in terms of how early the column comes in an index (i.e. leading columns are very important, others less so). If there are no indexes, all columns will be considered if statistics are populated
 - The column has many rows for the same column value so that the segments will have many rows. We establish that a column will have many values if (i) it is not a dimension and (ii) either statistics tell us so (via `stadistinct` > 1) or, if statistics aren't populated, we check whether the column is a generated identity or serial column.
 - When we have multiple qualifying rows, we select the column where rows are spread most evenly across the distinct values. 

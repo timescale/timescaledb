@@ -354,7 +354,8 @@ SELECT
           ELSE h.data->'error_data'->>'message'
           END
         END
-    END AS err_message
+    END AS err_message,
+    h.data->'info' AS execution_info
 FROM
     _timescaledb_internal.bgw_job_stat_history h
 LEFT JOIN
