@@ -385,7 +385,9 @@ BEGIN
 END
 $BODY$;
 
--- Wait for job to run or fail
+-- Wait for job to start. This returns as soon as a run has started, not when
+-- it has finished, so don't use it before reading the results of a run. Use
+-- wait_for_job_to_run, wait_for_job_failure or wait_for_finished_run instead.
 CREATE OR REPLACE FUNCTION test.wait_for_job_to_run_or_fail(job_param_id INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS)
 RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
@@ -403,6 +405,90 @@ BEGIN
     END LOOP;
     RAISE INFO 'wait_for_job_to_run_or_fail: timeout after % tries', spins;
     RETURN false;
+END
+$BODY$;
+
+-- Wait until the given number of runs of the job have failed. This is a
+-- procedure that commits between checks, so it also sees new rows under
+-- serializable isolation.
+CREATE OR REPLACE PROCEDURE test.wait_for_job_failure(job INTEGER, failures INTEGER=1, spins INTEGER=:TEST_SPINWAIT_ITERS)
+LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    FOR i IN 1..spins
+    LOOP
+        IF (SELECT count(*) FROM _timescaledb_internal.bgw_job_stat_history
+            WHERE job_id = job AND succeeded IS FALSE) >= failures THEN
+            RETURN;
+        END IF;
+        PERFORM pg_sleep(0.1);
+        COMMIT;
+    END LOOP;
+    RAISE EXCEPTION 'job % did not fail before timeout', job;
+END
+$BODY$;
+
+-- Wait until the job has a finished run and return its times. Starting a run
+-- sets last_finish and next_start to -infinity, so a job that can start again
+-- right after it finishes must be read with this.
+CREATE OR REPLACE FUNCTION test.wait_for_finished_run(job INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS,
+  OUT last_start TIMESTAMPTZ, OUT last_finish TIMESTAMPTZ, OUT next_start TIMESTAMPTZ)
+LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    FOR i IN 1..spins
+    LOOP
+        SELECT js.last_start, js.last_finish, js.next_start
+          INTO last_start, last_finish, next_start
+          FROM _timescaledb_internal.bgw_job_stat js
+         WHERE js.job_id = job AND js.last_finish > js.last_start;
+        IF FOUND THEN
+            RETURN;
+        END IF;
+        PERFORM pg_sleep(0.1);
+    END LOOP;
+    RAISE EXCEPTION 'job % has no finished run before timeout', job;
+END
+$BODY$;
+
+-- Wait until the background worker log of the test schedulers (public.bgw_log)
+-- has a message of the given application that matches the LIKE pattern
+CREATE OR REPLACE FUNCTION test.wait_for_log(app_name TEXT, pattern TEXT, spins INTEGER=:TEST_SPINWAIT_ITERS)
+RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    FOR i IN 1..spins
+    LOOP
+        IF EXISTS (SELECT FROM public.bgw_log
+                   WHERE application_name = app_name AND msg LIKE pattern) THEN
+            RETURN true;
+        END IF;
+        PERFORM pg_sleep(0.1);
+    END LOOP;
+    RAISE INFO 'wait_for_log: timeout after % tries', spins;
+    RETURN false;
+END
+$BODY$;
+
+-- Wait until the given number of backends of the current database wait for
+-- a lock of the given type
+CREATE OR REPLACE PROCEDURE test.wait_for_lock_waiter(lock_type TEXT, waiters INTEGER=1, spins INTEGER=:TEST_SPINWAIT_ITERS)
+LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    FOR i IN 1..spins
+    LOOP
+        -- pg_stat_activity keeps the same snapshot within a transaction
+        PERFORM pg_stat_clear_snapshot();
+        IF (SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a USING (pid)
+            WHERE l.locktype = lock_type AND NOT l.granted
+              AND a.datname = current_database()) >= waiters THEN
+            RETURN;
+        END IF;
+        PERFORM pg_sleep(0.1);
+        COMMIT;
+    END LOOP;
+    RAISE EXCEPTION 'no backend waiting for % lock before timeout', lock_type;
 END
 $BODY$;
 

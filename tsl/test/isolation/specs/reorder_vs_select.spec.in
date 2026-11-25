@@ -11,7 +11,7 @@ setup {
        (21, 19.5, 3);
 
  CREATE TABLE waiter(i INTEGER);
- -- like reluster_chunk execpt that it'll attempt to grab an release a ACCESS EXCLUSIVE
+ -- like reluster_chunk except that it'll attempt to grab an release a ACCESS EXCLUSIVE
  -- lock on wait_on before swapping the tables. This allows us to control interleaving more.
  CREATE OR REPLACE FUNCTION reorder_chunk_i(
      chunk REGCLASS,

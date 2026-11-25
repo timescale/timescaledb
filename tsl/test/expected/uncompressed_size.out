@@ -39,14 +39,19 @@ FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK') d,
 --------------+---------------------+------------------+------------------
  t            | t                   | t                | t
 
--- samplerate scales the sampled variable length size back up to the full chunk
+-- samplerate scales the sampled variable length size back up to the full chunk.
+-- A single sample of the chunk's 100 batches can be more than 20% off, so
+-- compare the average of 20 samples.
 SELECT
   s.tuples = d.tuples AS tuples_match,
   s.relation_size BETWEEN d.relation_size * 0.8 AND d.relation_size * 1.2 AS relation_size_in_range,
   s.index_size BETWEEN d.index_size * 0.8 AND d.index_size * 1.2 AS index_size_in_range,
   s.total_size BETWEEN d.total_size * 0.8 AND d.total_size * 1.2 AS total_size_in_range
 FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK') d,
-     _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK', 50) s;
+     (SELECT min(tuples) AS tuples, avg(relation_size) AS relation_size,
+             avg(index_size) AS index_size, avg(total_size) AS total_size
+      FROM generate_series(1, 20) g,
+           LATERAL _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK', 50 + 0 * g)) s;
  tuples_match | relation_size_in_range | index_size_in_range | total_size_in_range 
 --------------+------------------------+---------------------+---------------------
  t            | t                      | t                   | t

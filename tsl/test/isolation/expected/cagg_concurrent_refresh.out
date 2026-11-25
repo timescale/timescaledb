@@ -396,7 +396,7 @@ cond_10|                   50|                     79
 cond_10|                   70|    9223372036854775807
 
 
-starting permutation: WP_before_enable R6_materialization_logs R1_refresh3 R3_refresh_adjacent R6_materialization_logs WP_before_release S1_select R6_materialization_logs
+starting permutation: WP_before_enable R6_materialization_logs R1_refresh3 R3_refresh_adjacent R6_materialization_logs WP_before_release R1_done S1_select R6_materialization_logs
 R5: LOG:  statement: 
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
@@ -453,6 +453,13 @@ debug_waitpoint_release
 
 step R1_refresh3: <... completed>
 step R3_refresh_adjacent: <... completed>
+step R1_done: 
+    SELECT 1 AS done;
+
+done
+----
+   1
+
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10

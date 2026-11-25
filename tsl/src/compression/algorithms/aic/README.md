@@ -189,7 +189,7 @@ for the type. These include:
 
  - reduced memory allocation
  - allow more efficient SIMD code generation
- - correct type semantics, bounds and arithmetics
+ - correct type semantics, bounds and arithmetic
 
 The type dependent functions are emitted from inclusion-driven
 template headers, following the pattern used in the fastlanes

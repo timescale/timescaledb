@@ -54,14 +54,29 @@ static void
 bgw_log_insert(char *msg)
 {
 	Relation rel;
-	PushActiveSnapshot(GetTransactionSnapshot());
+	bool pushed = false;
+
+	/*
+	 * The hook can run while an error is reported in the middle of a catalog
+	 * scan, which already holds a snapshot. Taking the first transaction
+	 * snapshot then fails an assertion, so only take one when there is none.
+	 */
+	if (!HaveRegisteredOrActiveSnapshot())
+	{
+		PushActiveSnapshot(GetTransactionSnapshot());
+		pushed = true;
+	}
 
 	Oid log_oid = ts_get_relation_relid("public", "bgw_log", false);
 
 	rel = table_open(log_oid, RowExclusiveLock);
 	bgw_log_insert_relation(rel, msg);
 	table_close(rel, RowExclusiveLock);
-	PopActiveSnapshot();
+
+	if (pushed)
+	{
+		PopActiveSnapshot();
+	}
 }
 
 static emit_log_hook_type prev_emit_log_hook = NULL;

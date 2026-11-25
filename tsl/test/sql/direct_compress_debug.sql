@@ -2,8 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- need superuser for copy from program
-\c :TEST_DBNAME :ROLE_SUPERUSER
+-- The test data is generated on the client with \copy, because the server
+-- can run on a system without these tools, like Windows.
 
 CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.orderby='time');
 
@@ -14,7 +14,7 @@ SET timescaledb.enable_direct_compress_copy_sort_batches = false;
 BEGIN;
 -- this is really slow on windows so disable statement timeout for the copy
 SET statement_timeout = 0;
-COPY metrics FROM PROGRAM 'seq 3000 | sed "s/.*/2025-01-01 + & minute/" | date -f - +"%Y-%m-%d %H:%M:%S" | awk ''{print $0 ",d1,0." NR}''' WITH (FORMAT CSV);
+\copy metrics FROM PROGRAM 'seq 3000 | sed "s/.*/2025-01-01 + & minute/" | date -f - +"%Y-%m-%d %H:%M:%S" | awk ''{print $0 ",d1,0." NR}''' WITH (FORMAT CSV)
 SET statement_timeout TO '60s';
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
@@ -22,7 +22,7 @@ ROLLBACK;
 
 -- simple test with compressed copy enabled and reversed order and no batch sorting
 BEGIN;
-COPY metrics FROM PROGRAM 'seq 3000 | sed "s/.*/2025-01-01 - & minute/" | date -f - +"%Y-%m-%d %H:%M:%S" | awk ''{print $0 ",d1,0." NR}''' WITH (FORMAT CSV);
+\copy metrics FROM PROGRAM 'seq 3000 | sed "s/.*/2025-01-01 - & minute/" | date -f - +"%Y-%m-%d %H:%M:%S" | awk ''{print $0 ",d1,0." NR}''' WITH (FORMAT CSV)
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
 ROLLBACK;

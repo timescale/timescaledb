@@ -1,6 +1,6 @@
 # Suppressions for Clang Sanitizers #
 
-This folder contains [supression files](https://clang.llvm.org/docs/SanitizerSpecialCaseList.html) for
+This folder contains [suppression files](https://clang.llvm.org/docs/SanitizerSpecialCaseList.html) for
 running timescale using Clang's [AddressSanitizer](https://clang.llvm.org/docs/AddressSanitizer.html)
 and [UndefinedBehaviorSanitizer](https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html), which
 we use as part of timescale's regission suite. There are a few places OSs have UB and where postgres

@@ -86,4 +86,4 @@ https://commitfest.postgresql.org/32/1741/
 As when this document was first written, it is not yet merged. Their strategy
 involves integrating this functionality into the btree searching code,
 and will be available in PG15 at the earliest. The two
-implementations should not interfere with eachother.
+implementations should not interfere with each other.

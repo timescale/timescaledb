@@ -1,1 +1,0 @@
-Fixes: #11036 Do not switch to catalog owner when setting chunk replica identity

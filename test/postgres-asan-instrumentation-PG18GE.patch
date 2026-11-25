@@ -2,12 +2,12 @@ diff --git a/src/include/utils/memdebug.h b/src/include/utils/memdebug.h
 index e88b4c6e8e..4ccbbf0146 100644
 --- a/src/include/utils/memdebug.h
 +++ b/src/include/utils/memdebug.h
-@@ -19,6 +19,35 @@
+@@ -19,6 +19,36 @@
  
  #ifdef USE_VALGRIND
  #include <valgrind/memcheck.h>
 +
-+#elif __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
++#elif (__has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)) && !defined(FRONTEND)
 +
 +#ifndef CLOBBER_FREED_MEMORY
 +#error "This patch requires CLOBBER_FREED_MEMORY (included by --cassert) to work properly"
@@ -34,6 +34,7 @@ index e88b4c6e8e..4ccbbf0146 100644
 +#define VALGRIND_CREATE_MEMPOOL(context, redzones, zeroed) do {} while (0)
 +#define VALGRIND_DESTROY_MEMPOOL(context) do {} while (0)
 +#define VALGRIND_MEMPOOL_CHANGE(context, optr, nptr, size) do {} while (0)
++#define VALGRIND_MEMPOOL_TRIM(context, addr, size) do {} while (0)
 +
  #else
  #define VALGRIND_CHECK_MEM_IS_DEFINED(addr, size)			do {} while (0)
