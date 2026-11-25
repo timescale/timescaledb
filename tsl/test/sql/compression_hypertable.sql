@@ -358,3 +358,24 @@ drop table dest;
 create table dest as select * from source_table order by value;
 select count(distinct tag) from dest;
 drop table dest;
+
+
+-- Test proper handling of by-value types in this scenario as well.
+drop table source_table;
+
+create table source_table(ts int, itag bigint, value float) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.chunk_interval = 2500, tsdb.compress);
+
+insert into source_table
+select ts, ts % 5 - 2, mix(ts)
+from generate_series(1, 5000) ts
+;
+
+alter table source_table set (tsdb.compress_segmentby = 'itag', tsdb.compress_orderby = 'ts');
+select compress_chunk(x) from show_chunks('source_table') x;
+
+select count(distinct itag) from source_table;
+
+create table dest as select * from source_table;
+select count(distinct itag) from dest;
+drop table dest;

@@ -732,3 +732,32 @@ select count(distinct tag) from dest;
   4755
 
 drop table dest;
+-- Test proper handling of by-value types in this scenario as well.
+drop table source_table;
+create table source_table(ts int, itag bigint, value float) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.chunk_interval = 2500, tsdb.compress);
+insert into source_table
+select ts, ts % 5 - 2, mix(ts)
+from generate_series(1, 5000) ts
+;
+alter table source_table set (tsdb.compress_segmentby = 'itag', tsdb.compress_orderby = 'ts');
+NOTICE:  updated compression settings will only apply to future compressions
+select compress_chunk(x) from show_chunks('source_table') x;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_59_chunk
+ _timescaledb_internal._hyper_9_60_chunk
+ _timescaledb_internal._hyper_9_61_chunk
+
+select count(distinct itag) from source_table;
+ count 
+-------
+     5
+
+create table dest as select * from source_table;
+select count(distinct itag) from dest;
+ count 
+-------
+     5
+
+drop table dest;
