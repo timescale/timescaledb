@@ -74,8 +74,9 @@ jobs:
       matrix:
         pg: ["${{ fromJson(needs.config.outputs.pg_latest) }}"]
         oracle: ["internal-error", "optimizations", "hypertable"]
-        ts_flags: ["-DCMAKE_BUILD_TYPE=RelWithDebInfo"]
         include:
+          - ts_flags: "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
 
@@ -94,6 +95,7 @@ jobs:
 
           - oracle: "hypertable"
             display_name: "Hypertable ON-OFF"
+
     env:
         CFLAGS: "-march=armv8.2-a+crypto ${{ matrix.extra_cflags }}"
 
