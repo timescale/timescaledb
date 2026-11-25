@@ -40,13 +40,46 @@ AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C;
 CREATE ACCESS METHOD ts_compression_codec TYPE INDEX HANDLER _timescaledb_functions.compression_codec_handler;
 COMMENT ON ACCESS METHOD ts_compression_codec IS 'Registry for compression codec operator classes';
 
--- Per-column setting for EXTERNAL compression algorithm. Set via the
--- timescaledb.compress_column_codec option. codec_column[i] is compressed
--- with the codec operator class named by codec_opclass[i].
-ALTER TABLE _timescaledb_catalog.compression_settings
-  ADD COLUMN codec_column text[],
-  ADD COLUMN codec_opclass text[],
-  ADD CONSTRAINT compression_settings_check_codec_null
-    CHECK ((codec_column IS NULL AND codec_opclass IS NULL) OR (codec_column IS NOT NULL AND codec_opclass IS NOT NULL)),
-  ADD CONSTRAINT compression_settings_check_codec_cardinality
-    CHECK (array_ndims(codec_column) = 1 AND array_ndims(codec_opclass) = 1 AND cardinality(codec_column) = cardinality(codec_opclass));
+-- Rebuild compression settings to add the per-column setting for the
+-- EXTERNAL compression algorithm (timescaledb.compress_column_codec)
+CREATE TABLE _timescaledb_catalog.tempsettings AS SELECT * FROM _timescaledb_catalog.compression_settings;
+DROP VIEW IF EXISTS _timescaledb_internal.hypertable_chunk_local_size;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.compression_settings;
+DROP TABLE _timescaledb_catalog.compression_settings;
+
+CREATE TABLE _timescaledb_catalog.compression_settings (
+  relid regclass NOT NULL,
+  compress_relid regclass NULL,
+  segmentby text[],
+  orderby text[],
+  orderby_desc bool[],
+  orderby_nullsfirst bool[],
+  index jsonb,
+  codec_column text[],
+  codec_opclass text[],
+  CONSTRAINT compression_settings_pkey PRIMARY KEY (relid),
+  CONSTRAINT compression_settings_check_segmentby CHECK (array_ndims(segmentby) = 1),
+  CONSTRAINT compression_settings_check_orderby_null CHECK ((orderby IS NULL AND orderby_desc IS NULL AND orderby_nullsfirst IS NULL) OR (orderby IS NOT NULL AND orderby_desc IS NOT NULL AND orderby_nullsfirst IS NOT NULL)),
+  CONSTRAINT compression_settings_check_orderby_cardinality CHECK (array_ndims(orderby) = 1 AND array_ndims(orderby_desc) = 1 AND array_ndims(orderby_nullsfirst) = 1 AND cardinality(orderby) = cardinality(orderby_desc) AND cardinality(orderby) = cardinality(orderby_nullsfirst)),
+  CONSTRAINT compression_settings_check_codec_null CHECK ((codec_column IS NULL AND codec_opclass IS NULL) OR (codec_column IS NOT NULL AND codec_opclass IS NOT NULL)),
+  CONSTRAINT compression_settings_check_codec_cardinality CHECK (array_ndims(codec_column) = 1 AND array_ndims(codec_opclass) = 1 AND cardinality(codec_column) = cardinality(codec_opclass))
+);
+
+INSERT INTO _timescaledb_catalog.compression_settings
+SELECT
+    cs.relid,
+    cs.compress_relid,
+    cs.segmentby,
+    cs.orderby,
+    cs.orderby_desc,
+    cs.orderby_nullsfirst,
+    cs.index
+FROM
+    _timescaledb_catalog.tempsettings cs;
+
+DROP TABLE _timescaledb_catalog.tempsettings;
+
+CREATE INDEX compression_settings_compress_relid_idx ON _timescaledb_catalog.compression_settings (compress_relid);
+
+GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
