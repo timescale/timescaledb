@@ -828,6 +828,13 @@ SELECT wait_application_pid('test_job_3_long') IS NOT NULL ;
 ----------
  t
 
+-- The scheduler logs the new worker only after it sees the job start, so
+-- wait until it has logged that and gone back to waiting
+SELECT test.wait_for_log('DB Scheduler', '[TESTING] Wait until%');
+ wait_for_log 
+--------------
+ t
+
 SELECT pg_terminate_backend(wait_application_pid('DB Scheduler Test'));
  pg_terminate_backend 
 ----------------------

@@ -55,8 +55,10 @@ select :'next_start_short'::timestamptz - :'initial_start_given'::timestamptz as
 select test.wait_for_job_to_run(:long_job_fixed, 1);
 
 select initial_start as initial_start_long from timescaledb_information.jobs where job_id = :long_job_fixed \gset
+-- The next run can start right after a run finishes, and starting a run
+-- resets last_finish and next_start. Read them only from a finished run.
 select last_finish as last_finish_long, next_start as next_start_long
-from _timescaledb_internal.bgw_job_stat where job_id = :long_job_fixed \gset
+from test.wait_for_finished_run(:long_job_fixed) \gset
 -- The run took longer than the schedule interval, so the next start skips the
 -- slots it ran over and is the first slot after the run finished
 select :'next_start_long'::timestamptz - :'initial_start_long'::timestamptz > INTERVAL '1 second' as skipped_slot,

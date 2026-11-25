@@ -153,7 +153,7 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner, Jsonb *config)
 	}
 
 	TSSecurityContext sctx;
-	ts_security_context_enter(owner, &sctx);
+	ts_security_context_enter(owner, 0, &sctx);
 
 	job_execute_function(funcexpr);
 
@@ -1241,6 +1241,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		ts_begin_tss_store_callback(&tss_scope);
 	}
 
+	ts_bgw_job_execution_begin();
+
 	PG_TRY();
 	{
 		/*
@@ -1318,6 +1320,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		PopActiveSnapshot();
 		CommitTransactionCommand();
+		ts_bgw_job_execution_end();
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
@@ -1354,6 +1357,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	PopActiveSnapshot();
 	CommitTransactionCommand();
+	ts_bgw_job_execution_end();
 
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, start);

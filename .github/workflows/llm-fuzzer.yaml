@@ -253,7 +253,9 @@ jobs:
     - name: LLM Fuzzing
       id: llm-fuzzing
       env:
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        ANTHROPIC_BASE_URL: https://api.concentrate.ai
+        ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+        ANTHROPIC_API_KEY: ""
         EVENT_WHAT: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
         EVENT_BRANCH: ${{ github.head_ref || github.ref_name }}
         EVENT_BASE: ${{ github.base_ref || format('{0}~', github.ref_name) }}

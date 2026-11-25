@@ -413,6 +413,9 @@ SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', I
 
 SELECT ts_bgw_db_scheduler_test_run(500);
 SELECT wait_application_pid('test_job_3_long') IS NOT NULL ;
+-- The scheduler logs the new worker only after it sees the job start, so
+-- wait until it has logged that and gone back to waiting
+SELECT test.wait_for_log('DB Scheduler', '[TESTING] Wait until%');
 SELECT pg_terminate_backend(wait_application_pid('DB Scheduler Test'));
 
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
@@ -777,7 +780,7 @@ initial_start => :'init'::timestamptz + interval '5 ms', timezone => 'Europe/Ath
 select * from _timescaledb_catalog.bgw_job;
 -- now wait for scheduler to run the policies
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
-SELECT * from _timescaledb_internal.bgw_job_stat;
+SELECT * from _timescaledb_internal.bgw_job_stat ORDER BY job_id;
 
 SELECT show_chunks('test_table_scheduler');
 select hypertable_schema, hypertable_name, chunk_schema, chunk_name, is_compressed from timescaledb_information.chunks ;

@@ -212,18 +212,14 @@ BEGIN
         numchunks_compressed := numchunks_compressed + 1;
       END IF;
     EXCEPTION WHEN OTHERS THEN
-      -- The chunk can be dropped while the policy runs, for example by a
-      -- retention policy. Don't report those as failures.
-      IF EXISTS (SELECT FROM _timescaledb_catalog.chunk ch WHERE ch.relid = chunk_rec.oid) THEN
-        GET STACKED DIAGNOSTICS
-            _message = MESSAGE_TEXT,
-            _detail = PG_EXCEPTION_DETAIL,
-            _sqlstate = RETURNED_SQLSTATE;
-        RAISE WARNING 'converting chunk "%" to columnstore failed when recompress columnstore policy is executed', chunk_rec.oid::regclass::text
-            USING DETAIL = pg_catalog.format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = _sqlstate;
-        chunks_failure := chunks_failure + 1;
-      END IF;
+      GET STACKED DIAGNOSTICS
+          _message = MESSAGE_TEXT,
+          _detail = PG_EXCEPTION_DETAIL,
+          _sqlstate = RETURNED_SQLSTATE;
+      RAISE WARNING 'converting chunk "%" to columnstore failed when recompress columnstore policy is executed', chunk_rec.oid::regclass::text
+          USING DETAIL = pg_catalog.format('Message: (%s), Detail: (%s).', _message, _detail),
+                ERRCODE = _sqlstate;
+      chunks_failure := chunks_failure + 1;
     END;
     COMMIT;
 

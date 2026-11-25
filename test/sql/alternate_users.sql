@@ -101,3 +101,16 @@ INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 SELECT * FROM hypertable_su;
 CREATE INDEX ON hypertable_su (time, temp);
 ALTER TABLE hypertable_su ADD COLUMN val2 integer;
+
+-- database owner cannot turn a table of another role into a hypertable
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE dbowner_plain_su(time timestamptz NOT NULL, temp float);
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('dbowner_plain_su', 'time');
+\set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;

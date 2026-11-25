@@ -1,0 +1,1 @@
+Fixes: #11136 Do not use search_path for chunk constraint operators

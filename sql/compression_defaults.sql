@@ -3,21 +3,17 @@
 -- LICENSE-APACHE for a copy of the license.
 
 
--- This function return a jsonb with the following keys:
--- - columns: an array of column names that shold be used for segment by
--- - confidence: a number between 0 and 10 (most confident) indicating how sure we are.
--- - message: a message that should be displayed to the user to evaluate the result.
+-- This function returns the column names that should be used for segment by.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_segmentby_defaults(
     relation regclass
 )
-    RETURNS JSONB LANGUAGE PLPGSQL AS
+    RETURNS TEXT[] LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     _table_name NAME;
     _schema_name NAME;
     _hypertable_row _timescaledb_catalog.hypertable;
     _segmentby NAME;
-    _cnt int;
 BEGIN
     SELECT n.nspname, c.relname INTO STRICT _schema_name, _table_name
     FROM pg_class c
@@ -74,7 +70,7 @@ BEGIN
     LIMIT 1;
 
     IF FOUND THEN
-        return json_build_object('columns', json_build_array(_segmentby), 'confidence', 10);
+        return array[_segmentby::text];
     END IF;
 
 
@@ -120,7 +116,7 @@ BEGIN
     LIMIT 1;
 
     IF FOUND THEN
-        return json_build_object('columns', json_build_array(_segmentby), 'confidence', 8);
+        return array[_segmentby::text];
     END IF;
 
     --STEP 3 if column stats exist but there are no indexes
@@ -153,7 +149,7 @@ BEGIN
     LIMIT 1;
 
     IF FOUND THEN
-        return json_build_object('columns', json_build_array(_segmentby), 'confidence', 7);
+        return array[_segmentby::text];
     END IF;
 
     --STEP 4 if column stats do not exist use non-unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
@@ -190,10 +186,7 @@ BEGIN
     LIMIT 1;
 
     IF FOUND THEN
-        return json_build_object(
-            'columns', json_build_array(_segmentby),
-            'confidence', 5,
-            'message',  'Please make sure '|| _segmentby||' is not a unique column and appropriate for a segment by');
+        return array[_segmentby::text];
     END IF;
 
     --STEP 5 if column stats do not exist and no non-unique indexes, use unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
@@ -230,63 +223,19 @@ BEGIN
     LIMIT 1;
 
     IF FOUND THEN
-            return json_build_object(
-            'columns', json_build_array(_segmentby),
-            'confidence', 5,
-            'message',  'Please make sure '|| _segmentby||' is not a unique column and appropriate for a segment by');
+            return array[_segmentby::text];
     END IF;
 
 
-    --are there any indexed columns that are not dimemsions and are not serial/identity?
-    with index_attr as (
-        SELECT
-        a.attnum, min(a.pos) as pos
-        FROM
-            (select indkey, indnkeyatts from pg_catalog.pg_index where indisunique and indrelid = relation) i
-        INNER JOIN LATERAL
-            (select * from unnest(i.indkey) with ordinality) a(attnum, pos) ON (TRUE)
-        WHERE a.pos <= i.indnkeyatts
-        GROUP BY 1
-    )
-    SELECT
-      count(*) INTO STRICT _cnt
-    FROM
-      index_attr i
-    INNER JOIN
-      pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
-    INNER JOIN
-      pg_type t ON t.oid = a.atttypid
-    LEFT JOIN
-      pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
-    WHERE
-      a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
-      AND a.attidentity = '' AND (ad.adbin IS NULL OR pg_get_expr(adbin, adrelid) not like 'nextval%')
-      AND t.typcategory NOT IN ('D');
-
-    IF _cnt > 0 THEN
-        --there are many potential candidates. We do not have enough information to choose one.
-        return json_build_object(
-            'columns', json_build_array(),
-            'confidence', 0,
-            'message',  'Several columns are potential segment by candidates and we do not have enough information to choose one. Please use the segment_by option to explicitly specify the segment_by column');
-    ELSE
-        --there are no potential candidates. There is a good chance no segment by is the correct choice.
-        return json_build_object(
-            'columns', json_build_array(),
-            'confidence', 5,
-            'message',  'You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes');
-    END IF;
+    return array[]::text[];
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
--- This function return a jsonb with the following keys:
--- - clauses: an array of column names and sort order key words that shold be used for order by.
--- - confidence: a number between 0 and 10 (most confident) indicating how sure we are.
--- - message: a message that should be shown to the user to evaluate the result.
+-- This function returns the column names and sort order key words that should be used for order by.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_orderby_defaults(
     relation regclass, segment_by_cols text[]
 )
-    RETURNS JSONB LANGUAGE PLPGSQL AS
+    RETURNS TEXT[] LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     _table_name NAME;
@@ -296,7 +245,6 @@ DECLARE
     _dimension_names NAME[];
     _first_index_attrs NAME[];
     _orderby_clauses text[];
-    _confidence int;
 BEGIN
     SELECT n.nspname, c.relname INTO STRICT _schema_name, _table_name
     FROM pg_class c
@@ -328,12 +276,9 @@ BEGIN
 
     if _orderby_names is null then
         _orderby_names := array[]::name[];
-        _confidence := 5;
-    else
-        _confidence := 8;
     end if;
 
-    --add dimension colomns to the end. A dimension column like time should probably always be part of the order by.
+    --add dimension columns to the end. A dimension column like time should probably always be part of the order by.
     SELECT
       array_agg(d.column_name) INTO _dimension_names
     FROM _timescaledb_catalog.dimension d
@@ -378,6 +323,6 @@ BEGIN
     LEFT JOIN _timescaledb_catalog.dimension d ON (d.column_name = a.colname AND d.hypertable_id = _hypertable_row.id);
 
 
-    return json_build_object('clauses', _orderby_clauses, 'confidence', _confidence);
+    return _orderby_clauses;
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;

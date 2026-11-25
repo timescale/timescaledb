@@ -474,7 +474,9 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 				bgw_register(NULL, scheduler_mctx);
 			}
 			StartTransactionCommand();
+			PushActiveSnapshot(GetTransactionSnapshot());
 			scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+			PopActiveSnapshot();
 			CommitTransactionCommand();
 			MemoryContextSwitchTo(scratch_mctx);
 			break;
