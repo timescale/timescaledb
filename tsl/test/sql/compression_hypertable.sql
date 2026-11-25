@@ -379,3 +379,16 @@ select count(distinct itag) from source_table;
 create table dest as select * from source_table;
 select count(distinct itag) from dest;
 drop table dest;
+
+
+-- Test handling of fixed-width by-reference types
+CREATE TABLE u (ts int NOT NULL, id uuid, iv interval, val int);
+SELECT create_hypertable('u', 'ts', chunk_time_interval => 1000);
+ALTER TABLE u SET (timescaledb.compress,
+    timescaledb.compress_segmentby = 'id, iv', timescaledb.compress_orderby = 'ts');
+INSERT INTO u SELECT x, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', '1 day 2 hours', x
+FROM generate_series(1, 5) x;
+SELECT compress_chunk(c) FROM show_chunks('u') c;
+CREATE TABLE u_copy AS SELECT * FROM u;
+SELECT * FROM u_copy ORDER BY ts;
+

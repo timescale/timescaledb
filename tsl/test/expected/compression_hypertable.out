@@ -761,3 +761,29 @@ select count(distinct itag) from dest;
      5
 
 drop table dest;
+-- Test handling of fixed-width by-reference types
+CREATE TABLE u (ts int NOT NULL, id uuid, iv interval, val int);
+SELECT create_hypertable('u', 'ts', chunk_time_interval => 1000);
+ create_hypertable 
+-------------------
+ (10,public,u,t)
+
+ALTER TABLE u SET (timescaledb.compress,
+    timescaledb.compress_segmentby = 'id, iv', timescaledb.compress_orderby = 'ts');
+INSERT INTO u SELECT x, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', '1 day 2 hours', x
+FROM generate_series(1, 5) x;
+SELECT compress_chunk(c) FROM show_chunks('u') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_10_62_chunk
+
+CREATE TABLE u_copy AS SELECT * FROM u;
+SELECT * FROM u_copy ORDER BY ts;
+ ts |                  id                  |       iv        | val 
+----+--------------------------------------+-----------------+-----
+  1 | a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11 | @ 1 day 2 hours |   1
+  2 | a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11 | @ 1 day 2 hours |   2
+  3 | a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11 | @ 1 day 2 hours |   3
+  4 | a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11 | @ 1 day 2 hours |   4
+  5 | a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11 | @ 1 day 2 hours |   5
+

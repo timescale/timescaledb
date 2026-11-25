@@ -173,19 +173,19 @@ get_max_varlena_bytes(ArrowArray *text_array)
 }
 
 static void
-decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnull, int value_bytes)
+decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnull, bool by_value)
 {
 	column->decompression_type = DT_Scalar;
 	column->storage.scalar.isnull = isnull;
 	column->storage.scalar.value = value;
 
-	if (value_bytes < 0)
+	if (by_value)
 	{
-		column->by_ref_output_storage = DatumGetPointer(value);
+		column->by_ref_output_storage = NULL;
 	}
 	else
 	{
-		column->by_ref_output_storage = NULL;
+		column->by_ref_output_storage = DatumGetPointer(value);
 	}
 
 	*column->output_isnull = isnull;
@@ -253,8 +253,6 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const int value_bytes = get_typlen(column_description->typid);
-	Assert(value_bytes != 0);
 
 	bool isnull;
 	Datum value = slot_getattr(compressed_slot, column_description->compressed_scan_attno, &isnull);
@@ -274,7 +272,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		Datum value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
 									 column_description->uncompressed_chunk_attno,
 									 &isnull);
-		decompress_scalar_column(column_values, value, isnull, value_bytes);
+		decompress_scalar_column(column_values, value, isnull, column_description->by_value);
 		return;
 	}
 
@@ -288,7 +286,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	/* First check if this is a block of NULL values. */
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
-		decompress_scalar_column(column_values, (Datum) NULL, /* isnull = */ true, value_bytes);
+		decompress_scalar_column(column_values, (Datum) NULL, /* isnull = */ true, column_description->by_value);
 		return;
 	}
 
@@ -351,7 +349,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	compressed_column_values_from_arrow(column_values,
 										arrow,
 										column_description->typid,
-										value_bytes,
+										column_description->value_bytes,
 										batch_state->per_batch_context);
 }
 
@@ -1029,7 +1027,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				decompress_scalar_column(column_values,
 										 value,
 										 isnull,
-										 column_description->value_bytes);
+										 column_description->by_value);
 				break;
 			}
 			case COUNT_COLUMN:
