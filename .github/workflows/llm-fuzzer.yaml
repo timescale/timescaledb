@@ -16,8 +16,12 @@ env:
   PG_INSTALL_DIR: "postgresql"
   extra_packages: "clang-19 llvm-19 llvm-19-dev llvm-19-tools"
   CC: "clang-19"
-  CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
-  CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  # Clang 17 and later include the function type check in -fsanitize=undefined.
+  # PostgreSQL calls some functions through a pointer of a different type, for
+  # example string_compare in dynahash.c. With halt_on_error=1, each backend
+  # then stops at startup and initdb fails. Disable this check.
+  CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
 
   # We do not link libasan dynamically to avoid problems with libdl and our libraries.
   # clang does this by default, but we need to explicitly state that for gcc.
