@@ -258,7 +258,7 @@ jobs:
         EVENT_NAME: ${{ github.event_name }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         ORACLE_NAME: ${{ matrix.oracle }}
-      timeout-minutes: 90
+      timeout-minutes: 60
       run: |
         export PGDATABASE=postgres
 
@@ -269,7 +269,7 @@ jobs:
 
         rc=0
         claude -p --output-format stream-json --verbose \
-          --max-budget-usd 10.00 --dangerously-skip-permissions \
+          --max-budget-usd 15.00 --dangerously-skip-permissions \
           --model claude-opus-4-6[1m] --effort high \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
