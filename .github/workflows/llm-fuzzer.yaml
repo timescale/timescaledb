@@ -74,6 +74,7 @@ jobs:
       matrix:
         pg: ["${{ fromJson(needs.config.outputs.pg_latest) }}"]
         oracle: ["internal-error", "optimizations", "hypertable"]
+        ts_flags: ["-DCMAKE_BUILD_TYPE=RelWithDebInfo"]
         include:
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
