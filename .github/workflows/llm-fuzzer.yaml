@@ -224,7 +224,7 @@ jobs:
         set -o pipefail
         make -k -C build installcheck TESTS=vector_agg_text \
           | tee installcheck.log
-        grep 'vector_agg_text.*ok' installcheck.log
+        grep 'ok.*vector_agg_text' installcheck.log
 
     - name: Show regression diffs
       if: always()
