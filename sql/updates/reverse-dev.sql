@@ -66,3 +66,6 @@ DROP FUNCTION _timescaledb_functions.owner_validate(oid, text);
 
 ALTER TABLE _timescaledb_catalog.bgw_job DROP CONSTRAINT bgw_job_check;
 DROP FUNCTION _timescaledb_functions.bgw_job_validate(regrole, name, name, name, name);
+
+ALTER TABLE _timescaledb_catalog.continuous_agg DROP CONSTRAINT continuous_agg_check;
+DROP FUNCTION _timescaledb_functions.continuous_agg_validate(integer, integer, name, name, name, name, name, name);

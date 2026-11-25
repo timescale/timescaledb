@@ -216,3 +216,57 @@ BEGIN
   RETURN true;
 END
 $$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.continuous_agg_validate(_mat_hypertable_id integer, _raw_hypertable_id integer, _user_view_schema name, _user_view_name name, _partial_view_schema name, _partial_view_name name, _direct_view_schema name, _direct_view_name name)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE
+  _kinds text[] := ARRAY['user', 'partial', 'direct'];
+  _schemas name[] := ARRAY[_user_view_schema, _partial_view_schema, _direct_view_schema];
+  _names name[] := ARRAY[_user_view_name, _partial_view_name, _direct_view_name];
+  _relids oid[] := '{}';
+  _relid oid;
+  _relowner oid;
+  _owner oid;
+BEGIN
+  IF _mat_hypertable_id = _raw_hypertable_id THEN
+    RAISE EXCEPTION 'materialization hypertable with ID % is its own source', _mat_hypertable_id USING ERRCODE = 'TS601';
+  END IF;
+
+  SELECT c.relowner INTO _owner
+  FROM _timescaledb_catalog.hypertable h
+  JOIN pg_catalog.pg_namespace n ON n.nspname = h.schema_name
+  JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = h.table_name
+  WHERE h.id = _mat_hypertable_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'materialization hypertable with ID % does not exist', _mat_hypertable_id USING ERRCODE = 'TS601';
+  END IF;
+
+  FOR i IN 1..3 LOOP
+    SELECT c.oid INTO _relid
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = _schemas[i] AND c.relname = _names[i];
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION '% view "%.%" does not exist', _kinds[i], _schemas[i], _names[i] USING ERRCODE = 'TS601';
+    END IF;
+
+    _relowner := _timescaledb_functions.relation_validate(_relid, ARRAY['v']::"char"[], _kinds[i] || ' view');
+
+    IF _relid = ANY(_relids) THEN
+      RAISE EXCEPTION '% view "%.%" is used more than once', _kinds[i], _schemas[i], _names[i] USING ERRCODE = 'TS601';
+    END IF;
+
+    IF _relowner <> _owner THEN
+      RAISE EXCEPTION '% view "%.%" has a different owner than the materialization hypertable', _kinds[i], _schemas[i], _names[i] USING ERRCODE = 'TS601';
+    END IF;
+
+    _relids := _relids || _relid;
+  END LOOP;
+
+  PERFORM _timescaledb_functions.owner_validate(_owner, 'continuous aggregate owner');
+
+  RETURN true;
+END
+$$ SET search_path TO pg_catalog, pg_temp;
