@@ -605,9 +605,9 @@ SELECT started_at FROM rideshare_trips ORDER BY started_at DESC LIMIT 3;
           7
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
-                  relid                  |                   compress_relid                   |  segmentby   |   orderby    | orderby_desc | orderby_nullsfirst |                                                                 index                                                                 
------------------------------------------+----------------------------------------------------+--------------+--------------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------------------
- rideshare_trips                         |                                                    | {vehicle_id} | {started_at} | {t}          | {t}                | [{"type": "minmax", "column": "started_at", "source": "orderby"}, {"type": "firstlast", "column": "started_at", "source": "orderby"}]
- _timescaledb_internal._hyper_7_10_chunk | _timescaledb_internal._hyper_7_10_chunk_compressed | {vehicle_id} | {started_at} | {t}          | {t}                | [{"type": "minmax", "column": "started_at", "source": "orderby"}, {"type": "firstlast", "column": "started_at", "source": "orderby"}]
+                  relid                  |                   compress_relid                   |  segmentby   |   orderby    | orderby_desc | orderby_nullsfirst |                                                                 index                                                                 | codec_column | codec_opclass 
+-----------------------------------------+----------------------------------------------------+--------------+--------------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------------------+--------------+---------------
+ rideshare_trips                         |                                                    | {vehicle_id} | {started_at} | {t}          | {t}                | [{"type": "minmax", "column": "started_at", "source": "orderby"}, {"type": "firstlast", "column": "started_at", "source": "orderby"}] |              | 
+ _timescaledb_internal._hyper_7_10_chunk | _timescaledb_internal._hyper_7_10_chunk_compressed | {vehicle_id} | {started_at} | {t}          | {t}                | [{"type": "minmax", "column": "started_at", "source": "orderby"}, {"type": "firstlast", "column": "started_at", "source": "orderby"}] |              | 
 
 DROP TABLE IF EXISTS rideshare_trips CASCADE;
