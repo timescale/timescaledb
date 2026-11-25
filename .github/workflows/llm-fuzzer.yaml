@@ -124,16 +124,17 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
 
-    - name: Fetch base branch
+    - name: Fetch PR base branch
       if: github.event_name == 'pull_request'
       run: git fetch origin ${{ github.event.pull_request.base.ref }}
 
-    - name: Fetch main branch
-      run: git fetch origin main
-
-    - name: Fetch release branches
-      run: git fetch origin '+refs/heads/*.x:refs/remotes/origin/*.x'
+    - name: Fetch important branches and tags
+      run: |
+        git fetch origin main
+        git fetch origin '+refs/heads/*.x:refs/remotes/origin/*.x'
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
