@@ -18,18 +18,7 @@ name: LLM fuzzer
 env:
   extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
   CC: "clang-15"
-  # Clang 17 and later include the function type check in -fsanitize=undefined.
-  # PostgreSQL calls some functions through a pointer of a different type, for
-  # example string_compare in dynahash.c. Disable this check.
-  CFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
-  CXXFLAGS: "-march=armv8.2-a+crypto -g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
 
-  # We do not link libasan dynamically to avoid problems with libdl and our libraries.
-  # clang does this by default, but we need to explicitly state that for gcc.
-  # static gcc LDFLAGS
-  # LDFLAGS: "-fsanitize=address,undefined -static-libasan -static-liblsan -static-libubsan"
-  # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
-  LDFLAGS: "-fsanitize=address,undefined"
   ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt
     detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
@@ -88,10 +77,24 @@ jobs:
         include:
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
+
+            # Only the internal-error oracle uses debug + sanitizer builds. The because
+            # other oracles check for the classes of errors that reproduce even without
+            # additional instrumentation, so we can use release builds for them
+            # to speed things up.
+            #
+            # In sanitizer builds on clang >= 17, Postgres itself requires -fno-sanitize=function (upstream decision).
+            extra_cflags: "-g -fsanitize=address,undefined -fno-sanitize=function -fno-omit-frame-pointer -Og -fno-inline-functions"
+            pg_flags: "--enable-debug --enable-cassert"
+            ts_flags: "-DCMAKE_BUILD_TYPE=Debug"
+
           - oracle: "optimizations"
             display_name: "Optimizations ON-OFF"
+
           - oracle: "hypertable"
             display_name: "Hypertable ON-OFF"
+    env:
+        CFLAGS: "-march=armv8.2-a+crypto ${{ matrix.extra_cflags }}"
 
     steps:
     - name: Replace unreliable Azure APT mirror
@@ -177,8 +180,10 @@ jobs:
 
         cd build-pg
 
-        ../pg/configure --prefix="$(readlink -f ../install)" --enable-debug --enable-cassert \
-          --with-openssl --without-readline --without-zlib --without-libxml
+        ../pg/configure --prefix="$(readlink -f ../install)" \
+          --with-openssl --without-readline --without-zlib --without-libxml \
+          ${{ matrix.pg_flags }}
+
         make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${EXTENSIONS}; do
           make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
@@ -214,8 +219,9 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+        ./bootstrap -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            ${{ matrix.ts_flags }}
+
         make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
@@ -261,7 +267,7 @@ jobs:
         EVENT_NAME: ${{ github.event_name }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         ORACLE_NAME: ${{ matrix.oracle }}
-      timeout-minutes: 60
+      timeout-minutes: 90
       run: |
         export PGDATABASE=postgres
 
