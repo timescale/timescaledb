@@ -247,6 +247,56 @@ BEGIN
 END
 $$ SET search_path TO pg_catalog, pg_temp;
 
+-- Remove jobs whose owner no longer exists
+DELETE FROM _timescaledb_catalog.bgw_job j
+WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles r WHERE r.oid = j.owner);
+
+-- Validate job rows with a CHECK constraint
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bgw_job_validate(_owner regrole, _proc_schema name, _proc_name name, _check_schema name, _check_name name)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE
+  _prokind "char";
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles r WHERE r.oid = _owner) THEN
+    RAISE EXCEPTION 'job owner with OID % does not exist', _owner::oid USING ERRCODE = 'TS601';
+  END IF;
+
+  PERFORM _timescaledb_functions.owner_validate(_owner, 'job owner');
+
+  -- a missing job procedure is reported when the job runs
+  SELECT p.prokind INTO _prokind
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = _proc_schema AND p.proname = _proc_name
+    AND pg_catalog.oidvectortypes(p.proargtypes) = 'integer, jsonb';
+
+  IF FOUND AND _prokind NOT IN ('f', 'p') THEN
+    RAISE EXCEPTION 'job procedure "%.%" is not a function or procedure', _proc_schema, _proc_name USING ERRCODE = 'TS601';
+  END IF;
+
+  IF (_check_schema IS NULL) <> (_check_name IS NULL) THEN
+    RAISE EXCEPTION 'job check function needs both a schema and a name' USING ERRCODE = 'TS601';
+  END IF;
+
+  IF _check_name IS NULL THEN
+    RETURN true;
+  END IF;
+
+  -- a missing check function is skipped with a warning
+  SELECT p.prokind INTO _prokind
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = _check_schema AND p.proname = _check_name
+    AND pg_catalog.oidvectortypes(p.proargtypes) = 'jsonb';
+
+  IF FOUND AND _prokind <> 'f' THEN
+    RAISE EXCEPTION 'job check function "%.%" is not a function', _check_schema, _check_name USING ERRCODE = 'TS601';
+  END IF;
+
+  RETURN true;
+END
+$$ SET search_path TO pg_catalog, pg_temp;
+
 -- Add the CHECK constraints. A constraint that already exists is replaced.
 DO $$
 DECLARE
@@ -258,7 +308,8 @@ BEGIN
     ('_timescaledb_catalog.chunk'::regclass, 'chunk_check'::name, '_timescaledb_functions.chunk_validate(relid, hypertable_id)'),
     ('_timescaledb_catalog.compression_settings'::regclass, 'compression_settings_check_relid'::name, '_timescaledb_functions.compression_settings_validate(relid, compress_relid)'),
     ('_timescaledb_catalog.chunk_rewrite'::regclass, 'chunk_rewrite_check'::name, '_timescaledb_functions.chunk_rewrite_validate(chunk_relid, new_relid)'),
-    ('_timescaledb_catalog.hypertable'::regclass, 'hypertable_check'::name, '_timescaledb_functions.hypertable_validate(id, schema_name, table_name, associated_schema_name)')
+    ('_timescaledb_catalog.hypertable'::regclass, 'hypertable_check'::name, '_timescaledb_functions.hypertable_validate(id, schema_name, table_name, associated_schema_name)'),
+    ('_timescaledb_catalog.bgw_job'::regclass, 'bgw_job_check'::name, '_timescaledb_functions.bgw_job_validate(owner, proc_schema, proc_name, check_schema, check_name)')
   LOOP
     EXECUTE pg_catalog.format('ALTER TABLE %s DROP CONSTRAINT IF EXISTS %I, ADD CONSTRAINT %I CHECK (%s)', _rel, _name, _name, _expr);
   END LOOP;

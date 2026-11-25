@@ -63,3 +63,6 @@ DROP FUNCTION _timescaledb_functions.hypertable_validate(integer, name, name, na
 
 DROP FUNCTION _timescaledb_functions.relation_validate(oid, "char"[], text);
 DROP FUNCTION _timescaledb_functions.owner_validate(oid, text);
+
+ALTER TABLE _timescaledb_catalog.bgw_job DROP CONSTRAINT bgw_job_check;
+DROP FUNCTION _timescaledb_functions.bgw_job_validate(regrole, name, name, name, name);

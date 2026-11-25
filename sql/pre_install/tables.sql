@@ -241,7 +241,8 @@ CREATE TABLE _timescaledb_catalog.bgw_job (
   timezone text,
   -- table constraints
   CONSTRAINT bgw_job_pkey PRIMARY KEY (id),
-  CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+  CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT bgw_job_check CHECK (_timescaledb_functions.bgw_job_validate(owner, proc_schema, proc_name, check_schema, check_name))
 );
 
 ALTER SEQUENCE _timescaledb_catalog.bgw_job_id_seq OWNED BY _timescaledb_catalog.bgw_job.id;

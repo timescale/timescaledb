@@ -171,3 +171,48 @@ BEGIN
   RETURN true;
 END
 $$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bgw_job_validate(_owner regrole, _proc_schema name, _proc_name name, _check_schema name, _check_name name)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE
+  _prokind "char";
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles r WHERE r.oid = _owner) THEN
+    RAISE EXCEPTION 'job owner with OID % does not exist', _owner::oid USING ERRCODE = 'TS601';
+  END IF;
+
+  PERFORM _timescaledb_functions.owner_validate(_owner, 'job owner');
+
+  -- a missing job procedure is reported when the job runs
+  SELECT p.prokind INTO _prokind
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = _proc_schema AND p.proname = _proc_name
+    AND pg_catalog.oidvectortypes(p.proargtypes) = 'integer, jsonb';
+
+  IF FOUND AND _prokind NOT IN ('f', 'p') THEN
+    RAISE EXCEPTION 'job procedure "%.%" is not a function or procedure', _proc_schema, _proc_name USING ERRCODE = 'TS601';
+  END IF;
+
+  IF (_check_schema IS NULL) <> (_check_name IS NULL) THEN
+    RAISE EXCEPTION 'job check function needs both a schema and a name' USING ERRCODE = 'TS601';
+  END IF;
+
+  IF _check_name IS NULL THEN
+    RETURN true;
+  END IF;
+
+  -- a missing check function is skipped with a warning
+  SELECT p.prokind INTO _prokind
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = _check_schema AND p.proname = _check_name
+    AND pg_catalog.oidvectortypes(p.proargtypes) = 'jsonb';
+
+  IF FOUND AND _prokind <> 'f' THEN
+    RAISE EXCEPTION 'job check function "%.%" is not a function', _check_schema, _check_name USING ERRCODE = 'TS601';
+  END IF;
+
+  RETURN true;
+END
+$$ SET search_path TO pg_catalog, pg_temp;

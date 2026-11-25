@@ -161,3 +161,61 @@ SET LOCAL ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT pg_has_role('check_set_owner', 'USAGE');
 SELECT _timescaledb_functions.compression_settings_validate('check_set', NULL);
 ROLLBACK;
+
+-- jobs
+CREATE PROCEDURE check_job(job_id int, config jsonb) LANGUAGE plpgsql AS $$ BEGIN END $$;
+CREATE FUNCTION check_job_config(config jsonb) RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;
+CREATE PROCEDURE check_job_config_proc(config jsonb) LANGUAGE plpgsql AS $$ BEGIN END $$;
+CREATE FUNCTION check_job_sfunc(int, int, jsonb) RETURNS int LANGUAGE sql AS 'SELECT 1';
+CREATE AGGREGATE check_job_agg(int, jsonb) (SFUNC = check_job_sfunc, STYPE = int);
+CREATE ROLE check_job_owner;
+GRANT INSERT, UPDATE ON _timescaledb_catalog.bgw_job TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SEQUENCE _timescaledb_catalog.bgw_job_id_seq TO :ROLE_DEFAULT_PERM_USER;
+
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.bgw_job'::regclass AND contype = 'c';
+
+-- valid values are accepted
+INSERT INTO _timescaledb_catalog.bgw_job (application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, check_schema, check_name)
+VALUES ('check_job', '1h', '1h', 0, '1h', 'public', 'check_job', :'ROLE_DEFAULT_PERM_USER', 'public', 'check_job_config') RETURNING id AS job_id \gset
+-- a job procedure or check function that does not exist is accepted
+BEGIN;
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'check_missing', check_name = 'check_missing' WHERE id = :job_id;
+ROLLBACK;
+
+\set ON_ERROR_STOP 0
+-- invalid job owner
+UPDATE _timescaledb_catalog.bgw_job SET owner = 4000000000::oid::regrole WHERE id = :job_id;
+-- invalid job procedure
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'check_job_agg' WHERE id = :job_id;
+-- invalid check functions
+UPDATE _timescaledb_catalog.bgw_job SET check_name = 'check_job_config_proc' WHERE id = :job_id;
+UPDATE _timescaledb_catalog.bgw_job SET check_name = NULL WHERE id = :job_id;
+UPDATE _timescaledb_catalog.bgw_job SET check_schema = NULL WHERE id = :job_id;
+-- a role can only write jobs of owners it has the privileges of
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+UPDATE _timescaledb_catalog.bgw_job SET owner = :'ROLE_SUPERUSER' WHERE id = :job_id;
+INSERT INTO _timescaledb_catalog.bgw_job (application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner)
+VALUES ('check_job', '1h', '1h', 0, '1h', 'public', 'check_job', :'ROLE_SUPERUSER');
+UPDATE _timescaledb_catalog.bgw_job SET owner = 'check_job_owner' WHERE id = :job_id;
+\set ON_ERROR_STOP 1
+UPDATE _timescaledb_catalog.bgw_job SET scheduled = false WHERE id = :job_id;
+RESET ROLE;
+
+-- the database owner can only write jobs of owners it has the privileges of
+SELECT datdba::regrole AS db_owner FROM pg_database WHERE datname = current_database() \gset
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.bgw_job SET owner = 'check_job_owner' WHERE id = :job_id;
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT check_job_owner TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+UPDATE _timescaledb_catalog.bgw_job SET owner = 'check_job_owner' WHERE id = :job_id;
+RESET ROLE;
+REVOKE check_job_owner FROM :ROLE_DEFAULT_PERM_USER;
+ALTER DATABASE :TEST_DBNAME OWNER TO :db_owner;
+
+DELETE FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
+DROP ROLE check_job_owner;

@@ -22,6 +22,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.align_to_bucket(interval,anyrange)
  _timescaledb_functions.alter_job_set_hypertable_id(integer,regclass)
  _timescaledb_functions.attach_osm_table_chunk(regclass,regclass)
+ _timescaledb_functions.bgw_job_validate(regrole,name,name,name,name)
  _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1,anyarray)
  _timescaledb_functions.bloom1_contains_any_hashes(_timescaledb_internal.bloom1,bigint[])
  _timescaledb_functions.bloom1_hash(anyelement)
