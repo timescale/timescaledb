@@ -105,6 +105,7 @@ CREATE TABLE _timescaledb_catalog.dimension (
   CONSTRAINT dimension_check2 CHECK ((integer_now_func_schema IS NULL AND integer_now_func IS NULL) OR (integer_now_func_schema IS NOT NULL AND integer_now_func IS NOT NULL)),
   CONSTRAINT dimension_interval_length_check CHECK (interval_length IS NULL OR interval_length > 0),
   CONSTRAINT dimension_compress_interval_length_check CHECK (compress_interval_length IS NULL OR compress_interval_length > 0),
+  CONSTRAINT dimension_validate_check CHECK (_timescaledb_functions.dimension_validate(hypertable_id, column_name, column_type, num_slices, partitioning_func_schema, partitioning_func, integer_now_func_schema, integer_now_func)),
   CONSTRAINT dimension_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 

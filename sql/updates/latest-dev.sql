@@ -359,6 +359,84 @@ BEGIN
 END
 $$ SET search_path TO pg_catalog, pg_temp;
 
+-- Validate dimension rows with a CHECK constraint
+CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_validate(_hypertable_id integer, _column_name name, _column_type regtype, _num_slices smallint, _partitioning_func_schema name, _partitioning_func name, _integer_now_func_schema name, _integer_now_func name)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE
+  _relid oid;
+  _owner oid;
+  _coltype oid;
+  _funcid oid;
+  _found boolean := false;
+BEGIN
+  SELECT c.oid, c.relowner INTO _relid, _owner
+  FROM _timescaledb_catalog.hypertable h
+  JOIN pg_catalog.pg_namespace n ON n.nspname = h.schema_name
+  JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = h.table_name
+  WHERE h.id = _hypertable_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'hypertable with ID % of dimension "%" does not exist', _hypertable_id, _column_name USING ERRCODE = 'TS601';
+  END IF;
+
+  PERFORM _timescaledb_functions.owner_validate(_owner, 'table owner');
+
+  SELECT a.atttypid INTO _coltype
+  FROM pg_catalog.pg_attribute a
+  WHERE a.attrelid = _relid AND a.attname = _column_name AND a.attnum > 0 AND NOT a.attisdropped;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'dimension column "%" does not exist in hypertable "%"', _column_name, _relid::regclass USING ERRCODE = 'TS601';
+  END IF;
+
+  IF _coltype <> _column_type THEN
+    RAISE EXCEPTION 'dimension column "%" does not have type "%"', _column_name, _column_type USING ERRCODE = 'TS601';
+  END IF;
+
+  -- functions must be executable by the table owner
+  -- a closed dimension has slices and an open dimension has an interval
+  IF _partitioning_func IS NOT NULL THEN
+    FOR _funcid IN
+      SELECT p.oid
+      FROM pg_catalog.pg_proc p
+      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = _partitioning_func_schema AND p.proname = _partitioning_func
+        AND p.pronargs = 1 AND p.provolatile = 'i' AND p.prokind = 'f'
+        AND (p.proargtypes[0] = _coltype OR p.proargtypes[0] = 'anyelement'::regtype)
+        AND CASE WHEN _num_slices IS NOT NULL THEN
+            p.prorettype = 'int4'::regtype
+          ELSE
+            p.prorettype::regtype IN ('int2', 'int4', 'int8', 'timestamp', 'timestamptz', 'date', 'uuid')
+            OR EXISTS (SELECT FROM pg_catalog.pg_cast ca WHERE ca.castsource = p.prorettype AND ca.casttarget = 'int8'::regtype AND ca.castmethod = 'b')
+          END
+    LOOP
+      _found := true;
+      IF NOT pg_catalog.has_function_privilege(_owner, _funcid, 'EXECUTE') THEN
+        RAISE EXCEPTION 'table owner "%" cannot execute partitioning function "%.%"', _owner::regrole, _partitioning_func_schema, _partitioning_func USING ERRCODE = 'TS601';
+      END IF;
+    END LOOP;
+
+    IF NOT _found THEN
+      RAISE EXCEPTION 'partitioning function "%.%" is not valid for dimension column "%"', _partitioning_func_schema, _partitioning_func, _column_name USING ERRCODE = 'TS601';
+    END IF;
+  END IF;
+
+  -- a missing integer now function is reported when it is used
+  IF _integer_now_func IS NOT NULL THEN
+    SELECT p.oid INTO _funcid
+    FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = _integer_now_func_schema AND p.proname = _integer_now_func AND p.pronargs = 0;
+
+    IF FOUND AND NOT pg_catalog.has_function_privilege(_owner, _funcid, 'EXECUTE') THEN
+      RAISE EXCEPTION 'table owner "%" cannot execute integer now function "%.%"', _owner::regrole, _integer_now_func_schema, _integer_now_func USING ERRCODE = 'TS601';
+    END IF;
+  END IF;
+
+  RETURN true;
+END
+$$ SET search_path TO pg_catalog, pg_temp;
+
 -- Add the CHECK constraints. A constraint that already exists is replaced.
 DO $$
 DECLARE
@@ -372,7 +450,8 @@ BEGIN
     ('_timescaledb_catalog.chunk_rewrite'::regclass, 'chunk_rewrite_check'::name, '_timescaledb_functions.chunk_rewrite_validate(chunk_relid, new_relid)'),
     ('_timescaledb_catalog.hypertable'::regclass, 'hypertable_check'::name, '_timescaledb_functions.hypertable_validate(id, schema_name, table_name, associated_schema_name)'),
     ('_timescaledb_catalog.bgw_job'::regclass, 'bgw_job_check'::name, '_timescaledb_functions.bgw_job_validate(owner, proc_schema, proc_name, check_schema, check_name)'),
-    ('_timescaledb_catalog.continuous_agg'::regclass, 'continuous_agg_check'::name, '_timescaledb_functions.continuous_agg_validate(mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name)')
+    ('_timescaledb_catalog.continuous_agg'::regclass, 'continuous_agg_check'::name, '_timescaledb_functions.continuous_agg_validate(mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name)'),
+    ('_timescaledb_catalog.dimension'::regclass, 'dimension_validate_check'::name, '_timescaledb_functions.dimension_validate(hypertable_id, column_name, column_type, num_slices, partitioning_func_schema, partitioning_func, integer_now_func_schema, integer_now_func)')
   LOOP
     EXECUTE pg_catalog.format('ALTER TABLE %s DROP CONSTRAINT IF EXISTS %I, ADD CONSTRAINT %I CHECK (%s)', _rel, _name, _name, _expr);
   END LOOP;

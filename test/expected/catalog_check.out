@@ -277,3 +277,78 @@ REVOKE check_job_owner FROM :ROLE_DEFAULT_PERM_USER;
 ALTER DATABASE :TEST_DBNAME OWNER TO :db_owner;
 DELETE FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
 DROP ROLE check_job_owner;
+-- dimensions
+CREATE TABLE check_dim(time bigint NOT NULL, device int, value int);
+SELECT FROM create_hypertable('check_dim', 'time', 'device', 2, chunk_time_interval => 10);
+--
+
+ALTER TABLE check_dim OWNER TO :ROLE_DEFAULT_PERM_USER;
+SELECT id AS dim_ht FROM _timescaledb_catalog.hypertable WHERE table_name = 'check_dim' \gset
+CREATE FUNCTION check_part(int) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT $1';
+CREATE FUNCTION check_part_volatile(int) RETURNS int LANGUAGE sql AS 'SELECT $1';
+CREATE FUNCTION check_part_revoked(int) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT $1';
+CREATE FUNCTION check_now() RETURNS bigint LANGUAGE sql STABLE AS 'SELECT 1::bigint';
+CREATE FUNCTION check_now_revoked() RETURNS bigint LANGUAGE sql STABLE AS 'SELECT 1::bigint';
+REVOKE EXECUTE ON FUNCTION check_part_revoked(int), check_now_revoked() FROM PUBLIC;
+GRANT UPDATE ON _timescaledb_catalog.dimension TO :ROLE_DEFAULT_PERM_USER;
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.dimension'::regclass AND conname = 'dimension_validate_check';
+         conname          
+--------------------------
+ dimension_validate_check
+
+-- valid values are accepted
+BEGIN;
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+UPDATE _timescaledb_catalog.dimension SET integer_now_func_schema = 'public', integer_now_func = 'check_now' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+-- an integer now function that does not exist is accepted
+UPDATE _timescaledb_catalog.dimension SET integer_now_func_schema = 'public', integer_now_func = 'check_missing' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- invalid column
+UPDATE _timescaledb_catalog.dimension SET column_name = 'check_missing' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  dimension column "check_missing" does not exist in hypertable "public.check_dim"
+-- invalid partitioning functions
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_missing' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_missing" is not valid for dimension column "device"
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_volatile' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_part_volatile" is not valid for dimension column "device"
+-- functions that the table owner cannot execute
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_revoked' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  table owner "default_perm_user" cannot execute partitioning function "public.check_part_revoked"
+UPDATE _timescaledb_catalog.dimension SET integer_now_func_schema = 'public', integer_now_func = 'check_now_revoked' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ERROR:  table owner "default_perm_user" cannot execute integer now function "public.check_now_revoked"
+-- a role can only write dimensions of tables whose owner it has the privileges of
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+UPDATE _timescaledb_catalog.dimension SET aligned = true WHERE hypertable_id <> :dim_ht;
+ERROR:  role "default_perm_user" does not have the privileges of table owner "super_user"
+\set ON_ERROR_STOP 1
+UPDATE _timescaledb_catalog.dimension SET aligned = true WHERE hypertable_id = :dim_ht;
+RESET ROLE;
+-- partitioning functions must match the column type and the dimension type
+CREATE FUNCTION check_part_text(text) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT 1';
+CREATE FUNCTION check_part_bigint(int) RETURNS bigint LANGUAGE sql IMMUTABLE AS 'SELECT $1::bigint';
+CREATE FUNCTION check_part_bool(bigint) RETURNS bool LANGUAGE sql IMMUTABLE AS 'SELECT true';
+CREATE FUNCTION check_part_time(bigint) RETURNS bigint LANGUAGE sql IMMUTABLE AS 'SELECT $1';
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_text' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_part_text" is not valid for dimension column "device"
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_bigint' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_part_bigint" is not valid for dimension column "device"
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_bool' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ERROR:  partitioning function "public.check_part_bool" is not valid for dimension column "time"
+\set ON_ERROR_STOP 1
+BEGIN;
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_time' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ROLLBACK;
+-- an overload that does not match is ignored
+CREATE FUNCTION check_part(text) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT 1';
+REVOKE EXECUTE ON FUNCTION check_part(text) FROM PUBLIC;
+BEGIN;
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ROLLBACK;
+-- the column type must match the type of the column
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.dimension SET column_type = 'uuid' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ERROR:  dimension column "time" does not have type "uuid"
+\set ON_ERROR_STOP 1
