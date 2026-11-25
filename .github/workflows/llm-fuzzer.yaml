@@ -71,8 +71,6 @@ jobs:
   fuzzer:
     if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
-    # runs-on: runs-on/fleet=linux-2cpu/env=ue1
-    # runs-on: ubuntu-latest
     runs-on: "timescaledb-runner-arm64"
     needs: config
     permissions:
@@ -153,8 +151,7 @@ jobs:
         path: |
           install
           pg
-        # key: "llm-fuzzer-postgres-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
-        key: "llm-fuzzer-FIXME-key"
+        key: "llm-fuzzer-postgres-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}
       if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
@@ -221,7 +218,6 @@ jobs:
 
     - name: make installcheck (smoke test)
       run: |
-        env
         set -o pipefail
         make -k -C build installcheck TESTS=compression \
           | tee installcheck.log
@@ -262,7 +258,7 @@ jobs:
         EVENT_NAME: ${{ github.event_name }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         ORACLE_NAME: ${{ matrix.oracle }}
-      timeout-minutes: 120
+      timeout-minutes: 90
       run: |
         export PGDATABASE=postgres
 

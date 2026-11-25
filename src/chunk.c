@@ -3459,7 +3459,6 @@ chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 void
 ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_id)
 {
-	/* LOOK HERE: does it properly convert all types? FIXME */
 	DimensionVec *slices;
 	ChunkScanCtx chunkctx;
 
