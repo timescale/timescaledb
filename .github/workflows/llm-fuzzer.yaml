@@ -72,11 +72,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: ["${{ fromJson(needs.config.outputs.pg_latest) }}"]
         oracle: ["internal-error", "optimizations", "hypertable"]
         include:
-          - ts_flags: "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+          # Default settings
+          - pg: "${{ fromJson(needs.config.outputs.pg_latest) }}"
+            ts_flags: "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
 
+          # IPE oracle settings
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
 
@@ -90,9 +92,11 @@ jobs:
             pg_flags: "--enable-debug --enable-cassert"
             ts_flags: "-DCMAKE_BUILD_TYPE=Debug"
 
+          # Optimizations ON-OFF oracle settings
           - oracle: "optimizations"
             display_name: "Optimizations ON-OFF"
 
+          # Hypertable ON-OFF oracle settings
           - oracle: "hypertable"
             display_name: "Hypertable ON-OFF"
 
