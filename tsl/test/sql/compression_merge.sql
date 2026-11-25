@@ -52,11 +52,12 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i',
 -- Verify we are not generating unordered chunks
 BEGIN;
   SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
+  -- Use the first chunk, which is one of the 10 hour chunks
   SELECT cs.compress_relid::text AS "CHUNK"
     FROM _timescaledb_catalog.compression_settings cs
     JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
     JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
-    WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
+    WHERE cs.compress_relid IS NOT NULL ORDER BY ch.id LIMIT 1 \gset
 
   -- We want to sure we are not fully recompressing them which will make
   -- the chunk contain multiple batches per segment group
@@ -77,7 +78,7 @@ BEGIN;
     FROM _timescaledb_catalog.compression_settings cs
     JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
     JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
-    WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
+    WHERE cs.compress_relid IS NOT NULL ORDER BY ch.id LIMIT 1 \gset
 
   -- Not using time as first column in orderby makes the merged chunks unordered
   -- We want to sure we are fully recompressing them which will make only

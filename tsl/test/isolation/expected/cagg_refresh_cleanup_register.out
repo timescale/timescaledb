@@ -82,7 +82,7 @@ user_view_name|start_time|end_time
 --------------+----------+--------
 
 
-starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_overlapping_refresh check_locks check_jobs L1_unlock check_locks check_jobs
+starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_overlapping_refresh check_locks check_jobs WP_after_register_enable L1_unlock WP_after_register_disable check_locks check_jobs
 step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
 debug_waitpoint_enable
 ----------------------
@@ -134,10 +134,20 @@ user_view_name|start_time                  |end_time
 --------------+----------------------------+----------------------------
 cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
+step WP_after_register_enable: SELECT debug_waitpoint_enable('cagg_refresh_after_register');
+debug_waitpoint_enable
+----------------------
+                      
+
 step L1_unlock: 
     COMMIT;
  <waiting ...>
 step R2_refresh: <... completed>
+step WP_after_register_disable: SELECT debug_waitpoint_release('cagg_refresh_after_register');
+debug_waitpoint_release
+-----------------------
+                       
+
 step R3_refresh: <... completed>
 step R4_overlapping_refresh: <... completed>
 ERROR:  could not refresh continuous aggregate "cond_daily" due to a concurrent refresh

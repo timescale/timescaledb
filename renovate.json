@@ -12,6 +12,12 @@
       "groupName": "dependencies",
       "schedule": ["on the first day of the month"],
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Reusable workflows from this repo intentionally track main, do not pin them",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["timescale/timescaledb"],
+      "pinDigests": false
     }
   ],
   "pinDigests": true

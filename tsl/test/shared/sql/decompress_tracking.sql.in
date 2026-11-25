@@ -37,12 +37,18 @@ BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d4'
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:30','d1',random()),('2020-01-01 1:30','d2',random())); ROLLBACK;
 
 -- test prepared statements EXPLAIN still works after execution
+-- The chunk size depends on whether dead rows from the rolled back
+-- statements above were pruned, so pin the scan type
 SET plan_cache_mode TO force_generic_plan;
+SET enable_indexscan TO off;
+SET enable_bitmapscan TO off;
 PREPARE p1 AS UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd1';
 BEGIN;
     EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
     EXECUTE p1;
     EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 ROLLBACK;
+RESET enable_indexscan;
+RESET enable_bitmapscan;
 
 DROP TABLE decompress_tracking;

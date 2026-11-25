@@ -79,6 +79,19 @@ step "s2_direct_update" {
     WHERE proc_name = 'test_job_proc_race';
 }
 
+# Update the job stats like a job worker does when a run ends
+step "s2_update_stat" {
+    BEGIN;
+    UPDATE _timescaledb_internal.bgw_job_stat s
+    SET total_runs = total_runs + 1
+    FROM _timescaledb_catalog.bgw_job j
+    WHERE j.id = s.job_id AND j.proc_name = 'test_job_proc_race';
+}
+
+step "s2_commit" {
+    COMMIT;
+}
+
 # Session s3 controls the debug waitpoint
 session "s3"
 setup {
@@ -93,7 +106,20 @@ step "s3_release_waitpoint" {
     SELECT debug_waitpoint_release('bgw_job_find_during_scan');
 }
 
+step "s3_enable_stat_waitpoint" {
+    SELECT debug_waitpoint_enable('bgw_job_stat_find_during_scan');
+}
+
+step "s3_release_stat_waitpoint" {
+    SELECT debug_waitpoint_release('bgw_job_stat_find_during_scan');
+}
+
 # This permutation triggers the race condition:
 # s1 pauses mid-scan, s2 updates the row, s1 resumes and sees duplicate tuple
 # Expected result: server crash due to assertion failure
 permutation "s3_enable_waitpoint" "s1_alter_job" "s2_direct_update" "s3_release_waitpoint"
+
+# The same race for the job stats. alter_job reads the job stats while a job
+# worker updates them. s1 finds the old row, then s2 commits the new one
+# before s1 continues the scan. s1 should see only one of them.
+permutation "s3_enable_stat_waitpoint" "s2_update_stat" "s1_alter_job" "s2_commit" "s3_release_stat_waitpoint"

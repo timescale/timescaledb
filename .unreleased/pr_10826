@@ -1,0 +1,1 @@
+Fixes: #10826 Classify background-job and intercepted COPY internals as nested statements

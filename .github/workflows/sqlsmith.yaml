@@ -7,8 +7,6 @@ name: SQLsmith
   push:
     branches:
       - sqlsmith
-      - main
-      - ?.*.x
   pull_request:
     paths: .github/workflows/sqlsmith.yaml
 

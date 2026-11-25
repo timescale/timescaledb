@@ -669,7 +669,6 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 {
 	Relation rel;
 	ObjectAddress address;
-	int sec_ctx;
 	char *amname = NULL;
 
 	amname = get_am_name(ts_get_rel_am(chunk->hypertable_relid));
@@ -706,7 +705,8 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 													0));
 	}
 
-	Oid saved_uid, owner;
+	Oid owner;
+	TSSecurityContext secctx;
 
 	Assert(chunk->hypertable_relid == ht->main_table_relid);
 
@@ -715,8 +715,6 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the parent hypertable */
 	stmt.relation->relpersistence = rel->rd_rel->relpersistence;
 	owner = rel->rd_rel->relowner;
-
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 
 	/* Prepare event trigger state and invoke ddl_command_start triggers */
 	if (ts_guc_enable_event_triggers)
@@ -751,17 +749,11 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *sche
 		create_toast_table(&stmt, address.objectId);
 
 		/* The inserting user may not own the chunk */
-		if (owner != saved_uid)
-		{
-			SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-		}
+		ts_security_context_enter(owner, 0, &secctx);
 
 		set_attoptions(rel, address.objectId);
 
-		if (owner != saved_uid)
-		{
-			SetUserIdAndSecContext(saved_uid, sec_ctx);
-		}
+		ts_security_context_exit(&secctx);
 	}
 	else
 	{
@@ -878,8 +870,7 @@ chunk_set_replica_identity(const Chunk *chunk)
 		.subtype = AT_ReplicaIdentity,
 	};
 	Oid owner = ch_rel->rd_rel->relowner;
-	Oid saved_uid;
-	int sec_ctx;
+	TSSecurityContext secctx;
 
 	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
 	{
@@ -905,16 +896,9 @@ chunk_set_replica_identity(const Chunk *chunk)
 	}
 
 	/* Run as the chunk owner since the inserting user may not own the chunk */
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-	}
+	ts_security_context_enter(owner, 0, &secctx);
 	ts_alter_table_with_event_trigger(chunk->fd.relid, NULL, list_make1(&cmd), false);
-	if (saved_uid != owner)
-	{
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-	}
+	ts_security_context_exit(&secctx);
 	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
 }

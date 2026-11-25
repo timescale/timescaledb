@@ -13,6 +13,10 @@ jobs:
   check_approvals:
     name: Check for sufficient approvals
     runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,3 +80,14 @@ jobs:
             fi
             exit 1
           fi
+
+      # A review does not re-run the check of the pull_request event
+      - name: Re-run failed check of the pull_request event
+        if: github.event_name == 'pull_request_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run list --workflow pr-approvals.yaml --event pull_request --limit 1 \
+            --commit ${{ github.event.pull_request.head.sha }} --json databaseId,conclusion \
+            --jq '.[] | select(.conclusion == "failure") | .databaseId' |
+            xargs -r gh run rerun --failed || true
