@@ -286,7 +286,10 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	/* First check if this is a block of NULL values. */
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
-		decompress_scalar_column(column_values, (Datum) NULL, /* isnull = */ true, column_description->by_value);
+		decompress_scalar_column(column_values,
+								 (Datum) NULL,
+								 /* isnull = */ true,
+								 column_description->by_value);
 		return;
 	}
 
