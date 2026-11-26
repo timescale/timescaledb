@@ -15,6 +15,13 @@ FROM pg_get_wal_records_info(:'lsn1', pg_current_wal_insert_lsn())
 ORDER BY start_lsn;
 */
 
+-- CREATE EXTENSION changes enough catalog rows to trigger autoanalyze.
+-- An autoanalyze running during the test delays catalog pruning into
+-- the statements below and changes their WAL counts.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+VACUUM ANALYZE;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 -- test WAL output of direct compressed insert
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
