@@ -2979,3 +2979,30 @@ ERROR:  expected column '_ts_meta_count' to be a compressed data type
 \set ON_ERROR_STOP 1
 drop table t_addcol cascade;
 drop FUNCTION test_has_proper_errcode cascade;
+-- SET NOT NULL on a column that got its default after it was added
+CREATE TABLE test_notnull_default(time timestamptz NOT NULL, value int) WITH (tsdb.hypertable, tsdb.orderby='time');
+INSERT INTO test_notnull_default VALUES ('2025-01-01 00:00:00+00', 1);
+SELECT count(compress_chunk(c)) FROM show_chunks('test_notnull_default') c;
+ count 
+-------
+     1
+
+ALTER TABLE test_notnull_default ADD COLUMN c1 int;
+ALTER TABLE test_notnull_default ALTER COLUMN c1 SET DEFAULT 5;
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull_default ALTER COLUMN c1 SET NOT NULL;
+ERROR:  column "c1" of relation "_hyper_36_130_chunk" contains null values
+\set ON_ERROR_STOP 1
+ALTER TABLE test_notnull_default ADD COLUMN c2 int DEFAULT 7;
+ALTER TABLE test_notnull_default ALTER COLUMN c2 SET NOT NULL;
+SELECT count(decompress_chunk(c)) FROM show_chunks('test_notnull_default') c;
+ count 
+-------
+     1
+
+SELECT value, c1, c2 FROM test_notnull_default;
+ value | c1 | c2 
+-------+----+----
+     1 |    |  7
+
+DROP TABLE test_notnull_default;

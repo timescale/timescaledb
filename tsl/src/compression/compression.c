@@ -2555,6 +2555,21 @@ decompress_row(RowDecompressor *decompressor, int row)
 	}
 }
 
+/* Whether the column has a valid NOT NULL constraint. */
+static bool
+tupdesc_attr_is_notnull(TupleDesc desc, int attoff)
+{
+	if (TupleDescAttr(desc, attoff)->attisdropped)
+	{
+		return false;
+	}
+#if PG18_GE
+	return TupleDescCompactAttr(desc, attoff)->attnullability == ATTNULLABLE_VALID;
+#else
+	return TupleDescAttr(desc, attoff)->attnotnull;
+#endif
+}
+
 /*
  * Decompresses the current compressed batch into decompressed_slots, and returns
  * the number of rows in batch. With a list of attnos only those columns are
@@ -2601,11 +2616,43 @@ decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attn
 	}
 
 	/*
+	 * With all columns decompressed, NOT NULL columns must not have NULLs.
+	 * Compressed columns without data use the missing value and are skipped.
+	 */
+	int num_notnull = 0;
+	int *notnull_offsets = NULL;
+	if (num_attnos == 0)
+	{
+		notnull_offsets = palloc(sizeof(int) * decompressor->in_desc->natts);
+		for (int i = 0; i < decompressor->in_desc->natts; i++)
+		{
+			const PerCompressedColumn *column_info = &decompressor->per_compressed_cols[i];
+			const int output_index = column_info->decompressed_column_offset;
+
+			if (output_index < 0 ||
+				(column_info->is_compressed && decompressor->compressed_is_nulls[i]))
+			{
+				continue;
+			}
+
+			if (tupdesc_attr_is_notnull(decompressor->out_desc, output_index))
+			{
+				notnull_offsets[num_notnull++] = output_index;
+			}
+		}
+	}
+
+	/*
 	 * Decompress all compressed columns for each row of the batch.
 	 */
 	for (int current_row = 0; current_row < n_batch_rows; current_row++)
 	{
 		decompress_row(decompressor, current_row);
+
+		for (int i = 0; i < num_notnull; i++)
+		{
+			CheckCompressedData(!decompressor->decompressed_is_nulls[notnull_offsets[i]]);
+		}
 
 		/*
 		 * Form the heap tuple for this decompressed rows and save it for later

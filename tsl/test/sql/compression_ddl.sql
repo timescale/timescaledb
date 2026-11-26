@@ -1494,3 +1494,18 @@ SELECT compress_chunk(c, recompress => true) FROM show_chunks('t_addcol') c;
 
 drop table t_addcol cascade;
 drop FUNCTION test_has_proper_errcode cascade;
+
+-- SET NOT NULL on a column that got its default after it was added
+CREATE TABLE test_notnull_default(time timestamptz NOT NULL, value int) WITH (tsdb.hypertable, tsdb.orderby='time');
+INSERT INTO test_notnull_default VALUES ('2025-01-01 00:00:00+00', 1);
+SELECT count(compress_chunk(c)) FROM show_chunks('test_notnull_default') c;
+ALTER TABLE test_notnull_default ADD COLUMN c1 int;
+ALTER TABLE test_notnull_default ALTER COLUMN c1 SET DEFAULT 5;
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull_default ALTER COLUMN c1 SET NOT NULL;
+\set ON_ERROR_STOP 1
+ALTER TABLE test_notnull_default ADD COLUMN c2 int DEFAULT 7;
+ALTER TABLE test_notnull_default ALTER COLUMN c2 SET NOT NULL;
+SELECT count(decompress_chunk(c)) FROM show_chunks('test_notnull_default') c;
+SELECT value, c1, c2 FROM test_notnull_default;
+DROP TABLE test_notnull_default;

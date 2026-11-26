@@ -2779,7 +2779,7 @@ SELECT raw_compressed('\x0000000000000000'::bytea)::text;
 ERROR:  invalid compression algorithm 0
 \set ON_ERROR_STOP 1
 -- Bulk decompression of data where the nulls do not match the values
-CREATE TABLE corrupt_bulk(time timestamptz NOT NULL, u uuid, v bigint);
+CREATE TABLE corrupt_bulk(time timestamptz NOT NULL, u uuid, v bigint, b bool);
 SELECT table_name FROM create_hypertable('corrupt_bulk', 'time');
   table_name  
 --------------
@@ -2788,7 +2788,7 @@ SELECT table_name FROM create_hypertable('corrupt_bulk', 'time');
 ALTER TABLE corrupt_bulk SET (timescaledb.compress, timescaledb.compress_segmentby = '');
 INSERT INTO corrupt_bulk
 SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second',
-       '11111111-1111-1111-1111-111111111111', i
+       '11111111-1111-1111-1111-111111111111', i, true
 FROM generate_series(1, 1000) i;
 SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_bulk') c;
  count 
@@ -2819,10 +2819,21 @@ UPDATE :COMPRESSED_CHUNK SET v = raw_compressed(
        || '\x0100000000000000'                -- selectors
        || '\x0000000000000000'                -- one not null row
        );
+UPDATE :COMPRESSED_CHUNK SET b = raw_compressed(
+       '\x05010000'::bytea                    -- BOOL, has_nulls = 1
+       || '\xe803000001000000'                -- values: 1000 elements in one block
+       || '\x0f00000000000000'                -- selectors
+       || '\x01000000803e0000'                -- 1000 times true
+       || '\x0100000001000000'                -- validity: one element in one block
+       || '\x0100000000000000'                -- selectors
+       || '\x0100000000000000'                -- one valid row
+       );
 \set ON_ERROR_STOP 0
 SELECT count(u) FROM corrupt_bulk;
 ERROR:  the compressed data is corrupt
 SELECT sum(v) FROM corrupt_bulk;
+ERROR:  the compressed data is corrupt
+SELECT count(b) FROM corrupt_bulk;
 ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
 -- UUID data where the timestamps claim to be larger than their part of the datum
@@ -2855,3 +2866,75 @@ ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
 DROP TABLE corrupt_bulk;
 DROP FUNCTION raw_compressed;
+-- Decompression of a batch with NULLs in the data of a NOT NULL column
+CREATE TABLE corrupt_notnull(time timestamptz NOT NULL, value int NOT NULL);
+SELECT table_name FROM create_hypertable('corrupt_notnull', 'time');
+   table_name    
+-----------------
+ corrupt_notnull
+
+ALTER TABLE corrupt_notnull SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+INSERT INTO corrupt_notnull
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second', i
+FROM generate_series(1, 10) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_notnull') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "COMPRESSED_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_notnull')) \gset
+CREATE TABLE corrupt_nullable(time timestamptz NOT NULL, value int);
+SELECT table_name FROM create_hypertable('corrupt_nullable', 'time');
+    table_name    
+------------------
+ corrupt_nullable
+
+ALTER TABLE corrupt_nullable SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+INSERT INTO corrupt_nullable
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second', nullif(i, 5)
+FROM generate_series(1, 10) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_nullable') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "NULLABLE_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_nullable')) \gset
+UPDATE :COMPRESSED_CHUNK SET value = (SELECT value FROM :NULLABLE_CHUNK);
+\set ON_ERROR_STOP 0
+SELECT count(decompress_chunk(c)) FROM show_chunks('corrupt_notnull') c;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP TABLE corrupt_notnull;
+DROP TABLE corrupt_nullable;
+-- Batch delete with a continuous aggregate and no time range for the batch
+CREATE TABLE corrupt_minmax(time timestamptz NOT NULL, device int, value float);
+SELECT table_name FROM create_hypertable('corrupt_minmax', 'time');
+   table_name   
+----------------
+ corrupt_minmax
+
+INSERT INTO corrupt_minmax
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second', 1, i
+FROM generate_series(1, 10) i;
+CREATE MATERIALIZED VIEW corrupt_minmax_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS day, avg(value) FROM corrupt_minmax GROUP BY 1 WITH NO DATA;
+ALTER TABLE corrupt_minmax SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_minmax') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "COMPRESSED_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_minmax')) \gset
+UPDATE :COMPRESSED_CHUNK SET _ts_meta_min_1 = NULL, _ts_meta_max_1 = NULL;
+\set ON_ERROR_STOP 0
+DELETE FROM corrupt_minmax WHERE device = 1;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP MATERIALIZED VIEW corrupt_minmax_cagg;
+DROP TABLE corrupt_minmax;

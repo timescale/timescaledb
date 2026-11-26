@@ -388,6 +388,8 @@ bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	validity_bitmap = validity_bits.data;
 	MemoryContextSwitchTo(old_context);
 
+	CheckCompressedData(!has_nulls || validity_bits.num_elements == value_bits.num_elements);
+
 	result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
 	const void **buffers = (const void **) &result[1];
 	buffers[0] = validity_bitmap;

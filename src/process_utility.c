@@ -3317,13 +3317,12 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 		}
 		else
 		{
-			/* For other columns we need to check whether we have a DEFAULT in which
-			 * case NULL as column value would be fine.
-			 * */
-			HeapTuple atttuple = SearchSysCacheAttName(ht->main_table_relid, cmd->name);
+			/* A NULL column value is fine when decompression fills in the
+			 * missing value of the chunk column. */
+			HeapTuple atttuple = SearchSysCacheAttName(chunk_relid, cmd->name);
 			Form_pg_attribute attform = ((Form_pg_attribute) GETSTRUCT(atttuple));
 
-			if (attform->atthasdef)
+			if (attform->atthasmissing)
 			{
 				appendStringInfo(&command,
 								 "%s IS NOT NULL AND "

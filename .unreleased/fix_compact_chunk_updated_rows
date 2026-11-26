@@ -1,0 +1,1 @@
+Fixes: #11211 Fix crash in compact_chunk after an update of the compressed rows

@@ -1340,3 +1340,26 @@ FROM stats_before b,
 
 DROP TABLE stats_before;
 DROP TABLE metrics_rc_stats;
+
+-- compact_chunk after the compressed rows were updated in place
+CREATE TABLE metrics_hot (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+INSERT INTO metrics_hot
+SELECT '2025-01-02 00:00:00+00'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(1,50) i;
+INSERT INTO metrics_hot
+SELECT '2025-01-02 00:10:00+00'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(1,50) i;
+SELECT cs.compress_relid::regclass::text AS "CHUNK_FULL_NAME"
+FROM _timescaledb_catalog.compression_settings cs
+WHERE cs.relid IN (SELECT show_chunks('metrics_hot')) \gset
+
+UPDATE :CHUNK_FULL_NAME SET _ts_meta_count = _ts_meta_count;
+SELECT count(_timescaledb_functions.compact_chunk(chunk)) FROM show_chunks('metrics_hot') chunk;
+SELECT _ts_meta_count FROM :CHUNK_FULL_NAME;
+SELECT count(*) FROM metrics_hot;
+
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
+DROP TABLE metrics_hot;
