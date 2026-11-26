@@ -85,7 +85,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 		if (column_values->decompression_type == DT_Scalar)
 		{
-			if (!DatumGetBool(PointerGetDatum(column_values->buffers[0])))
+			if (!column_values->storage.scalar.isnull)
 			{
 				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->value_bytes > 0)
@@ -98,7 +98,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 					 * The default value always has a long varlena header, but
 					 * we are going to use short if it fits.
 					 */
-					const int32 value_bytes = VARSIZE_ANY_EXHDR(column_values->buffers[1]);
+					const int32 value_bytes =
+						VARSIZE_ANY_EXHDR(DatumGetPointer(column_values->storage.scalar.value));
 					if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 					{
 						/* Short varlena, unaligned. */
@@ -117,7 +118,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			continue;
 		}
 
-		const bool is_valid = arrow_row_is_valid(column_values->buffers[0], row);
+		const bool is_valid = arrow_row_is_valid(column_values->storage.buffers[0], row);
 		if (!is_valid)
 		{
 			continue;
@@ -138,13 +139,14 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 		Assert(column_values->decompression_type == DT_ArrowText ||
 			   column_values->decompression_type == DT_ArrowTextDict);
 		Assert((column_values->decompression_type == DT_ArrowTextDict) ==
-			   (column_values->buffers[3] != NULL));
+			   (column_values->storage.buffers[3] != NULL));
 
 		const uint32 data_row = (column_values->decompression_type == DT_ArrowTextDict) ?
-									((int16 *) column_values->buffers[3])[row] :
+									((int16 *) column_values->storage.buffers[3])[row] :
 									row;
-		const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
-		const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
+		const uint32 start = ((uint32 *) column_values->storage.buffers[1])[data_row];
+		const int32 value_bytes =
+			((uint32 *) column_values->storage.buffers[1])[data_row + 1] - start;
 
 		if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 		{
@@ -212,8 +214,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 		if (column_values->decompression_type == DT_Scalar)
 		{
-			const bool is_valid = !DatumGetBool(PointerGetDatum(column_values->buffers[0]));
-			Datum value = PointerGetDatum(column_values->buffers[1]);
+			const bool is_valid = !column_values->storage.scalar.isnull;
+			Datum value = column_values->storage.scalar.value;
 			byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
 			if (is_valid)
 			{
@@ -266,7 +268,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			continue;
 		}
 
-		const bool is_valid = arrow_row_is_valid(column_values->buffers[0], row);
+		const bool is_valid = arrow_row_is_valid(column_values->storage.buffers[0], row);
 		byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
 
 		if (!is_valid)
@@ -282,22 +284,22 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			{
 				case 2:
 					memcpy(&serialized_key_storage[offset],
-						   row + (int16 *) column_values->buffers[1],
+						   row + (int16 *) column_values->storage.buffers[1],
 						   2);
 					break;
 				case 4:
 					memcpy(&serialized_key_storage[offset],
-						   row + (int32 *) column_values->buffers[1],
+						   row + (int32 *) column_values->storage.buffers[1],
 						   4);
 					break;
 				case 8:
 					memcpy(&serialized_key_storage[offset],
-						   row + (int64 *) column_values->buffers[1],
+						   row + (int64 *) column_values->storage.buffers[1],
 						   8);
 					break;
 				case 16:
 					memcpy(&serialized_key_storage[offset],
-						   (row * 2) + (int64 *) column_values->buffers[1],
+						   (row * 2) + (int64 *) column_values->storage.buffers[1],
 						   16);
 					break;
 				default:
@@ -312,7 +314,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 		if (column_values->decompression_type == DT_ArrowBits)
 		{
-			serialized_key_storage[offset] = arrow_row_is_valid(column_values->buffers[1], row);
+			serialized_key_storage[offset] =
+				arrow_row_is_valid(column_values->storage.buffers[1], row);
 			offset += 1;
 			continue;
 		}
@@ -321,10 +324,11 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			   column_values->decompression_type == DT_ArrowTextDict);
 
 		const uint32 data_row = column_values->decompression_type == DT_ArrowTextDict ?
-									((int16 *) column_values->buffers[3])[row] :
+									((int16 *) column_values->storage.buffers[3])[row] :
 									row;
-		const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
-		const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
+		const uint32 start = ((uint32 *) column_values->storage.buffers[1])[data_row];
+		const int32 value_bytes =
+			((uint32 *) column_values->storage.buffers[1])[data_row + 1] - start;
 
 		if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 		{
@@ -343,7 +347,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			offset += VARHDRSZ;
 		}
 		memcpy(&serialized_key_storage[offset],
-			   &((uint8 *) column_values->buffers[2])[start],
+			   &((uint8 *) column_values->storage.buffers[2])[start],
 			   value_bytes);
 
 		offset += value_bytes;

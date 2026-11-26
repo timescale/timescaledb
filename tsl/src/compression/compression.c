@@ -2155,10 +2155,10 @@ row_decompressor_reset(RowDecompressor *decompressor)
 		CompressedColumnValues *column_values = &decompressor->column_values[i];
 		column_values->decompression_type = DT_Invalid;
 		column_values->arrow = NULL;
-		column_values->by_ref_storage = NULL;
+		column_values->by_ref_output_storage = NULL;
 		for (int j = 0; j < 4; j++)
 		{
-			column_values->buffers[j] = NULL;
+			column_values->storage.buffers[j] = NULL;
 		}
 	}
 	decompressor->batches_decompressed = 0;
@@ -2384,22 +2384,27 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 		return;
 	}
 
-	/* because we filter out cases of existing bulk decompressed data
-	 * we can safely assume, that buffers[1] is only non-NULL when we
-	 * have an invalidated iterator and we need to re-initialize it.
+	/*
+	 * Detoast the compressed column if needed.
 	 *
-	 * this saves us from having to detoast the compressed data again
-	 * when we need to re-initialize the iterator. */
-	const CompressedDataHeader *header = column_values->buffers[1];
-	if (header == NULL)
+	 * If we have iterator columns, the iterator might need to be initialized
+	 * twice: first time when we're checking if the batch passes the filters for
+	 * decompression, and second time when we're actually decompressing it. We
+	 * want to avoid detoasting the compressed value twice in this case, so save
+	 * it in the decompressor as well.
+	 */
+	Datum compressed_datum = decompressor->compressed_datums[input_column];
+	if (VARATT_IS_EXTENDED(DatumGetPointer(compressed_datum)))
 	{
-		Datum compressed_datum = PointerGetDatum(
-			detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
-											decompressor->compressed_datums[input_column]),
+		compressed_datum = PointerGetDatum(
+			detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(compressed_datum),
 										&decompressor->detoaster,
-										CurrentMemoryContext));
-		header = get_compressed_data_header(compressed_datum);
+										decompressor->per_compressed_row_ctx));
+		decompressor->compressed_datums[input_column] = compressed_datum;
+		Assert(!VARATT_IS_EXTENDED(DatumGetPointer(compressed_datum)));
 	}
+
+	const CompressedDataHeader *header = (const CompressedDataHeader *) compressed_datum;
 
 	/* Special compression block with the NULL compression algorithm, tells
 	 * that all values in the compressed block are NULLs. */
@@ -2420,12 +2425,9 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 	if (decompress_all == NULL)
 	{
 		column_values->decompression_type = DT_Iterator;
-		column_values->buffers[0] =
+		column_values->storage.iterator =
 			definitions[header->compression_algorithm]
 				.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
-		/* the compressed data is kept in buffers[1] so we can re-initialize
-		 * the iterator if we need to decompress the column again in the same batch */
-		column_values->buffers[1] = header;
 		return;
 	}
 
@@ -2498,7 +2500,7 @@ row_decompressor_init_batch(RowDecompressor *decompressor, AttrNumber *attnos, i
 		if (column_values->decompression_type == DT_Iterator)
 		{
 			column_values->decompression_type = DT_Invalid;
-			column_values->buffers[0] = NULL;
+			column_values->storage.iterator = NULL;
 		}
 
 		/* Only initialize required columns if specified. */
@@ -2638,7 +2640,7 @@ decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attn
 		{
 			continue;
 		}
-		DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
+		DecompressionIterator *iterator = (DecompressionIterator *) column_values->storage.iterator;
 		const DecompressResult value = iterator->try_next(iterator);
 		CheckCompressedData(value.is_done);
 	}
