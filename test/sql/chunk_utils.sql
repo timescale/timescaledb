@@ -320,7 +320,7 @@ BEGIN;
     \set ECHO all
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
     SELECT show_chunks('drop_chunk_test_tstz');
-    SELECT show_chunks('drop_chunk_test_tstz', older_than => now() - interval '1 minute', newer_than => now() - interval '6 minute');
+    SELECT show_chunks('drop_chunk_test_tstz', older_than => now() - interval '1 minute', newer_than => now() - interval '7 minute');
     SELECT show_chunks('drop_chunk_test_tstz', newer_than => now() - interval '1 minute');
     SELECT show_chunks('drop_chunk_test_tstz', older_than => now() - interval '1 minute');
 
@@ -334,8 +334,8 @@ ROLLBACK;
 
 BEGIN;
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', newer_than => interval \'6 minute\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', newer_than => interval \'6 minute\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', newer_than => interval \'7 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', newer_than => interval \'7 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
