@@ -130,7 +130,7 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 	}
 
 	const int nrows = batch_state->total_batch_rows;
-	const size_t num_validity_words = (nrows + 63) / 64;
+	const size_t num_validity_words = (nrows + 62) / 64;
 	if (columnar_result->type == DT_ArrowBits)
 	{
 		columnar_result->allocated_body_bytes = sizeof(uint64) * num_validity_words;
