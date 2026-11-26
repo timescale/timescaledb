@@ -462,6 +462,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 {
 	StringInfoData si = { .data = (char *) _data, .len = VARSIZE(_data) };
 	const DictionaryCompressed *bitmap = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(bitmap->has_nulls == 0 || bitmap->has_nulls == 1);
 	CheckCompressedData(element_type == bitmap->element_type);
 
 	Simple8bRleSerialized *s8_bitmap;
@@ -553,6 +554,7 @@ tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	StringInfoData si = { .data = DatumGetPointer(compressed),
 						  .len = VARSIZE(DatumGetPointer(compressed)) };
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
 	CheckCompressedData(header->element_type == BOOLOID);
@@ -632,6 +634,7 @@ tsl_uuid_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	StringInfoData si = { .data = DatumGetPointer(compressed),
 						  .len = VARSIZE_ANY(DatumGetPointer(compressed)) };
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
 	CheckCompressedData(header->element_type == UUIDOID);
@@ -730,6 +733,7 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 						  .len = VARSIZE(DatumGetPointer(compressed)) };
 
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
 	CheckCompressedData(header->element_type == TEXTOID);
@@ -1054,6 +1058,7 @@ dictionary_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
 	const DictionaryCompressed *compressed_header =
 		consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(compressed_header->has_nulls == 0 || compressed_header->has_nulls == 1);
 
 	pq_sendbyte(buffer, compressed_header->has_nulls == true);
 

@@ -534,6 +534,7 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 	CheckCompressedData(((DeltaDeltaCompressed *) compressed)->compression_algorithm ==
 						COMPRESSION_ALGORITHM_DELTADELTA);
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&si);
 
@@ -894,6 +895,7 @@ deltadelta_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
 	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
 	const DeltaDeltaCompressed *data = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+	CheckCompressedData(data->has_nulls == 0 || data->has_nulls == 1);
 
 	pq_sendbyte(buffer, data->has_nulls);
 	pq_sendint64(buffer, data->last_value);

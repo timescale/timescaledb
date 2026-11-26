@@ -3256,7 +3256,20 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 	CheckCompressedData(header.compression_algorithm > 0 &&
 						header.compression_algorithm < _END_COMPRESSION_ALGORITHMS);
 
-	return definitions[header.compression_algorithm].compressed_data_recv(buf);
+	/*
+	 * Build the data in a temporary context, so that the memory used for
+	 * nested compressed data does not add up.
+	 */
+	MemoryContext recv_context =
+		AllocSetContextCreate(CurrentMemoryContext, "compressed data recv", ALLOCSET_SMALL_SIZES);
+	MemoryContext old_context = MemoryContextSwitchTo(recv_context);
+	Datum compressed = definitions[header.compression_algorithm].compressed_data_recv(buf);
+	MemoryContextSwitchTo(old_context);
+
+	Datum result = datumCopy(compressed, /* typByVal = */ false, /* typLen = */ -1);
+	MemoryContextDelete(recv_context);
+
+	return result;
 }
 
 extern Datum
@@ -3278,7 +3291,8 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 	StringInfoData data;
 	Datum result;
 
-	if (input_len > PG_INT32_MAX)
+	/* The decoded length is computed as three times the input length in an int. */
+	if (input_len > PG_INT32_MAX / 3)
 	{
 		elog(ERROR, "input too long");
 	}

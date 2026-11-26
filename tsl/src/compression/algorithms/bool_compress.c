@@ -240,6 +240,7 @@ bool_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_BOOL);
 	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
 	const BoolCompressed *data = consumeCompressedData(&si, sizeof(BoolCompressed));
+	CheckCompressedData(data->has_nulls == 0 || data->has_nulls == 1);
 
 	pq_sendbyte(buffer, data->has_nulls);
 	simple8brle_serialized_send(buffer, bytes_deserialize_simple8b_and_advance(&si));
@@ -367,8 +368,8 @@ bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	StringInfoData si = { .data = DatumGetPointer(compressed),
 						  .len = VARSIZE(DatumGetPointer(compressed)) };
 	BoolCompressed *header = consumeCompressedData(&si, sizeof(BoolCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
-	Assert(header->has_nulls == 0 || header->has_nulls == 1);
 	CheckCompressedData(element_type == BOOLOID);
 
 	serialized_values = bytes_deserialize_simple8b_and_advance(&si);
@@ -498,14 +499,12 @@ decompression_iterator_init(BoolDecompressionIterator *iter, void *compressed, O
 {
 	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
 	BoolCompressed *header = consumeCompressedData(&si, sizeof(BoolCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 	Simple8bRleSerialized *values = bytes_deserialize_simple8b_and_advance(&si);
 
-	Assert(header->has_nulls == 0 || header->has_nulls == 1);
 	CheckCompressedData(element_type == BOOLOID);
 
 	const bool has_nulls = header->has_nulls == 1;
-
-	CheckCompressedData(has_nulls == 0 || has_nulls == 1);
 
 	*iter = (BoolDecompressionIterator){
 		.base = { .compression_algorithm = COMPRESSION_ALGORITHM_BOOL,

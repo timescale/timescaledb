@@ -2667,8 +2667,8 @@ group by 2, 3 order by 1 desc
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
     18 | true        | true
-    15 | XX001       | XX001
-     7 | 08P01       | 08P01
+    16 | XX001       | XX001
+     6 | 08P01       | 08P01
      2 | 3F000       | 3F000
      2 | false       | false
      1 | 22021       | 22021
@@ -2683,14 +2683,14 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   109 | XX001       | XX001
-     8 | 22021       | 22021
+   115 | XX001       | XX001
      5 | true        | true
-     5 | 08P01       | 08P01
+     4 | 22021       | 22021
+     3 | 08P01       | 08P01
+     1 | 3F000       | 3F000
      1 | XX001       | true
      1 | false       | false
      1 | true        | XX001
-     1 | 3F000       | 3F000
 
 \set algo bool
 \set type bool
@@ -2938,3 +2938,25 @@ ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW corrupt_minmax_cagg;
 DROP TABLE corrupt_minmax;
+-- Data with a has_nulls flag that is neither 0 nor 1
+CREATE FUNCTION raw_compressed(bytea) RETURNS _timescaledb_internal.compressed_data
+AS 'byteasend' LANGUAGE internal;
+\set ON_ERROR_STOP 0
+SELECT raw_compressed(
+       '\x05020000'::bytea                    -- BOOL, has_nulls = 2
+       || '\x0100000001000000'                -- values: one element in one block
+       || '\x0100000000000000'                -- selectors
+       || '\x0100000000000000'                -- true
+       )::text;
+ERROR:  the compressed data is corrupt
+-- Array input with more elements than a batch can have
+SELECT replace(encode(
+       '\x0100'::bytea                                          -- ARRAY, has_nulls = 0
+       || convert_to('pg_catalog', 'UTF8') || '\x00'            -- element type namespace
+       || convert_to('text', 'UTF8') || '\x00'                  -- element type name
+       || '\x0000'                                              -- has_nulls = 0, use_binary = 0
+       || int4send(40000)                                       -- number of elements
+, 'base64'), E'\n', '')::_timescaledb_internal.compressed_data;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP FUNCTION raw_compressed;

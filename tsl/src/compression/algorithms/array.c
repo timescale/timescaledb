@@ -415,6 +415,8 @@ tsl_array_decompression_iterator_from_datum_forward(Datum compressed_array, Oid 
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 
 	ArrayCompressed *compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(compressed_array_header->has_nulls == 0 ||
+						compressed_array_header->has_nulls == 1);
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 
@@ -496,6 +498,8 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(compressed_array_header->has_nulls == 0 ||
+						compressed_array_header->has_nulls == 1);
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	if (element_type != compressed_array_header->element_type)
@@ -557,6 +561,7 @@ tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	CheckCompressedData(header->element_type == BOOLOID);
@@ -584,9 +589,11 @@ tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	validity_bitmap = validity_bits.data;
 	MemoryContextSwitchTo(old_context);
 
+	CheckCompressedData(!header->has_nulls || validity_bits.num_ones == n_notnull);
+
 	/* Decompress the values using the iterator based decompressor */
 	{
-		int position = 0;
+		uint32 position = 0;
 		DecompressionIterator *iter =
 			tsl_array_decompression_iterator_from_datum_forward(PointerGetDatum(compressed_data),
 																BOOLOID);
@@ -603,6 +610,7 @@ tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 			}
 			++position;
 		}
+		CheckCompressedData(position == n_total);
 	}
 
 	ArrowArray *result =
@@ -624,6 +632,7 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE_ANY(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	CheckCompressedData(header->element_type == UUIDOID);
@@ -716,6 +725,7 @@ tsl_text_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	CheckCompressedData(header->element_type == TEXTOID);
@@ -970,6 +980,7 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 	{
 		num_elements = nulls.num_elements;
 	}
+	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	for (i = 0; i < num_elements; i++)
 	{
@@ -1069,6 +1080,8 @@ array_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
 	const ArrayCompressed *compressed_array_header =
 		consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(compressed_array_header->has_nulls == 0 ||
+						compressed_array_header->has_nulls == 1);
 
 	pq_sendbyte(buffer, compressed_array_header->has_nulls == true);
 

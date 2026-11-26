@@ -910,3 +910,25 @@ DELETE FROM corrupt_minmax WHERE device = 1;
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW corrupt_minmax_cagg;
 DROP TABLE corrupt_minmax;
+
+-- Data with a has_nulls flag that is neither 0 nor 1
+CREATE FUNCTION raw_compressed(bytea) RETURNS _timescaledb_internal.compressed_data
+AS 'byteasend' LANGUAGE internal;
+\set ON_ERROR_STOP 0
+SELECT raw_compressed(
+       '\x05020000'::bytea                    -- BOOL, has_nulls = 2
+       || '\x0100000001000000'                -- values: one element in one block
+       || '\x0100000000000000'                -- selectors
+       || '\x0100000000000000'                -- true
+       )::text;
+
+-- Array input with more elements than a batch can have
+SELECT replace(encode(
+       '\x0100'::bytea                                          -- ARRAY, has_nulls = 0
+       || convert_to('pg_catalog', 'UTF8') || '\x00'            -- element type namespace
+       || convert_to('text', 'UTF8') || '\x00'                  -- element type name
+       || '\x0000'                                              -- has_nulls = 0, use_binary = 0
+       || int4send(40000)                                       -- number of elements
+, 'base64'), E'\n', '')::_timescaledb_internal.compressed_data;
+\set ON_ERROR_STOP 1
+DROP FUNCTION raw_compressed;
