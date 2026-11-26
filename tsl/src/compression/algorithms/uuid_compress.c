@@ -323,6 +323,7 @@ extern bool
 uuid_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const UuidCompressed *uc = (const UuidCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(UuidCompressed));
 	return uc->num_nulls > 0;
 }
 
@@ -438,18 +439,21 @@ uuid_decompression_iterator_from_datum_reverse(Datum uuid_compressed, Oid elemen
 extern void
 uuid_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
-	const UuidCompressed *data = (UuidCompressed *) header;
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_UUID);
+	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
+	const UuidCompressed *data = consumeCompressedData(&si, sizeof(UuidCompressed));
 
 	pq_sendbyte(buffer, data->subtype);
 	pq_sendint16(buffer, data->num_nulls);
 	pq_sendint32(buffer, data->timestamp_size);
 	pq_sendint32(buffer, data->rand_b_and_variant_size);
 
-	char *ptr = (char *) data->alignment_sentinel;
-	deltadelta_compressed_send((CompressedDataHeader *) ptr, buffer);
-	ptr += data->timestamp_size;
-	uint64 *rand_b_and_variant = (uint64 *) ptr;
+	CheckCompressedData(data->timestamp_size >= VARHDRSZ);
+	char *timestamp_data = consumeCompressedData(&si, data->timestamp_size);
+	CheckCompressedData(VARSIZE(timestamp_data) <= data->timestamp_size);
+	deltadelta_compressed_send((CompressedDataHeader *) timestamp_data, buffer);
+
+	const uint64 *rand_b_and_variant = consumeCompressedData(&si, data->rand_b_and_variant_size);
 	uint32 num_elements = data->rand_b_and_variant_size / sizeof(uint64);
 	for (uint32 i = 0; i < num_elements; i++)
 	{
@@ -620,6 +624,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 						(GLOBAL_MAX_ROWS_PER_COMPRESSION * (sizeof(uint64) + 1)));
 
 	timestamp_compressed_data = consumeCompressedData(&si, header->timestamp_size);
+	CheckCompressedData(VARSIZE(timestamp_compressed_data) <= header->timestamp_size);
 	rand_b_and_variant_compressed_data =
 		consumeCompressedData(&si, header->rand_b_and_variant_size);
 

@@ -282,6 +282,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 														batch_state->per_batch_context));
 
 	CompressedDataHeader *header = (CompressedDataHeader *) value;
+	CheckCompressedData(VARSIZE(header) >= sizeof(CompressedDataHeader));
 
 	/* First check if this is a block of NULL values. */
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)

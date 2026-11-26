@@ -431,6 +431,7 @@ bool
 aic_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const AICCompressed *c = (const AICCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(AICCompressed));
 	return c->null_count > 0;
 }
 

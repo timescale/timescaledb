@@ -318,9 +318,12 @@ load_recv_fn(DatumDeserializer *des, bool use_binary)
 
 /* Loosely based on `range_deserialize` in rangetypes.c */
 Datum
-bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
+bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr, const char *end)
 {
 	Datum res;
+
+	/* The alignment below looks at the first byte. */
+	CheckCompressedData(*ptr < end);
 
 	/* att_align_pointer can handle the case where an unaligned short-varlen follows any other
 	 * varlen by detecting padding. padding bytes _must always_ be set to 0, while the first byte of
@@ -330,6 +333,8 @@ bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 
 	*ptr =
 		(Pointer) att_align_pointer(*ptr, deserializer->type_align, deserializer->type_len, *ptr);
+	CheckCompressedData(*ptr < end);
+	const Size bytes_left = end - *ptr;
 	if (deserializer->type_len == -1)
 	{
 		/*
@@ -338,6 +343,7 @@ bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 		 * with 1-byte or 4-byte header here, no TOAST or compressed data.
 		 */
 		CheckCompressedData(VARATT_IS_4B_U(*ptr) || (VARATT_IS_1B(*ptr) && !VARATT_IS_1B_E(*ptr)));
+		CheckCompressedData(VARATT_IS_1B(*ptr) || bytes_left >= VARHDRSZ);
 
 		/*
 		 * Full varsize must be larger or equal than the header size so that the
@@ -345,6 +351,15 @@ bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 		 */
 		CheckCompressedData((VARATT_IS_1B(*ptr) && VARSIZE_1B(*ptr) >= VARHDRSZ_SHORT) ||
 							(VARSIZE_4B(*ptr) > VARHDRSZ));
+		CheckCompressedData(VARSIZE_ANY(*ptr) <= bytes_left);
+	}
+	else if (deserializer->type_len == -2)
+	{
+		CheckCompressedData(memchr(*ptr, 0, bytes_left) != NULL);
+	}
+	else
+	{
+		CheckCompressedData((Size) deserializer->type_len <= bytes_left);
 	}
 	res = ts_fetch_att(*ptr, deserializer->type_by_val, deserializer->type_len);
 	*ptr = att_addlength_pointer(*ptr, deserializer->type_len, *ptr);

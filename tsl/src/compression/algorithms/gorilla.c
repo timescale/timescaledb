@@ -68,6 +68,7 @@ bool
 gorilla_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const GorillaCompressed *gc = (const GorillaCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(GorillaCompressed));
 	return gc->has_nulls;
 }
 

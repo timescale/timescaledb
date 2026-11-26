@@ -39,7 +39,8 @@ typedef struct DatumDeserializer DatumDeserializer;
 DatumDeserializer *create_datum_deserializer(Oid type);
 
 /* deserialization from bytes in memory */
-Datum bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr);
+Datum bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr,
+								 const char *end);
 
 /* deserialization from binary strings (for recv functions) */
 Datum binary_string_to_datum(DatumDeserializer *deserializer, BinaryStringEncoding encoding,

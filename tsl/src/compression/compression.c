@@ -123,7 +123,7 @@ compressor_for_type(Oid type)
 DecompressionInitializer
 tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse)
 {
-	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	}
@@ -141,7 +141,7 @@ tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse
 DecompressAllFunction
 tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 {
-	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	}
@@ -188,7 +188,10 @@ get_compressed_data_header(Datum data)
 {
 	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(data);
 
-	if (header->compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
+	CheckCompressedData(VARSIZE(header) >= sizeof(CompressedDataHeader));
+
+	if (header->compression_algorithm == _INVALID_COMPRESSION_ALGORITHM ||
+		header->compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", header->compression_algorithm);
 	}

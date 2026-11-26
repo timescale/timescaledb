@@ -86,6 +86,7 @@ bool
 deltadelta_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const DeltaDeltaCompressed *ddc = (const DeltaDeltaCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(DeltaDeltaCompressed));
 	return ddc->has_nulls;
 }
 
@@ -890,19 +891,17 @@ delta_delta_decompression_iterator_from_datum_reverse(Datum deltadelta_compresse
 void
 deltadelta_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
-	const DeltaDeltaCompressed *data = (DeltaDeltaCompressed *) header;
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
+	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
+	const DeltaDeltaCompressed *data = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+
 	pq_sendbyte(buffer, data->has_nulls);
 	pq_sendint64(buffer, data->last_value);
 	pq_sendint64(buffer, data->last_delta);
-	simple8brle_serialized_send(buffer, (Simple8bRleSerialized *) data->delta_deltas);
+	simple8brle_serialized_send(buffer, bytes_deserialize_simple8b_and_advance(&si));
 	if (data->has_nulls)
 	{
-		Simple8bRleSerialized *nulls =
-			(Simple8bRleSerialized *) (((char *) data->delta_deltas) +
-									   simple8brle_serialized_total_size(
-										   (Simple8bRleSerialized *) data->delta_deltas));
-		simple8brle_serialized_send(buffer, nulls);
+		simple8brle_serialized_send(buffer, bytes_deserialize_simple8b_and_advance(&si));
 	}
 }
 Datum

@@ -1,0 +1,2 @@
+Fixes: #11211 Fix crashes and out-of-bounds memory access when reading corrupt compressed data
+Thanks: @rsrizal2-ai for reporting the out-of-bounds read in the array compression reverse iterator

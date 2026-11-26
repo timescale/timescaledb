@@ -18,6 +18,7 @@ aic_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	const AICCompressed *data = (const AICCompressed *) header;
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_AIC);
 
+	CheckCompressedData(VARSIZE(data) >= sizeof(AICCompressed));
 	uint32 stream_size = VARSIZE(data) - sizeof(AICCompressed);
 
 	pq_sendbyte(buffer, data->flags);

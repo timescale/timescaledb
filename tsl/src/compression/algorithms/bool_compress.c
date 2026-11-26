@@ -134,6 +134,7 @@ extern bool
 bool_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const BoolCompressed *ddc = (const BoolCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(BoolCompressed));
 	return ddc->has_nulls;
 }
 
@@ -236,17 +237,15 @@ bool_decompression_iterator_from_datum_reverse(Datum bool_compressed, Oid elemen
 extern void
 bool_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
-	const BoolCompressed *data = (BoolCompressed *) header;
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_BOOL);
+	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
+	const BoolCompressed *data = consumeCompressedData(&si, sizeof(BoolCompressed));
+
 	pq_sendbyte(buffer, data->has_nulls);
-	simple8brle_serialized_send(buffer, (Simple8bRleSerialized *) data->values);
+	simple8brle_serialized_send(buffer, bytes_deserialize_simple8b_and_advance(&si));
 	if (data->has_nulls)
 	{
-		Simple8bRleSerialized *validity_bitmap =
-			(Simple8bRleSerialized *) (((char *) data->values) +
-									   simple8brle_serialized_total_size(
-										   (Simple8bRleSerialized *) data->values));
-		simple8brle_serialized_send(buffer, validity_bitmap);
+		simple8brle_serialized_send(buffer, bytes_deserialize_simple8b_and_advance(&si));
 	}
 }
 

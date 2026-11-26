@@ -53,7 +53,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	const uint32 n_notnull_padded = pad_to_multiple(INNER_LOOP_SIZE, n_notnull);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
-	Assert(n_total >= n_notnull);
+	CheckCompressedData(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	/*
