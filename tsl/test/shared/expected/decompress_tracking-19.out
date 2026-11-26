@@ -150,7 +150,11 @@ BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:3
          ->  Values Scan on "*VALUES*" (actual rows=2.00 loops=1)
 
 -- test prepared statements EXPLAIN still works after execution
+-- The chunk size depends on whether dead rows from the rolled back
+-- statements above were pruned, so pin the scan type
 SET plan_cache_mode TO force_generic_plan;
+SET enable_indexscan TO off;
+SET enable_bitmapscan TO off;
 PREPARE p1 AS UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd1';
 BEGIN;
     EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
@@ -175,10 +179,12 @@ BEGIN;
          Update on _hyper_X_X_chunk decompress_tracking_2
          ->  Result
                ->  Append
-                     ->  Index Scan using "X_decompress_tracking_pkey" on _hyper_X_X_chunk decompress_tracking_1
-                           Index Cond: (device = 'd1'::text)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1
+                           Filter: (device = 'd1'::text)
                      ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2
                            Filter: (device = 'd1'::text)
 
 ROLLBACK;
+RESET enable_indexscan;
+RESET enable_bitmapscan;
 DROP TABLE decompress_tracking;

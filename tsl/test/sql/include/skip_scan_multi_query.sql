@@ -71,8 +71,13 @@ SELECT * FROM devices ORDER BY region, dev;
 -- prepared statements
 PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
 :PREFIX EXECUTE prep;
+-- Hide the SkipScan info for the cached plan runs. A cache reset caused by
+-- other sessions can replan them and print the info again.
+BEGIN;
+SET LOCAL timescaledb.debug_skip_scan_info TO false;
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;
+COMMIT;
 DEALLOCATE prep;
 
 -- ReScan tests
