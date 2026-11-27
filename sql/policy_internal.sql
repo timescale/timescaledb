@@ -229,8 +229,13 @@ BEGIN
     -- again after COMMIT
     SET LOCAL search_path TO pg_catalog, pg_temp;
 
-    -- went through recompression successfully now reindex indexes
-    IF (chunk_rec.status & bit_compressed_partial = bit_compressed_partial) AND (reindex_enabled IS TRUE) THEN
+    -- Reindex after recompression, and after compression that emptied the
+    -- rowstore with DELETE instead of TRUNCATE (non-empty heap), since
+    -- VACUUM never shrinks the indexes.
+    IF reindex_enabled IS TRUE AND (
+      chunk_rec.status & bit_compressed_partial = bit_compressed_partial
+      OR (chunk_rec.status = bit_uncompressed AND pg_catalog.pg_relation_size(chunk_rec.oid) > 0)
+    ) THEN
       FOR idx_rec IN
         SELECT idx.schemaname, idx.indexname
         FROM pg_indexes idx
