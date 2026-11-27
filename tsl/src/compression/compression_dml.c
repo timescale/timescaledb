@@ -1450,10 +1450,14 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			/* Track time range for continuous aggregate invalidation if needed */
 			if (invalidation_ctx)
 			{
-				Datum min_time_datum = decompressor.compressed_datums[AttrNumberGetAttrOffset(
-					invalidation_ctx->min_time_attno)];
-				Datum max_time_datum = decompressor.compressed_datums[AttrNumberGetAttrOffset(
-					invalidation_ctx->max_time_attno)];
+				const int min_time_offset =
+					AttrNumberGetAttrOffset(invalidation_ctx->min_time_attno);
+				const int max_time_offset =
+					AttrNumberGetAttrOffset(invalidation_ctx->max_time_attno);
+				CheckCompressedData(!decompressor.compressed_is_nulls[min_time_offset]);
+				CheckCompressedData(!decompressor.compressed_is_nulls[max_time_offset]);
+				Datum min_time_datum = decompressor.compressed_datums[min_time_offset];
+				Datum max_time_datum = decompressor.compressed_datums[max_time_offset];
 				int64 batch_min =
 					ts_time_value_to_internal(min_time_datum, invalidation_ctx->time_type_oid);
 				int64 batch_max =

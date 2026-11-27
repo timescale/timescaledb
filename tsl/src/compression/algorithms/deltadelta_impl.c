@@ -18,11 +18,10 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	StringInfoData si = { .data = DatumGetPointer(compressed),
 						  .len = VARSIZE(DatumGetPointer(compressed)) };
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 	Simple8bRleSerialized *deltas_compressed = bytes_deserialize_simple8b_and_advance(&si);
 
 	const bool has_nulls = header->has_nulls == 1;
-
-	Assert(header->has_nulls == 0 || header->has_nulls == 1);
 
 	/*
 	 * Can't use element type here because of zig-zag encoding. The deltas are
@@ -53,7 +52,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	const uint32 n_notnull_padded = pad_to_multiple(INNER_LOOP_SIZE, n_notnull);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
-	Assert(n_total >= n_notnull);
+	CheckCompressedData(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	/*

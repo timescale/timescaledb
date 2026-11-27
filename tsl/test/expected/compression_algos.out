@@ -2667,8 +2667,8 @@ group by 2, 3 order by 1 desc
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
     18 | true        | true
-    15 | XX001       | XX001
-     7 | 08P01       | 08P01
+    16 | XX001       | XX001
+     6 | 08P01       | 08P01
      2 | 3F000       | 3F000
      2 | false       | false
      1 | 22021       | 22021
@@ -2683,14 +2683,14 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   109 | XX001       | XX001
-     8 | 22021       | 22021
+   115 | XX001       | XX001
      5 | true        | true
-     5 | 08P01       | 08P01
+     4 | 22021       | 22021
+     3 | 08P01       | 08P01
+     1 | 3F000       | 3F000
      1 | XX001       | true
      1 | false       | false
      1 | true        | XX001
-     1 | 3F000       | 3F000
 
 \set algo bool
 \set type bool
@@ -2720,3 +2720,243 @@ group by 2, 3 order by 1 desc
      2 | 08P01       | 08P01
      1 | true        | true
 
+-- Array data with an element size larger than the data section
+CREATE TABLE corrupt_array(time timestamptz NOT NULL, value numeric);
+SELECT table_name FROM create_hypertable('corrupt_array', 'time');
+  table_name   
+---------------
+ corrupt_array
+
+ALTER TABLE corrupt_array SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+INSERT INTO corrupt_array
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 hour', i * 1.5
+FROM generate_series(1, 10) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_array') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "COMPRESSED_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_array')) \gset
+CREATE FUNCTION raw_compressed(bytea) RETURNS _timescaledb_internal.compressed_data
+AS 'byteasend' LANGUAGE internal;
+UPDATE :COMPRESSED_CHUNK SET value = raw_compressed(
+       '\x0100000000000000a4060000'::bytea -- ARRAY, has_nulls = 0, element type numeric
+       || '\x0200000002000000'             -- two element sizes in two blocks
+       || '\xee00000000000000'             -- selectors
+       || '\x0200000000000000'             -- size of the first element
+       || '\x0000000100000000'             -- size of the second element
+       || '\x0561056200000000'             -- data
+       );
+\set ON_ERROR_STOP 0
+SELECT value FROM corrupt_array ORDER BY time DESC LIMIT 2;
+ERROR:  the compressed data is corrupt
+SELECT value FROM corrupt_array ORDER BY time ASC LIMIT 2;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP TABLE corrupt_array;
+-- Output of data with more simple8b blocks than the datum holds
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.compressed_data_send(raw_compressed(
+       '\x04000000'::bytea                    -- DELTADELTA, has_nulls = 0
+       || '\x0000000000000000'                -- last value
+       || '\x0000000000000000'                -- last delta
+       || '\xd0070000d0070000'));             -- 2000 elements in 2000 blocks
+ERROR:  the compressed data is corrupt
+SELECT _timescaledb_functions.compressed_data_send(raw_compressed(
+       '\x05000000'::bytea                    -- BOOL, has_nulls = 0
+       || '\xd0070000d0070000'));             -- 2000 elements in 2000 blocks
+ERROR:  the compressed data is corrupt
+SELECT _timescaledb_functions.compressed_data_send(raw_compressed(
+       '\x020000001900000001000000'::bytea    -- DICTIONARY, has_nulls = 0, text, one distinct value
+       || '\xd0070000d0070000'));             -- 2000 elements in 2000 blocks
+ERROR:  the compressed data is corrupt
+-- Data with the invalid compression algorithm
+SELECT _timescaledb_functions.compressed_data_send(raw_compressed('\x0000000000000000'::bytea));
+ERROR:  invalid compression algorithm 0
+SELECT raw_compressed('\x0000000000000000'::bytea)::text;
+ERROR:  invalid compression algorithm 0
+\set ON_ERROR_STOP 1
+-- Bulk decompression of data where the nulls do not match the values
+CREATE TABLE corrupt_bulk(time timestamptz NOT NULL, u uuid, v bigint, b bool);
+SELECT table_name FROM create_hypertable('corrupt_bulk', 'time');
+  table_name  
+--------------
+ corrupt_bulk
+
+ALTER TABLE corrupt_bulk SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+INSERT INTO corrupt_bulk
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second',
+       '11111111-1111-1111-1111-111111111111', i, true
+FROM generate_series(1, 1000) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_bulk') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "COMPRESSED_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_bulk')) \gset
+UPDATE :COMPRESSED_CHUNK SET u = raw_compressed(
+       '\x0101000000000000860b0000'::bytea    -- ARRAY, has_nulls = 1, element type uuid
+       || '\xe803000001000000'                -- nulls: 1000 elements in one block
+       || '\x0f00000000000000'                -- selectors
+       || '\x00000000803e0000'                -- 1000 not null rows
+       || '\x0100000001000000'                -- sizes: one element in one block
+       || '\x0f00000000000000'                -- selectors
+       || '\x1000000010000000'                -- one element of 16 bytes
+       || '\x11111111111111111111111111111111'
+       );
+UPDATE :COMPRESSED_CHUNK SET v = raw_compressed(
+       '\x04010000'::bytea                    -- DELTADELTA, has_nulls = 1
+       || '\x0000000000000000'                -- last value
+       || '\x0000000000000000'                -- last delta
+       || '\xff7f000001000000'                -- deltas: 32767 elements in one block
+       || '\x0f00000000000000'                -- selectors
+       || '\x01000000f0ff0700'                -- 32767 times the delta 1
+       || '\x0100000001000000'                -- nulls: one element in one block
+       || '\x0100000000000000'                -- selectors
+       || '\x0000000000000000'                -- one not null row
+       );
+UPDATE :COMPRESSED_CHUNK SET b = raw_compressed(
+       '\x05010000'::bytea                    -- BOOL, has_nulls = 1
+       || '\xe803000001000000'                -- values: 1000 elements in one block
+       || '\x0f00000000000000'                -- selectors
+       || '\x01000000803e0000'                -- 1000 times true
+       || '\x0100000001000000'                -- validity: one element in one block
+       || '\x0100000000000000'                -- selectors
+       || '\x0100000000000000'                -- one valid row
+       );
+\set ON_ERROR_STOP 0
+SELECT count(u) FROM corrupt_bulk;
+ERROR:  the compressed data is corrupt
+SELECT sum(v) FROM corrupt_bulk;
+ERROR:  the compressed data is corrupt
+SELECT count(b) FROM corrupt_bulk;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+-- UUID data where the timestamps claim to be larger than their part of the datum
+UPDATE :COMPRESSED_CHUNK SET u = raw_compressed(
+       '\x07000000'::bytea                    -- UUID, deltadelta subtype, no nulls
+       || '\x2000000008000000'                -- 32 bytes of timestamps, 8 bytes of random parts
+       || '\x00400000'                        -- timestamps with a length of 4096 bytes
+       || '\x04000000'                        -- DELTADELTA, has_nulls = 0
+       || '\x0000000000000000'                -- last value
+       || '\x0000000000000000'                -- last delta
+       || '\x0002000000020000'                -- 512 elements in 512 blocks
+       || '\x1111111111111111'
+       );
+\set ON_ERROR_STOP 0
+SELECT count(u) FROM corrupt_bulk;
+ERROR:  the compressed data is corrupt
+SELECT u::text FROM :COMPRESSED_CHUNK;
+ERROR:  the compressed data is corrupt
+-- Data shorter than its header
+SELECT raw_compressed(''::bytea)::text;
+ERROR:  the compressed data is corrupt
+SELECT _timescaledb_functions.compressed_data_has_nulls(raw_compressed('\x05'::bytea));
+ERROR:  the compressed data is corrupt
+SELECT _timescaledb_functions.compressed_data_has_nulls(raw_compressed('\x08'::bytea));
+ERROR:  the compressed data is corrupt
+SELECT raw_compressed('\x01'::bytea)::text;
+ERROR:  the compressed data is corrupt
+SELECT raw_compressed('\x08'::bytea)::text;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP TABLE corrupt_bulk;
+DROP FUNCTION raw_compressed;
+-- Decompression of a batch with NULLs in the data of a NOT NULL column
+CREATE TABLE corrupt_notnull(time timestamptz NOT NULL, value int NOT NULL);
+SELECT table_name FROM create_hypertable('corrupt_notnull', 'time');
+   table_name    
+-----------------
+ corrupt_notnull
+
+ALTER TABLE corrupt_notnull SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+INSERT INTO corrupt_notnull
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second', i
+FROM generate_series(1, 10) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_notnull') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "COMPRESSED_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_notnull')) \gset
+CREATE TABLE corrupt_nullable(time timestamptz NOT NULL, value int);
+SELECT table_name FROM create_hypertable('corrupt_nullable', 'time');
+    table_name    
+------------------
+ corrupt_nullable
+
+ALTER TABLE corrupt_nullable SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+INSERT INTO corrupt_nullable
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second', nullif(i, 5)
+FROM generate_series(1, 10) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_nullable') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "NULLABLE_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_nullable')) \gset
+UPDATE :COMPRESSED_CHUNK SET value = (SELECT value FROM :NULLABLE_CHUNK);
+\set ON_ERROR_STOP 0
+SELECT count(decompress_chunk(c)) FROM show_chunks('corrupt_notnull') c;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP TABLE corrupt_notnull;
+DROP TABLE corrupt_nullable;
+-- Batch delete with a continuous aggregate and no time range for the batch
+CREATE TABLE corrupt_minmax(time timestamptz NOT NULL, device int, value float);
+SELECT table_name FROM create_hypertable('corrupt_minmax', 'time');
+   table_name   
+----------------
+ corrupt_minmax
+
+INSERT INTO corrupt_minmax
+SELECT '2024-01-01 00:00:00+00'::timestamptz + i * interval '1 second', 1, i
+FROM generate_series(1, 10) i;
+CREATE MATERIALIZED VIEW corrupt_minmax_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS day, avg(value) FROM corrupt_minmax GROUP BY 1 WITH NO DATA;
+ALTER TABLE corrupt_minmax SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('corrupt_minmax') c;
+ count 
+-------
+     1
+
+SELECT compress_relid::regclass AS "COMPRESSED_CHUNK"
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('corrupt_minmax')) \gset
+UPDATE :COMPRESSED_CHUNK SET _ts_meta_min_1 = NULL, _ts_meta_max_1 = NULL;
+\set ON_ERROR_STOP 0
+DELETE FROM corrupt_minmax WHERE device = 1;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP MATERIALIZED VIEW corrupt_minmax_cagg;
+DROP TABLE corrupt_minmax;
+-- Data with a has_nulls flag that is neither 0 nor 1
+CREATE FUNCTION raw_compressed(bytea) RETURNS _timescaledb_internal.compressed_data
+AS 'byteasend' LANGUAGE internal;
+\set ON_ERROR_STOP 0
+SELECT raw_compressed(
+       '\x05020000'::bytea                    -- BOOL, has_nulls = 2
+       || '\x0100000001000000'                -- values: one element in one block
+       || '\x0100000000000000'                -- selectors
+       || '\x0100000000000000'                -- true
+       )::text;
+ERROR:  the compressed data is corrupt
+-- Array input with more elements than a batch can have
+SELECT replace(encode(
+       '\x0100'::bytea                                          -- ARRAY, has_nulls = 0
+       || convert_to('pg_catalog', 'UTF8') || '\x00'            -- element type namespace
+       || convert_to('text', 'UTF8') || '\x00'                  -- element type name
+       || '\x0000'                                              -- has_nulls = 0, use_binary = 0
+       || int4send(40000)                                       -- number of elements
+, 'base64'), E'\n', '')::_timescaledb_internal.compressed_data;
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
+DROP FUNCTION raw_compressed;

@@ -68,6 +68,7 @@ bool
 gorilla_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const GorillaCompressed *gc = (const GorillaCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(GorillaCompressed));
 	return gc->has_nulls;
 }
 
@@ -577,6 +578,7 @@ static void
 compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, StringInfo si)
 {
 	expanded->header = (GorillaCompressed *) consumeCompressedData(si, sizeof(GorillaCompressed));
+	CheckCompressedData(expanded->header->has_nulls == 0 || expanded->header->has_nulls == 1);
 
 	if (expanded->header->compression_algorithm != COMPRESSION_ALGORITHM_GORILLA)
 	{

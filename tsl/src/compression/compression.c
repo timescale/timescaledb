@@ -123,7 +123,7 @@ compressor_for_type(Oid type)
 DecompressionInitializer
 tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse)
 {
-	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	}
@@ -141,7 +141,7 @@ tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse
 DecompressAllFunction
 tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 {
-	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	}
@@ -188,7 +188,10 @@ get_compressed_data_header(Datum data)
 {
 	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(data);
 
-	if (header->compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
+	CheckCompressedData(VARSIZE(header) >= sizeof(CompressedDataHeader));
+
+	if (header->compression_algorithm == _INVALID_COMPRESSION_ALGORITHM ||
+		header->compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", header->compression_algorithm);
 	}
@@ -2552,6 +2555,21 @@ decompress_row(RowDecompressor *decompressor, int row)
 	}
 }
 
+/* Whether the column has a valid NOT NULL constraint. */
+static bool
+tupdesc_attr_is_notnull(TupleDesc desc, int attoff)
+{
+	if (TupleDescAttr(desc, attoff)->attisdropped)
+	{
+		return false;
+	}
+#if PG18_GE
+	return TupleDescCompactAttr(desc, attoff)->attnullability == ATTNULLABLE_VALID;
+#else
+	return TupleDescAttr(desc, attoff)->attnotnull;
+#endif
+}
+
 /*
  * Decompresses the current compressed batch into decompressed_slots, and returns
  * the number of rows in batch. With a list of attnos only those columns are
@@ -2598,11 +2616,43 @@ decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attn
 	}
 
 	/*
+	 * With all columns decompressed, NOT NULL columns must not have NULLs.
+	 * Compressed columns without data use the missing value and are skipped.
+	 */
+	int num_notnull = 0;
+	int *notnull_offsets = NULL;
+	if (num_attnos == 0)
+	{
+		notnull_offsets = palloc(sizeof(int) * decompressor->in_desc->natts);
+		for (int i = 0; i < decompressor->in_desc->natts; i++)
+		{
+			const PerCompressedColumn *column_info = &decompressor->per_compressed_cols[i];
+			const int output_index = column_info->decompressed_column_offset;
+
+			if (output_index < 0 ||
+				(column_info->is_compressed && decompressor->compressed_is_nulls[i]))
+			{
+				continue;
+			}
+
+			if (tupdesc_attr_is_notnull(decompressor->out_desc, output_index))
+			{
+				notnull_offsets[num_notnull++] = output_index;
+			}
+		}
+	}
+
+	/*
 	 * Decompress all compressed columns for each row of the batch.
 	 */
 	for (int current_row = 0; current_row < n_batch_rows; current_row++)
 	{
 		decompress_row(decompressor, current_row);
+
+		for (int i = 0; i < num_notnull; i++)
+		{
+			CheckCompressedData(!decompressor->decompressed_is_nulls[notnull_offsets[i]]);
+		}
 
 		/*
 		 * Form the heap tuple for this decompressed rows and save it for later
@@ -3206,7 +3256,20 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 	CheckCompressedData(header.compression_algorithm > 0 &&
 						header.compression_algorithm < _END_COMPRESSION_ALGORITHMS);
 
-	return definitions[header.compression_algorithm].compressed_data_recv(buf);
+	/*
+	 * Build the data in a temporary context, so that the memory used for
+	 * nested compressed data does not add up.
+	 */
+	MemoryContext recv_context =
+		AllocSetContextCreate(CurrentMemoryContext, "compressed data recv", ALLOCSET_SMALL_SIZES);
+	MemoryContext old_context = MemoryContextSwitchTo(recv_context);
+	Datum compressed = definitions[header.compression_algorithm].compressed_data_recv(buf);
+	MemoryContextSwitchTo(old_context);
+
+	Datum result = datumCopy(compressed, /* typByVal = */ false, /* typLen = */ -1);
+	MemoryContextDelete(recv_context);
+
+	return result;
 }
 
 extern Datum
@@ -3228,7 +3291,8 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 	StringInfoData data;
 	Datum result;
 
-	if (input_len > PG_INT32_MAX)
+	/* The decoded length is computed as three times the input length in an int. */
+	if (input_len > PG_INT32_MAX / 3)
 	{
 		elog(ERROR, "input too long");
 	}

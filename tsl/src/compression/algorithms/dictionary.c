@@ -55,6 +55,7 @@ bool
 dictionary_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const DictionaryCompressed *dc = (const DictionaryCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(DictionaryCompressed));
 	return dc->has_nulls;
 }
 
@@ -461,6 +462,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 {
 	StringInfoData si = { .data = (char *) _data, .len = VARSIZE(_data) };
 	const DictionaryCompressed *bitmap = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(bitmap->has_nulls == 0 || bitmap->has_nulls == 1);
 	CheckCompressedData(element_type == bitmap->element_type);
 
 	Simple8bRleSerialized *s8_bitmap;
@@ -552,6 +554,7 @@ tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	StringInfoData si = { .data = DatumGetPointer(compressed),
 						  .len = VARSIZE(DatumGetPointer(compressed)) };
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
 	CheckCompressedData(header->element_type == BOOLOID);
@@ -631,6 +634,7 @@ tsl_uuid_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	StringInfoData si = { .data = DatumGetPointer(compressed),
 						  .len = VARSIZE_ANY(DatumGetPointer(compressed)) };
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
 	CheckCompressedData(header->element_type == UUIDOID);
@@ -729,6 +733,7 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 						  .len = VARSIZE(DatumGetPointer(compressed)) };
 
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
 	CheckCompressedData(header->element_type == TEXTOID);
@@ -1049,41 +1054,26 @@ tsl_dictionary_compressor_finish(PG_FUNCTION_ARGS)
 void
 dictionary_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
-	uint32 data_size;
-	uint32 size;
-	const DictionaryCompressed *compressed_header;
-	const char *compressed_data;
-
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
-	compressed_header = (DictionaryCompressed *) header;
-
-	compressed_data = (char *) compressed_header;
-
-	compressed_data += sizeof(*compressed_header);
-
-	data_size = VARSIZE(compressed_header);
-	data_size -= sizeof(*compressed_header);
+	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
+	const DictionaryCompressed *compressed_header =
+		consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(compressed_header->has_nulls == 0 || compressed_header->has_nulls == 1);
 
 	pq_sendbyte(buffer, compressed_header->has_nulls == true);
 
 	type_append_to_binary_string(compressed_header->element_type, buffer);
 
-	size = simple8brle_serialized_total_size((void *) compressed_data);
-	simple8brle_serialized_send(buffer, (void *) compressed_data);
-	compressed_data += size;
-	data_size -= size;
+	simple8brle_serialized_send(buffer, bytes_deserialize_simple8b_and_advance(&si));
 
 	if (compressed_header->has_nulls)
 	{
-		uint32 size = simple8brle_serialized_total_size((void *) compressed_data);
-		simple8brle_serialized_send(buffer, (void *) compressed_data);
-		compressed_data += size;
-		data_size -= size;
+		simple8brle_serialized_send(buffer, bytes_deserialize_simple8b_and_advance(&si));
 	}
 
 	array_compressed_data_send(buffer,
-							   compressed_data,
-							   data_size,
+							   si.data + si.cursor,
+							   si.len - si.cursor,
 							   compressed_header->element_type,
 							   false);
 }

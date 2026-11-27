@@ -1083,6 +1083,20 @@ batches_overlap_firstlast(RecompressContext *recompress_ctx, Datum *prev_last,
 	return false;
 }
 
+/* Fetch the batch that the index scan returned earlier at this TID. */
+static void
+fetch_batch_by_tid(Relation compressed_chunk_rel, ItemPointer tid, Snapshot snapshot,
+				   TupleTableSlot *slot)
+{
+	if (!table_tuple_fetch_row_version(compressed_chunk_rel, tid, snapshot, slot))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+				 errmsg("aborting compaction due to concurrent updates on "
+						"compressed data, retrying with next policy run")));
+	}
+}
+
 /*
  * Decompress a compressed batch into the tuplesort and delete the original.
  *
@@ -1216,17 +1230,10 @@ compact_chunk_recompress_overlapping_batches(
 	 */
 	if (ItemPointerIsValid(&state->first_overlap_tid))
 	{
-		bool found pg_attribute_unused();
-		bool call_again = false;
-		bool all_dead = false;
-
-		found = table_index_fetch_tuple(index_scan->xs_heapfetch,
-										&state->first_overlap_tid,
-										index_scan->xs_snapshot,
-										previous_compressed_slot,
-										&call_again,
-										&all_dead);
-		Assert(found);
+		fetch_batch_by_tid(compressed_chunk_rel,
+						   &state->first_overlap_tid,
+						   index_scan->xs_snapshot,
+						   previous_compressed_slot);
 		decompress_batch_to_tuplesort(previous_compressed_slot,
 									  decompressor,
 									  recompress_tuplesortstate,
@@ -1234,13 +1241,10 @@ compact_chunk_recompress_overlapping_batches(
 									  snapshot,
 									  &processed_batches);
 
-		found = table_index_fetch_tuple(index_scan->xs_heapfetch,
-										&state->previous_tid,
-										index_scan->xs_snapshot,
-										previous_compressed_slot,
-										&call_again,
-										&all_dead);
-		Assert(found);
+		fetch_batch_by_tid(compressed_chunk_rel,
+						   &state->previous_tid,
+						   index_scan->xs_snapshot,
+						   previous_compressed_slot);
 		decompress_batch_to_tuplesort(previous_compressed_slot,
 									  decompressor,
 									  recompress_tuplesortstate,
@@ -1313,14 +1317,10 @@ compact_chunk_recompress_overlapping_batches(
 		{
 			if (!overlapping)
 			{
-				bool found pg_attribute_unused() =
-					table_index_fetch_tuple(index_scan->xs_heapfetch,
-											&state->previous_tid,
-											index_scan->xs_snapshot,
-											previous_compressed_slot,
-											&index_scan->xs_heap_continue,
-											NULL);
-				Assert(found);
+				fetch_batch_by_tid(compressed_chunk_rel,
+								   &state->previous_tid,
+								   index_scan->xs_snapshot,
+								   previous_compressed_slot);
 
 				decompress_batch_to_tuplesort(previous_compressed_slot,
 											  decompressor,

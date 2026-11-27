@@ -46,6 +46,7 @@ bool
 array_compressed_has_nulls(const CompressedDataHeader *header)
 {
 	const ArrayCompressed *ac = (const ArrayCompressed *) header;
+	CheckCompressedData(VARSIZE(header) >= sizeof(ArrayCompressed));
 	return ac->has_nulls;
 }
 
@@ -414,6 +415,8 @@ tsl_array_decompression_iterator_from_datum_forward(Datum compressed_array, Oid 
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 
 	ArrayCompressed *compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(compressed_array_header->has_nulls == 0 ||
+						compressed_array_header->has_nulls == 1);
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 
@@ -466,7 +469,9 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 	CheckCompressedData(iter->data_offset + datum_size.val <= iter->num_data_bytes);
 
 	start_pointer = iter->data + iter->data_offset;
-	val = bytes_to_datum_and_advance(iter->deserializer, &start_pointer);
+	val = bytes_to_datum_and_advance(iter->deserializer,
+									 &start_pointer,
+									 start_pointer + datum_size.val);
 	iter->data_offset += datum_size.val;
 	CheckCompressedData(iter->data + iter->data_offset == start_pointer);
 
@@ -493,6 +498,8 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(compressed_array_header->has_nulls == 0 ||
+						compressed_array_header->has_nulls == 1);
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	if (element_type != compressed_array_header->element_type)
@@ -554,6 +561,7 @@ tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	CheckCompressedData(header->element_type == BOOLOID);
@@ -581,9 +589,11 @@ tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	validity_bitmap = validity_bits.data;
 	MemoryContextSwitchTo(old_context);
 
+	CheckCompressedData(!header->has_nulls || validity_bits.num_ones == n_notnull);
+
 	/* Decompress the values using the iterator based decompressor */
 	{
-		int position = 0;
+		uint32 position = 0;
 		DecompressionIterator *iter =
 			tsl_array_decompression_iterator_from_datum_forward(PointerGetDatum(compressed_data),
 																BOOLOID);
@@ -600,6 +610,7 @@ tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 			}
 			++position;
 		}
+		CheckCompressedData(position == n_total);
 	}
 
 	ArrowArray *result =
@@ -621,6 +632,7 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE_ANY(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	CheckCompressedData(header->element_type == UUIDOID);
@@ -653,6 +665,12 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 		simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
 	validity_bitmap = validity_bits.data;
 	MemoryContextSwitchTo(old_context);
+
+	if (header->has_nulls)
+	{
+		CheckCompressedData(validity_bits.num_ones == n_notnull);
+		CheckCompressedData(validity_bits.num_elements == n_total);
+	}
 
 	/* Check the alignment of compressed_non_null_values */
 	if (((uintptr_t) compressed_non_null_values % 8) == 0)
@@ -707,6 +725,7 @@ tsl_text_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
 	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	CheckCompressedData(header->element_type == TEXTOID);
@@ -740,6 +759,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	uint32 offset = 0;
 	for (uint32 i = 0; i < n_notnull; i++)
 	{
+		CheckCompressedData(sizes[i] > 0);
 		const void *unaligned = consumeCompressedData(si, sizes[i]);
 
 		/*
@@ -752,6 +772,8 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		 */
 		const void *vardata =
 			DatumGetPointer(att_align_pointer(unaligned, TYPALIGN_INT, -1, unaligned));
+		const Datum alignment_bytes = PointerGetDatum(vardata) - PointerGetDatum(unaligned);
+		CheckCompressedData(alignment_bytes < sizes[i]);
 
 		/*
 		 * Check for potentially corrupt varlena headers since we're reading them
@@ -763,6 +785,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 			 * Full varsize must be larger or equal than the header size so that
 			 * the calculation of size without header doesn't overflow.
 			 */
+			CheckCompressedData(alignment_bytes + VARHDRSZ <= sizes[i]);
 			CheckCompressedData(VARSIZE_4B(vardata) >= VARHDRSZ);
 		}
 		else if (VARATT_IS_1B(vardata))
@@ -789,7 +812,6 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		 * Size of varlena plus alignment must match the size stored in the
 		 * sizes array for this element.
 		 */
-		const Datum alignment_bytes = PointerGetDatum(vardata) - PointerGetDatum(unaligned);
 		CheckCompressedData(VARSIZE_ANY(vardata) + alignment_bytes == sizes[i]);
 
 		const uint32 textlen = VARSIZE_ANY_EXHDR(vardata);
@@ -912,11 +934,14 @@ array_decompression_iterator_try_next_reverse(DecompressionIterator *base_iter)
 		};
 	}
 
-	Assert((int64) iter->data_offset - (int64) datum_size.val >= 0);
+	CheckCompressedData(datum_size.val <= iter->data_offset);
 
 	iter->data_offset -= datum_size.val;
 	start_pointer = iter->data + iter->data_offset;
-	val = bytes_to_datum_and_advance(iter->deserializer, &start_pointer);
+	val = bytes_to_datum_and_advance(iter->deserializer,
+									 &start_pointer,
+									 start_pointer + datum_size.val);
+	CheckCompressedData(iter->data + iter->data_offset + datum_size.val == start_pointer);
 
 	return (DecompressResult){
 		.val = val,
@@ -955,6 +980,7 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 	{
 		num_elements = nulls.num_elements;
 	}
+	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	for (i = 0; i < num_elements; i++)
 	{
@@ -1050,25 +1076,20 @@ array_compressed_recv(StringInfo buffer)
 void
 array_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
-	const char *compressed_data = (char *) header;
-	uint32 data_size;
-	ArrayCompressed *compressed_array_header;
-
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
-	compressed_array_header = (ArrayCompressed *) header;
-
-	compressed_data += sizeof(*compressed_array_header);
-
-	data_size = VARSIZE(compressed_array_header);
-	data_size -= sizeof(*compressed_array_header);
+	StringInfoData si = { .data = (char *) header, .len = VARSIZE(header) };
+	const ArrayCompressed *compressed_array_header =
+		consumeCompressedData(&si, sizeof(ArrayCompressed));
+	CheckCompressedData(compressed_array_header->has_nulls == 0 ||
+						compressed_array_header->has_nulls == 1);
 
 	pq_sendbyte(buffer, compressed_array_header->has_nulls == true);
 
 	type_append_to_binary_string(compressed_array_header->element_type, buffer);
 
 	array_compressed_data_send(buffer,
-							   compressed_data,
-							   data_size,
+							   si.data + si.cursor,
+							   si.len - si.cursor,
 							   compressed_array_header->element_type,
 							   compressed_array_header->has_nulls);
 }
