@@ -45,7 +45,9 @@ typedef struct DeferredChunkAppendState
 
 	int32 hypertable_id;
 	int32 primary_dimension_id;
-	int64 last_range_start;			/* ordered: range_start of the last slice returned */
+	int32 skip_osm_chunk_id; /* ordered: id of the OSM chunk to skip, decided once in begin, or
+							  * INVALID_CHUNK_ID if nothing is skipped */
+	int64 last_range_start; /* ordered: range_start of the last slice returned */
 	TimestampTz last_creation_time; /* unordered: creation_time of the last chunk returned */
 	int32 last_id;					/* unordered: id of the last chunk (creation_time tiebreak) */
 	bool have_last;					/* whether the last_* resume key is set */
