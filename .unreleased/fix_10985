@@ -1,0 +1,1 @@
+Fixes: #10985 Fix crash when setting an invalid chunk interval with ALTER TABLE or ALTER MATERIALIZED VIEW

@@ -376,11 +376,19 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Hypertable *mat_ht =
 			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
 
-		int64 interval = interval_to_usec(DatumGetIntervalP(
-			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
-		Dimension *dim = ts_hyperspace_get_mutable_dimension(mat_ht->space, DIMENSION_TYPE_OPEN, 0);
+		Datum interval = Int64GetDatum(interval_to_usec(DatumGetIntervalP(
+			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed)));
+		Oid interval_type = INT8OID;
+		const Dimension *dim = ts_hyperspace_get_dimension(mat_ht->space, DIMENSION_TYPE_OPEN, 0);
 
-		ts_dimension_set_chunk_interval(dim, interval);
+		/* Validate the interval the same way as when creating the CAgg */
+		ts_dimension_update(mat_ht,
+							&dim->fd.column_name,
+							DIMENSION_TYPE_OPEN,
+							&interval,
+							&interval_type,
+							NULL,
+							NULL);
 		ts_cache_release(&hcache);
 	}
 

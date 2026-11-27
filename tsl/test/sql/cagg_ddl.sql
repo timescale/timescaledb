@@ -1478,6 +1478,14 @@ ALTER MATERIALIZED VIEW cagg_chunk_interval SET (tsdb.chunk_interval='110 day');
 
 SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_interval';
 
+-- invalid intervals are rejected like on CAgg creation
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW cagg_chunk_interval SET (tsdb.chunk_interval='0 seconds');
+ALTER MATERIALIZED VIEW cagg_chunk_interval SET (tsdb.chunk_interval='-1 day');
+\set ON_ERROR_STOP 1
+
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_interval';
+
 -- test columnstore options
 CREATE MATERIALIZED VIEW columnstore_options WITH (tsdb.continuous, tsdb.chunk_interval='1 day') AS SELECT time_bucket('1 day', time) FROM conditions GROUP BY 1 WITH NO DATA;
 SELECT column_name, compress_interval_length from _timescaledb_catalog.dimension where column_name='time_bucket' ORDER BY id DESC LIMIT 1;
