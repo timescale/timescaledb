@@ -72,6 +72,13 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 				 errmsg("lower bound cannot exceed upper bound")));
 	}
 
+	if (PG_GETARG_INT32(4) <= 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("number of buckets must be greater than zero")));
+	}
+
 	if (state == NULL)
 	{
 		nbuckets = PG_GETARG_INT32(4) + 2;
