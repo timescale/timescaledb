@@ -814,10 +814,6 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *columnar_scan, List *rtabl
 	};
 
 	Plan *agg_input_plan = agg->plan.lefttree;
-	fprintf(stderr,
-			"childplan is %s at %p\n",
-			ts_get_node_name((Node *) agg_input_plan),
-			agg_input_plan);
 	Node *resolved_agg_targetlist =
 		ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, agg_input_plan);
 	if (validate_entries_walker(resolved_agg_targetlist, &validate_ctx))
@@ -861,12 +857,8 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *columnar_scan, List *rtabl
 		.next_resno = 1,
 	};
 
-	fprintf(stderr, "agg targetlist before rewrite:\n");
-	my_print(agg->plan.targetlist);
 	agg->plan.targetlist =
 		castNode(List, rewrite_agg_tlist_mutator((Node *) agg->plan.targetlist, &rewrite_ctx));
-	fprintf(stderr, "agg targetlist after rewrite:\n");
-	my_print(agg->plan.targetlist);
 
 	if (agg->plan.qual)
 	{
@@ -905,23 +897,6 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *columnar_scan, List *rtabl
 
 	/* Set ColumnarIndexScan as the Agg's child */
 	agg->plan.lefttree = (Plan *) columnar_index_scan;
-
-	fprintf(stderr, "agg with columnar index scan would be:\n");
-	my_print(agg);
-
-	mybt();
-	fprintf(stderr, "output map:\n");
-	my_print(output_map);
-	fprintf(stderr, "custom scan tlist:\n");
-	my_print(custom_scan_tlist);
-	fprintf(stderr, "output targetlist:\n");
-	my_print(columnar_index_scan->scan.plan.targetlist);
-	fprintf(stderr, "compressed scan:\n");
-	my_print(compressed_subplan);
-	fprintf(stderr, "resolved targetlist:\n");
-	my_print(resolved_agg_targetlist);
-	fprintf(stderr, "would-be columnar index scan targetlist:\n");
-	my_print(columnar_index_scan->scan.plan.targetlist);
 
 	int *old_resno_to_new_resno = palloc0(sizeof(*old_resno_to_new_resno) *
 										  (1 + list_length(compressed_scan->plan.targetlist)));
@@ -1002,9 +977,6 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *columnar_scan, List *rtabl
 			lappend(rewritten_compressed_scan_targetlist, new_entry);
 	}
 
-	fprintf(stderr, "would-be rewritten targetlist:\n");
-	my_print(rewritten_compressed_scan_targetlist);
-
 	//	compressed_subplan->targetlist = rewritten_compressed_scan_targetlist;
 	compressed_scan->plan.targetlist = rewritten_compressed_scan_targetlist;
 	if (compressed_sort != NULL)
@@ -1034,8 +1006,6 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *columnar_scan, List *rtabl
 
 			compressed_sort_targetlist = lappend(compressed_sort_targetlist, output_entry);
 		}
-		fprintf(stderr, "new sort targetlist:\n");
-		my_print(compressed_sort_targetlist);
 
 		compressed_sort->plan.targetlist = compressed_sort_targetlist;
 
@@ -1048,9 +1018,6 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *columnar_scan, List *rtabl
 	}
 
 	agg->plan.lefttree = compressed_subplan;
-
-	fprintf(stderr, "resulting agg:\n");
-	my_print(agg);
 
 	return (Plan *) agg;
 }
