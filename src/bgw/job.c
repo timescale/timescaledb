@@ -9,6 +9,7 @@
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_authid.h>
+#include <catalog/pg_database.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type_d.h>
 #include <executor/execdebug.h>
@@ -929,6 +930,39 @@ ts_bgw_job_permission_check(BgwJob *job, const char *cmd)
 	}
 }
 
+static Oid
+database_owner(void)
+{
+	HeapTuple tuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(MyDatabaseId));
+
+	if (!HeapTupleIsValid(tuple))
+	{
+		elog(ERROR, "cache lookup failed for database %u", MyDatabaseId);
+	}
+
+	Oid owner = ((Form_pg_database) GETSTRUCT(tuple))->datdba;
+	ReleaseSysCache(tuple);
+
+	return owner;
+}
+
+/* Superuser jobs may only run when the database owner is a superuser. */
+bool
+ts_bgw_job_owner_is_blocked(Oid owner)
+{
+	return superuser_arg(owner) && !superuser_arg(database_owner());
+}
+
+void
+ts_bgw_job_owner_blocked_error(Oid owner)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+			 errmsg("permission denied to run background job as superuser \"%s\"",
+					GetUserNameFromId(owner, false)),
+			 errdetail(BGW_JOB_OWNER_BLOCKED_DETAIL)));
+}
+
 void
 ts_bgw_job_validate_job_owner(Oid owner)
 {
@@ -951,6 +985,11 @@ ts_bgw_job_validate_job_owner(Oid owner)
 				 errhint("Hypertable owner must have LOGIN permission to run background tasks.")));
 	}
 	ReleaseSysCache(role_tup);
+
+	if (ts_bgw_job_owner_is_blocked(owner))
+	{
+		ts_bgw_job_owner_blocked_error(owner);
+	}
 }
 
 /*
@@ -1227,6 +1266,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	job->job_history.execution_start = params.job_history_execution_start;
 	ts_bgw_job_stat_history_update(JOB_STAT_HISTORY_UPDATE_PID, job, JOB_SUCCESS, NULL);
 
+	bool owner_blocked = ts_bgw_job_owner_is_blocked(job->fd.owner);
+
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 
@@ -1252,6 +1293,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		zero_guc("max_parallel_workers_per_gather");
 		zero_guc("max_parallel_workers");
 		zero_guc("max_parallel_maintenance_workers");
+
+		if (owner_blocked)
+		{
+			StartTransactionCommand();
+			ts_bgw_job_owner_blocked_error(job->fd.owner);
+		}
 
 		res = ts_bgw_job_execute_in_tss_scope(job, &tss_scope);
 

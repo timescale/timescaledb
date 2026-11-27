@@ -42,4 +42,20 @@ CALL run_job(:job_id);
 SELECT delete_job(:job_id);
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- A superuser cannot own a job when the database owner is not a superuser
+SELECT datdba::regrole AS dbowner FROM pg_database WHERE datname = current_database() \gset
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
+
+\set ON_ERROR_STOP 0
+SELECT add_job('custom_job', '1h');
+\set ON_ERROR_STOP 1
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT add_job('custom_job', '1h') AS job_id \gset
+SELECT delete_job(:job_id);
+RESET ROLE;
+
+ALTER DATABASE :TEST_DBNAME OWNER TO :dbowner;
+
 DROP ROLE :ROLE_ADMIN;

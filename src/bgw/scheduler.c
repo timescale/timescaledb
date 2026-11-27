@@ -318,6 +318,37 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 				return;
 			}
 
+			/* Fail the run without using a worker when the owner must not run jobs. */
+			if (ts_bgw_job_owner_is_blocked(sjob->job.fd.owner))
+			{
+				ErrorData *edata = palloc0(sizeof(ErrorData));
+
+				edata->elevel = ERROR;
+				edata->sqlerrcode = ERRCODE_INSUFFICIENT_PRIVILEGE;
+				edata->message =
+					psprintf("permission denied to run background job as superuser \"%s\"",
+							 GetUserNameFromId(sjob->job.fd.owner, false));
+				edata->detail = BGW_JOB_OWNER_BLOCKED_DETAIL;
+
+				elog(WARNING,
+					 "failed to launch job %d \"%s\": %s",
+					 sjob->job.fd.id,
+					 NameStr(sjob->job.fd.application_name),
+					 edata->message);
+
+				mark_job_as_started(sjob);
+				mark_job_as_ended(sjob,
+								  JOB_FAILURE_TO_START,
+								  ts_errdata_to_jsonb(edata,
+													  &sjob->job.fd.proc_schema,
+													  &sjob->job.fd.proc_name));
+				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+				PopActiveSnapshot();
+				CommitTransactionCommand();
+				MemoryContextSwitchTo(scratch_mctx);
+				return;
+			}
+
 			/* If no worker is available, stay scheduled and keep the existing start time. */
 			sjob->reserved_worker = ts_bgw_worker_reserve();
 			if (!sjob->reserved_worker)

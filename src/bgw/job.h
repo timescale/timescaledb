@@ -87,6 +87,10 @@ extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(
 extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job, const char *cmd);
 
 extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);
+#define BGW_JOB_OWNER_BLOCKED_DETAIL "The owner of the database is not a superuser."
+
+extern bool ts_bgw_job_owner_is_blocked(Oid owner);
+extern void ts_bgw_job_owner_blocked_error(Oid owner);
 
 extern JobResult ts_bgw_job_execute(BgwJob *job);
 extern TSDLLEXPORT void ts_bgw_job_run_config_check(Oid check, int32 job_id, Oid owner,

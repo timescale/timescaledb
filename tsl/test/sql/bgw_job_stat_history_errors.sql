@@ -172,3 +172,20 @@ SELECT count(*) > 0 FROM timescaledb_information.job_errors WHERE err_message ~ 
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
+
+-- The scheduler does not start a superuser job when the database owner is not a superuser
+CREATE PROCEDURE superuser_job(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN NULL; END; $$;
+SELECT add_job('superuser_job', '1 hour', initial_start => now()) AS superuser_job_id \gset
+SELECT datdba::regrole AS dbowner FROM pg_database WHERE datname = current_database() \gset
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
+
+SELECT _timescaledb_functions.start_background_workers();
+CALL test.wait_for_job_failure(:superuser_job_id);
+SELECT _timescaledb_functions.stop_background_workers();
+
+SELECT succeeded, sqlerrcode, err_message
+FROM timescaledb_information.job_history WHERE job_id = :superuser_job_id;
+SELECT total_runs, total_failures, next_start > now() AS next_start_in_future
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :superuser_job_id;
+
+ALTER DATABASE :TEST_DBNAME OWNER TO :dbowner;
