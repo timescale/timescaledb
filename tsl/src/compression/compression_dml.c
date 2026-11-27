@@ -582,9 +582,9 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
  * updated.
  */
 static Expr *
-find_update_set_expr(ModifyTable *mt, AttrNumber target_attno)
+find_update_set_expr(ModifyTable *mt, int rel_index, AttrNumber target_attno)
 {
-	List *update_colnos = linitial(mt->updateColnosLists);
+	List *update_colnos = list_nth(mt->updateColnosLists, rel_index);
 	List *subplan_tlist = outerPlan(mt)->targetlist;
 	ListCell *col_cell = list_head(update_colnos);
 	ListCell *tl_cell;
@@ -621,11 +621,10 @@ find_update_set_expr(ModifyTable *mt, AttrNumber target_attno)
  * The column must be a segmentby column or have minmax sparse index.
  */
 static OpExpr *
-build_changed_key_filter(CompressionSettings *settings, Relation rel, Oid chunk_relid,
-						 AttrNumber attno, ModifyTable *mt, PlannerInfo *root)
+build_changed_key_filter(CompressionSettings *settings, Oid chunk_relid, AttrNumber chunk_attno,
+						 ModifyTable *mt, int rel_index, PlannerInfo *root)
 {
-	char *colname = get_attname(RelationGetRelid(rel), attno, false);
-	AttrNumber chunk_attno = get_attnum(chunk_relid, colname);
+	char *colname = get_attname(chunk_relid, chunk_attno, false);
 
 	if (!ts_array_is_member(settings->fd.segmentby, colname) &&
 		(compressed_column_metadata_attno(settings,
@@ -643,7 +642,7 @@ build_changed_key_filter(CompressionSettings *settings, Relation rel, Oid chunk_
 	}
 
 	/* The new value has to be derivable before the scan. */
-	Expr *setexpr = find_update_set_expr(mt, attno);
+	Expr *setexpr = find_update_set_expr(mt, rel_index, chunk_attno);
 	if (setexpr == NULL)
 	{
 		return NULL;
@@ -709,7 +708,20 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 
 	ModifyTableState *mtstate =
 		linitial_node(ModifyTableState, castNode(CustomScanState, ht_state)->custom_ps);
-	ResultRelInfo *relinfo = mtstate->resultRelInfo;
+	Oid chunk_relid = chunk->fd.relid;
+
+	/* Indexes and column numbers can differ between chunks, so use this chunk's result relation. */
+	int rel_index = 0;
+	while (rel_index < mtstate->mt_nrels &&
+		   RelationGetRelid(mtstate->resultRelInfo[rel_index].ri_RelationDesc) != chunk_relid)
+	{
+		rel_index++;
+	}
+	Ensure(rel_index < mtstate->mt_nrels,
+		   "chunk \"%s\" is not a result relation of the UPDATE",
+		   get_rel_name(chunk_relid));
+
+	ResultRelInfo *relinfo = &mtstate->resultRelInfo[rel_index];
 	Relation rel = relinfo->ri_RelationDesc;
 	Bitmapset *updated_columns = ExecGetUpdatedCols(relinfo, estate);
 
@@ -718,8 +730,7 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 		return false;
 	}
 
-	CompressionSettings *settings = ts_compression_settings_get(chunk->fd.relid);
-	Oid chunk_relid = chunk->fd.relid;
+	CompressionSettings *settings = ts_compression_settings_get(chunk_relid);
 	bool batches_decompressed = false;
 
 	/*
@@ -768,7 +779,8 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 				changed_col = get_attname(RelationGetRelid(rel), attno, false);
 			}
 
-			OpExpr *filter = build_changed_key_filter(settings, rel, chunk_relid, attno, mt, &root);
+			OpExpr *filter =
+				build_changed_key_filter(settings, chunk_relid, attno, mt, rel_index, &root);
 			if (filter != NULL)
 			{
 				predicates = lappend(predicates, filter);
@@ -783,7 +795,9 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 		Bitmapset *referenced = NULL;
 		pull_varattnos((Node *) RelationGetIndexExpressions(index_rel), 1, &referenced);
 		pull_varattnos((Node *) RelationGetIndexPredicate(index_rel), 1, &referenced);
-		bool expr_or_pred_updated = bms_overlap(referenced, updated_columns);
+		/* A whole-row reference depends on every column. */
+		bool wholerow = bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, referenced);
+		bool expr_or_pred_updated = wholerow || bms_overlap(referenced, updated_columns);
 
 		index_close(index_rel, AccessShareLock);
 
@@ -797,8 +811,9 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 		{
 			if (changed_col == NULL)
 			{
-				AttrNumber off = bms_next_member(bms_intersect(referenced, updated_columns), -1) +
-								 FirstLowInvalidHeapAttributeNumber;
+				Bitmapset *changed =
+					wholerow ? updated_columns : bms_intersect(referenced, updated_columns);
+				AttrNumber off = bms_next_member(changed, -1) + FirstLowInvalidHeapAttributeNumber;
 				changed_col = get_attname(RelationGetRelid(rel), off, false);
 			}
 			ereport(ERROR,
