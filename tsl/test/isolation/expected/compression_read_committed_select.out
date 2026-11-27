@@ -1,0 +1,74 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s2_insert s1_select
+step s2_insert: 
+ BEGIN;
+ INSERT INTO metrics VALUES ('2026-01-01 10:00', 1, 100);
+ INSERT INTO plain VALUES ('2026-01-01 10:00', 1, 100);
+ COMMIT;
+
+step s1_select: 
+ SELECT 'hypertable' AS source, value FROM metrics
+ UNION ALL
+ SELECT 'partitioned table', value FROM plain
+ ORDER BY 1, 2;
+
+source           |value
+-----------------+-----
+hypertable       |    1
+hypertable       |    2
+hypertable       |    3
+hypertable       |  100
+partitioned table|    1
+partitioned table|    2
+partitioned table|    3
+partitioned table|  100
+
+
+starting permutation: s3_lock s1_select s2_insert s3_unlock s1_select
+step s3_lock: BEGIN; SELECT lock_compressed_chunk();
+lock_compressed_chunk
+---------------------
+                     
+
+step s1_select: 
+ SELECT 'hypertable' AS source, value FROM metrics
+ UNION ALL
+ SELECT 'partitioned table', value FROM plain
+ ORDER BY 1, 2;
+ <waiting ...>
+step s2_insert: 
+ BEGIN;
+ INSERT INTO metrics VALUES ('2026-01-01 10:00', 1, 100);
+ INSERT INTO plain VALUES ('2026-01-01 10:00', 1, 100);
+ COMMIT;
+
+step s3_unlock: COMMIT;
+step s1_select: <... completed>
+source           |value
+-----------------+-----
+hypertable       |    1
+hypertable       |    2
+hypertable       |    3
+partitioned table|    1
+partitioned table|    2
+partitioned table|    3
+partitioned table|  100
+
+step s1_select: 
+ SELECT 'hypertable' AS source, value FROM metrics
+ UNION ALL
+ SELECT 'partitioned table', value FROM plain
+ ORDER BY 1, 2;
+
+source           |value
+-----------------+-----
+hypertable       |    1
+hypertable       |    2
+hypertable       |    3
+hypertable       |  100
+partitioned table|    1
+partitioned table|    2
+partitioned table|    3
+partitioned table|  100
+
