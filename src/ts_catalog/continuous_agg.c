@@ -1849,14 +1849,19 @@ ts_cagg_variable_current_bucket_start(int64 timeval, const ContinuousAggBucketFu
 }
 
 /*
- * Allows the CAgg owner, superusers, and the database owner.
+ * Check that the user owns the CAgg. Superusers and members of the owner role
+ * pass. With allow_db_owner, the database owner passes as well.
+ *
+ * Returns the owner of the CAgg.
  */
 Oid
-ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
+ts_cagg_permissions_check(Oid cagg_oid, Oid userid, bool allow_db_owner)
 {
 	Oid ownerid = ts_rel_get_owner(cagg_oid);
+	bool is_owner =
+		allow_db_owner ? ts_has_owner_privs(userid, ownerid) : has_privs_of_role(userid, ownerid);
 
-	if (!ts_has_owner_privs(userid, ownerid))
+	if (!is_owner)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),

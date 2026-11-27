@@ -1101,7 +1101,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	 * hypertable pr other cagg related objects (e.g. computing the batches
 	 * for an incremental refresh).
 	 */
-	ts_cagg_permissions_check(cagg_relid, GetUserId());
+	ts_cagg_permissions_check(cagg_relid, GetUserId(), true);
 
 	if (!PG_ARGISNULL(1))
 	{
