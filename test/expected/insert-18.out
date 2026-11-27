@@ -53,6 +53,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_1_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
@@ -72,6 +74,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_2_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
@@ -91,6 +95,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_3_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
@@ -110,6 +116,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_4_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
@@ -132,6 +140,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx1"  | {device_id,timeCustom}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
@@ -139,6 +148,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx1"  | {device_id,timeCustom}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
@@ -146,6 +156,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
  _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx1"  | {device_id,timeCustom}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
@@ -153,6 +164,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
  _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx1"  | {device_id,timeCustom}   |      | f      | f       | f         | 
 
 SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id |                 relid                  | hypertable_id | status | osm_chunk 

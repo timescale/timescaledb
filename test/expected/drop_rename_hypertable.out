@@ -45,6 +45,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_1_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
@@ -64,6 +66,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_2_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
@@ -83,6 +87,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_3_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
@@ -102,6 +108,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal._hyper_1_4_chunk                                             | r    | series_bool | boolean          | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | device_id   | text             | f
+ _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx1"  | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   | i    | device_id   | text             | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_idx"             | i    | timeCustom  | bigint           | f
