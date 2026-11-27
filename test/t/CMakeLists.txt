@@ -1,7 +1,12 @@
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND PROVE_TEST_FILES 001_replication_telemetry.pl
-       002_compressed_chunk_apache.pl 003_old_loader_compat.pl
-       004_pu_shim_preload.pl)
+  list(
+    APPEND
+    PROVE_TEST_FILES
+    001_replication_telemetry.pl
+    002_compressed_chunk_apache.pl
+    003_old_loader_compat.pl
+    004_pu_shim_preload.pl
+    005_rename_db_scheduler.pl)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 foreach(P_FILE ${PROVE_TEST_FILES})
