@@ -49,3 +49,10 @@
 */
 #define ERRCODE_TS_UNEXPECTED MAKE_SQLSTATE('T', 'S', '5', '0', '1')
 #define ERRCODE_TS_CHUNK_COLLISION MAKE_SQLSTATE('T', 'S', '5', '0', '3')
+
+/*
+--TS600 - GROUP: catalog errors
+--TS601 - invalid catalog value
+*/
+#define ERRCODE_TS_CATALOG_ERRORS MAKE_SQLSTATE('T', 'S', '6', '0', '0')
+#define ERRCODE_TS_INVALID_CATALOG_VALUE MAKE_SQLSTATE('T', 'S', '6', '0', '1')

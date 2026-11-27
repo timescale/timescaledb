@@ -1,0 +1,354 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE check_ht(time timestamptz NOT NULL, value int);
+SELECT FROM create_hypertable('check_ht', 'time');
+--
+
+INSERT INTO check_ht VALUES ('2020-01-01 00:00:00+00', 1);
+CREATE TABLE check_plain(a int);
+CREATE VIEW check_view AS SELECT 1 AS a;
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.chunk'::regclass AND contype = 'c';
+   conname   |                        pg_get_constraintdef                         
+-------------+---------------------------------------------------------------------
+ chunk_check | CHECK (_timescaledb_functions.chunk_validate(relid, hypertable_id))
+
+\set ON_ERROR_STOP 0
+-- invalid chunk relations
+UPDATE _timescaledb_catalog.chunk SET relid = 'pg_class';
+ERROR:  chunk relation "pg_class" is a system relation
+UPDATE _timescaledb_catalog.chunk SET relid = 'check_view';
+ERROR:  chunk relation "public.check_view" is not a table
+UPDATE _timescaledb_catalog.chunk SET relid = 4000000000::oid::regclass;
+ERROR:  chunk relation with OID 4000000000 does not exist
+INSERT INTO _timescaledb_catalog.chunk (relid, hypertable_id, creation_time)
+SELECT 'pg_class', id, now() FROM _timescaledb_catalog.hypertable;
+ERROR:  chunk relation "pg_class" is a system relation
+-- chunk relation that is not a child of the hypertable
+INSERT INTO _timescaledb_catalog.chunk (relid, hypertable_id, creation_time)
+SELECT 'check_plain', id, now() FROM _timescaledb_catalog.hypertable;
+ERROR:  chunk relation "public.check_plain" is not a child of its hypertable
+-- chunk row for a hypertable that does not exist
+INSERT INTO _timescaledb_catalog.chunk (relid, hypertable_id, creation_time)
+VALUES ('check_plain', 1000, now());
+ERROR:  hypertable with ID 1000 of chunk relation "public.check_plain" does not exist
+-- violations use the TS601 error code
+\set VERBOSITY sqlstate
+UPDATE _timescaledb_catalog.chunk SET relid = 'check_plain';
+ERROR:  TS601
+\set VERBOSITY terse
+-- COPY in restoring mode is validated too
+SET timescaledb.restoring = on;
+COPY _timescaledb_catalog.chunk (id, relid, hypertable_id, status, osm_chunk, creation_time) FROM stdin;
+ERROR:  chunk relation "pg_class" is a system relation
+RESET timescaledb.restoring;
+\set ON_ERROR_STOP 1
+-- valid values are accepted
+BEGIN;
+UPDATE _timescaledb_catalog.chunk SET status = 4;
+SELECT relid, status FROM _timescaledb_catalog.chunk ORDER BY id;
+                 relid                  | status 
+----------------------------------------+--------
+ _timescaledb_internal._hyper_1_1_chunk |      4
+
+ROLLBACK;
+-- compression settings
+CREATE TABLE check_compressed(a int);
+CREATE TABLE check_other(a int);
+ALTER TABLE check_other OWNER TO :ROLE_DEFAULT_PERM_USER;
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.compression_settings'::regclass AND contype = 'c' ORDER BY 1;
+                    conname                     
+------------------------------------------------
+ compression_settings_check_orderby_cardinality
+ compression_settings_check_orderby_null
+ compression_settings_check_relid
+ compression_settings_check_segmentby
+
+-- valid values are accepted
+INSERT INTO _timescaledb_catalog.compression_settings (relid) VALUES ('check_ht');
+INSERT INTO _timescaledb_catalog.compression_settings (relid, compress_relid) VALUES ('check_plain', 'check_compressed');
+\set ON_ERROR_STOP 0
+-- invalid relations
+INSERT INTO _timescaledb_catalog.compression_settings (relid) VALUES ('pg_class');
+ERROR:  relation "pg_class" is a system relation
+INSERT INTO _timescaledb_catalog.compression_settings (relid) VALUES ('check_view');
+ERROR:  relation "public.check_view" is not a table
+INSERT INTO _timescaledb_catalog.compression_settings (relid) VALUES (4000000000::oid::regclass);
+ERROR:  relation with OID 4000000000 does not exist
+-- invalid compressed relations
+UPDATE _timescaledb_catalog.compression_settings SET compress_relid = 'pg_class' WHERE relid = 'check_plain'::regclass;
+ERROR:  compressed relation "pg_class" is a system relation
+UPDATE _timescaledb_catalog.compression_settings SET compress_relid = 'check_view' WHERE relid = 'check_plain'::regclass;
+ERROR:  compressed relation "public.check_view" is not a table
+UPDATE _timescaledb_catalog.compression_settings SET compress_relid = 4000000000::oid::regclass WHERE relid = 'check_plain'::regclass;
+ERROR:  compressed relation with OID 4000000000 does not exist
+UPDATE _timescaledb_catalog.compression_settings SET compress_relid = relid WHERE relid = 'check_plain'::regclass;
+ERROR:  compressed relation "public.check_plain" is not a valid table
+-- compressed relation owned by a different role
+UPDATE _timescaledb_catalog.compression_settings SET compress_relid = 'check_other' WHERE relid = 'check_plain'::regclass;
+ERROR:  compressed relation "public.check_other" has a different owner than "public.check_plain"
+\set ON_ERROR_STOP 1
+DELETE FROM _timescaledb_catalog.compression_settings;
+-- chunk rewrite
+\set CHUNK _timescaledb_internal._hyper_1_1_chunk
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.chunk_rewrite'::regclass AND contype = 'c';
+       conname       
+---------------------
+ chunk_rewrite_check
+
+-- valid values are accepted
+INSERT INTO _timescaledb_catalog.chunk_rewrite VALUES (:'CHUNK', 'check_plain');
+\set ON_ERROR_STOP 0
+-- invalid chunk relations
+INSERT INTO _timescaledb_catalog.chunk_rewrite VALUES (4000000000::oid::regclass, 'check_compressed');
+ERROR:  chunk relation with OID 4000000000 does not exist
+INSERT INTO _timescaledb_catalog.chunk_rewrite VALUES ('check_plain', 'check_compressed');
+ERROR:  relation "public.check_plain" is not a chunk
+INSERT INTO _timescaledb_catalog.chunk_rewrite VALUES ('check_ht', 'check_compressed');
+ERROR:  relation "public.check_ht" is not a chunk
+-- invalid rewrite relations
+UPDATE _timescaledb_catalog.chunk_rewrite SET new_relid = 4000000000::oid::regclass;
+ERROR:  rewrite relation with OID 4000000000 does not exist
+UPDATE _timescaledb_catalog.chunk_rewrite SET new_relid = 'pg_class';
+ERROR:  rewrite relation "pg_class" is a system relation
+UPDATE _timescaledb_catalog.chunk_rewrite SET new_relid = 'check_view';
+ERROR:  rewrite relation "public.check_view" is not a table
+UPDATE _timescaledb_catalog.chunk_rewrite SET new_relid = 'check_other';
+ERROR:  rewrite relation "public.check_other" has a different owner than "_timescaledb_internal._hyper_1_1_chunk"
+UPDATE _timescaledb_catalog.chunk_rewrite SET new_relid = 'check_ht';
+ERROR:  rewrite relation "public.check_ht" is in use
+UPDATE _timescaledb_catalog.chunk_rewrite SET new_relid = chunk_relid;
+ERROR:  rewrite relation "_timescaledb_internal._hyper_1_1_chunk" is in use
+\set ON_ERROR_STOP 1
+DELETE FROM _timescaledb_catalog.chunk_rewrite;
+-- hypertable
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.hypertable'::regclass AND contype = 'c' ORDER BY 1;
+             conname             
+---------------------------------
+ hypertable_check
+ hypertable_num_dimensions_check
+ hypertable_schema_name_check
+
+\set ON_ERROR_STOP 0
+-- invalid hypertable relations
+UPDATE _timescaledb_catalog.hypertable SET table_name = 'check_missing';
+ERROR:  hypertable relation "public.check_missing" does not exist
+UPDATE _timescaledb_catalog.hypertable SET schema_name = 'pg_catalog', table_name = 'pg_class';
+ERROR:  hypertable relation "pg_class" is a system relation
+UPDATE _timescaledb_catalog.hypertable SET table_name = 'check_view';
+ERROR:  hypertable relation "public.check_view" is not a table
+-- hypertable relation that is not the parent of the chunks
+UPDATE _timescaledb_catalog.hypertable SET table_name = 'check_plain';
+ERROR:  hypertable relation "public.check_plain" is not the parent of its chunks
+\set ON_ERROR_STOP 1
+-- valid values are accepted
+BEGIN;
+INSERT INTO _timescaledb_catalog.hypertable (schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size)
+SELECT schema_name, 'check_plain', associated_schema_name, 'check_plain', num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+ROLLBACK;
+-- a role can only write rows of tables whose owner it has the privileges of
+GRANT INSERT, UPDATE ON _timescaledb_catalog.hypertable, _timescaledb_catalog.chunk, _timescaledb_catalog.compression_settings, _timescaledb_catalog.chunk_rewrite TO :ROLE_DEFAULT_PERM_USER;
+INSERT INTO _timescaledb_catalog.compression_settings (relid) VALUES ('check_ht');
+INSERT INTO _timescaledb_catalog.chunk_rewrite VALUES (:'CHUNK', 'check_plain');
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.hypertable SET status = 0;
+ERROR:  role "default_perm_user" does not have the privileges of table owner "super_user"
+UPDATE _timescaledb_catalog.chunk SET status = 0;
+ERROR:  role "default_perm_user" does not have the privileges of table owner "super_user"
+UPDATE _timescaledb_catalog.compression_settings SET segmentby = NULL;
+ERROR:  role "default_perm_user" does not have the privileges of table owner "super_user"
+UPDATE _timescaledb_catalog.chunk_rewrite SET new_relid = 'check_compressed';
+ERROR:  role "default_perm_user" does not have the privileges of table owner "super_user"
+\set ON_ERROR_STOP 1
+RESET ROLE;
+DELETE FROM _timescaledb_catalog.compression_settings;
+DELETE FROM _timescaledb_catalog.chunk_rewrite;
+REVOKE INSERT, UPDATE ON _timescaledb_catalog.hypertable, _timescaledb_catalog.chunk, _timescaledb_catalog.compression_settings, _timescaledb_catalog.chunk_rewrite FROM :ROLE_DEFAULT_PERM_USER;
+-- associated schema
+CREATE TABLE check_assoc(time timestamptz NOT NULL);
+SELECT FROM create_hypertable('check_assoc', 'time');
+--
+
+ALTER TABLE check_assoc OWNER TO :ROLE_DEFAULT_PERM_USER;
+SELECT id AS assoc_ht FROM _timescaledb_catalog.hypertable WHERE table_name = 'check_assoc' \gset
+CREATE SCHEMA check_schema;
+CREATE SCHEMA check_schema_owned AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+GRANT UPDATE ON _timescaledb_catalog.hypertable TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+UPDATE _timescaledb_catalog.hypertable SET associated_schema_name = 'check_schema_owned' WHERE id = :assoc_ht;
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.hypertable SET associated_schema_name = 'check_missing' WHERE id = :assoc_ht;
+ERROR:  associated schema "check_missing" does not exist
+UPDATE _timescaledb_catalog.hypertable SET associated_schema_name = 'check_schema' WHERE id = :assoc_ht;
+ERROR:  role "default_perm_user" cannot create chunks in associated schema "check_schema"
+UPDATE _timescaledb_catalog.hypertable SET associated_schema_name = 'pg_catalog' WHERE id = :assoc_ht;
+ERROR:  role "default_perm_user" cannot create chunks in associated schema "pg_catalog"
+\set ON_ERROR_STOP 1
+UPDATE _timescaledb_catalog.hypertable SET associated_schema_name = '_timescaledb_internal' WHERE id = :assoc_ht;
+RESET ROLE;
+REVOKE UPDATE ON _timescaledb_catalog.hypertable FROM :ROLE_DEFAULT_PERM_USER;
+-- a role that can only SET ROLE to the owner is accepted
+BEGIN;
+CREATE ROLE check_set_owner;
+CREATE TABLE check_set(a int);
+ALTER TABLE check_set OWNER TO check_set_owner;
+GRANT check_set_owner TO :ROLE_DEFAULT_PERM_USER WITH INHERIT FALSE, SET TRUE;
+SET LOCAL ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT pg_has_role('check_set_owner', 'USAGE');
+ pg_has_role 
+-------------
+ f
+
+SELECT _timescaledb_functions.compression_settings_validate('check_set', NULL);
+ compression_settings_validate 
+-------------------------------
+ t
+
+ROLLBACK;
+-- jobs
+CREATE PROCEDURE check_job(job_id int, config jsonb) LANGUAGE plpgsql AS $$ BEGIN END $$;
+CREATE FUNCTION check_job_config(config jsonb) RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;
+CREATE PROCEDURE check_job_config_proc(config jsonb) LANGUAGE plpgsql AS $$ BEGIN END $$;
+CREATE FUNCTION check_job_sfunc(int, int, jsonb) RETURNS int LANGUAGE sql AS 'SELECT 1';
+CREATE AGGREGATE check_job_agg(int, jsonb) (SFUNC = check_job_sfunc, STYPE = int);
+CREATE ROLE check_job_owner;
+GRANT INSERT, UPDATE ON _timescaledb_catalog.bgw_job TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SEQUENCE _timescaledb_catalog.bgw_job_id_seq TO :ROLE_DEFAULT_PERM_USER;
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.bgw_job'::regclass AND contype = 'c';
+    conname    
+---------------
+ bgw_job_check
+
+-- valid values are accepted
+INSERT INTO _timescaledb_catalog.bgw_job (application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, check_schema, check_name)
+VALUES ('check_job', '1h', '1h', 0, '1h', 'public', 'check_job', :'ROLE_DEFAULT_PERM_USER', 'public', 'check_job_config') RETURNING id AS job_id \gset
+-- a job procedure or check function that does not exist is accepted
+BEGIN;
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'check_missing', check_name = 'check_missing' WHERE id = :job_id;
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- invalid job owner
+UPDATE _timescaledb_catalog.bgw_job SET owner = 4000000000::oid::regrole WHERE id = :job_id;
+ERROR:  job owner with OID 4000000000 does not exist
+-- invalid job procedure
+UPDATE _timescaledb_catalog.bgw_job SET proc_name = 'check_job_agg' WHERE id = :job_id;
+ERROR:  job procedure "public.check_job_agg" is not a function or procedure
+-- invalid check functions
+UPDATE _timescaledb_catalog.bgw_job SET check_name = 'check_job_config_proc' WHERE id = :job_id;
+ERROR:  job check function "public.check_job_config_proc" is not a function
+UPDATE _timescaledb_catalog.bgw_job SET check_name = NULL WHERE id = :job_id;
+ERROR:  job check function needs both a schema and a name
+UPDATE _timescaledb_catalog.bgw_job SET check_schema = NULL WHERE id = :job_id;
+ERROR:  job check function needs both a schema and a name
+-- a role can only write jobs of owners it has the privileges of
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+UPDATE _timescaledb_catalog.bgw_job SET owner = :'ROLE_SUPERUSER' WHERE id = :job_id;
+ERROR:  role "default_perm_user" does not have the privileges of job owner "super_user"
+INSERT INTO _timescaledb_catalog.bgw_job (application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner)
+VALUES ('check_job', '1h', '1h', 0, '1h', 'public', 'check_job', :'ROLE_SUPERUSER');
+ERROR:  role "default_perm_user" does not have the privileges of job owner "super_user"
+UPDATE _timescaledb_catalog.bgw_job SET owner = 'check_job_owner' WHERE id = :job_id;
+ERROR:  role "default_perm_user" does not have the privileges of job owner "check_job_owner"
+\set ON_ERROR_STOP 1
+UPDATE _timescaledb_catalog.bgw_job SET scheduled = false WHERE id = :job_id;
+RESET ROLE;
+-- the database owner can only write jobs of owners it has the privileges of
+SELECT datdba::regrole AS db_owner FROM pg_database WHERE datname = current_database() \gset
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.bgw_job SET owner = 'check_job_owner' WHERE id = :job_id;
+ERROR:  role "default_perm_user" does not have the privileges of job owner "check_job_owner"
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT check_job_owner TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+UPDATE _timescaledb_catalog.bgw_job SET owner = 'check_job_owner' WHERE id = :job_id;
+RESET ROLE;
+REVOKE check_job_owner FROM :ROLE_DEFAULT_PERM_USER;
+ALTER DATABASE :TEST_DBNAME OWNER TO :db_owner;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
+DROP ROLE check_job_owner;
+-- dimensions
+CREATE TABLE check_dim(time bigint NOT NULL, device int, value int);
+SELECT FROM create_hypertable('check_dim', 'time', 'device', 2, chunk_time_interval => 10);
+--
+
+ALTER TABLE check_dim OWNER TO :ROLE_DEFAULT_PERM_USER;
+SELECT id AS dim_ht FROM _timescaledb_catalog.hypertable WHERE table_name = 'check_dim' \gset
+CREATE FUNCTION check_part(int) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT $1';
+CREATE FUNCTION check_part_volatile(int) RETURNS int LANGUAGE sql AS 'SELECT $1';
+CREATE FUNCTION check_part_revoked(int) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT $1';
+CREATE FUNCTION check_now() RETURNS bigint LANGUAGE sql STABLE AS 'SELECT 1::bigint';
+CREATE FUNCTION check_now_revoked() RETURNS bigint LANGUAGE sql STABLE AS 'SELECT 1::bigint';
+REVOKE EXECUTE ON FUNCTION check_part_revoked(int), check_now_revoked() FROM PUBLIC;
+GRANT UPDATE ON _timescaledb_catalog.dimension TO :ROLE_DEFAULT_PERM_USER;
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_catalog.dimension'::regclass AND conname = 'dimension_validate_check';
+         conname          
+--------------------------
+ dimension_validate_check
+
+-- valid values are accepted
+BEGIN;
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+UPDATE _timescaledb_catalog.dimension SET integer_now_func_schema = 'public', integer_now_func = 'check_now' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+-- an integer now function that does not exist is accepted
+UPDATE _timescaledb_catalog.dimension SET integer_now_func_schema = 'public', integer_now_func = 'check_missing' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- invalid column
+UPDATE _timescaledb_catalog.dimension SET column_name = 'check_missing' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  dimension column "check_missing" does not exist in hypertable "public.check_dim"
+-- invalid partitioning functions
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_missing' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_missing" is not valid for dimension column "device"
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_volatile' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_part_volatile" is not valid for dimension column "device"
+-- functions that the table owner cannot execute
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_revoked' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  table owner "default_perm_user" cannot execute partitioning function "public.check_part_revoked"
+UPDATE _timescaledb_catalog.dimension SET integer_now_func_schema = 'public', integer_now_func = 'check_now_revoked' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ERROR:  table owner "default_perm_user" cannot execute integer now function "public.check_now_revoked"
+-- a role can only write dimensions of tables whose owner it has the privileges of
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+UPDATE _timescaledb_catalog.dimension SET aligned = true WHERE hypertable_id <> :dim_ht;
+ERROR:  role "default_perm_user" does not have the privileges of table owner "super_user"
+\set ON_ERROR_STOP 1
+UPDATE _timescaledb_catalog.dimension SET aligned = true WHERE hypertable_id = :dim_ht;
+RESET ROLE;
+-- partitioning functions must match the column type and the dimension type
+CREATE FUNCTION check_part_text(text) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT 1';
+CREATE FUNCTION check_part_bigint(int) RETURNS bigint LANGUAGE sql IMMUTABLE AS 'SELECT $1::bigint';
+CREATE FUNCTION check_part_bool(bigint) RETURNS bool LANGUAGE sql IMMUTABLE AS 'SELECT true';
+CREATE FUNCTION check_part_time(bigint) RETURNS bigint LANGUAGE sql IMMUTABLE AS 'SELECT $1';
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_text' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_part_text" is not valid for dimension column "device"
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_bigint' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ERROR:  partitioning function "public.check_part_bigint" is not valid for dimension column "device"
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_bool' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ERROR:  partitioning function "public.check_part_bool" is not valid for dimension column "time"
+\set ON_ERROR_STOP 1
+BEGIN;
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part_time' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ROLLBACK;
+-- an overload that does not match is ignored
+CREATE FUNCTION check_part(text) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT 1';
+REVOKE EXECUTE ON FUNCTION check_part(text) FROM PUBLIC;
+BEGIN;
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = 'public', partitioning_func = 'check_part' WHERE hypertable_id = :dim_ht AND column_name = 'device';
+ROLLBACK;
+-- the column type must match the type of the column
+\set ON_ERROR_STOP 0
+UPDATE _timescaledb_catalog.dimension SET column_type = 'uuid' WHERE hypertable_id = :dim_ht AND column_name = 'time';
+ERROR:  dimension column "time" does not have type "uuid"
+\set ON_ERROR_STOP 1

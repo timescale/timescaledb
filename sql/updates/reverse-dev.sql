@@ -48,3 +48,27 @@ INSERT INTO _timescaledb_catalog.continuous_aggs_bucket_function
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
 
 GRANT SELECT ON TABLE _timescaledb_catalog.continuous_aggs_bucket_function TO PUBLIC;
+
+ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT chunk_check;
+DROP FUNCTION _timescaledb_functions.chunk_validate(regclass, integer);
+
+ALTER TABLE _timescaledb_catalog.compression_settings DROP CONSTRAINT compression_settings_check_relid;
+DROP FUNCTION _timescaledb_functions.compression_settings_validate(regclass, regclass);
+
+ALTER TABLE _timescaledb_catalog.chunk_rewrite DROP CONSTRAINT chunk_rewrite_check;
+DROP FUNCTION _timescaledb_functions.chunk_rewrite_validate(regclass, regclass);
+
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_check;
+DROP FUNCTION _timescaledb_functions.hypertable_validate(integer, name, name, name);
+
+DROP FUNCTION _timescaledb_functions.relation_validate(oid, "char"[], text);
+DROP FUNCTION _timescaledb_functions.owner_validate(oid, text);
+
+ALTER TABLE _timescaledb_catalog.bgw_job DROP CONSTRAINT bgw_job_check;
+DROP FUNCTION _timescaledb_functions.bgw_job_validate(regrole, name, name, name, name);
+
+ALTER TABLE _timescaledb_catalog.continuous_agg DROP CONSTRAINT continuous_agg_check;
+DROP FUNCTION _timescaledb_functions.continuous_agg_validate(integer, integer, name, name, name, name, name, name);
+
+ALTER TABLE _timescaledb_catalog.dimension DROP CONSTRAINT dimension_validate_check;
+DROP FUNCTION _timescaledb_functions.dimension_validate(integer, name, regtype, smallint, name, name, name, name);

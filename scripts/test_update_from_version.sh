@@ -184,8 +184,8 @@ SQL
 if [ -n "${CHECK_LOCKS}" ] && [ "${UPDATE_MODE}" != singlestep ]; then
   echo "Locks held by the update transaction (${FROM_VERSION} -> ${TO_VERSION}): ${LOCKS_HELD:-n/a} (_timescaledb_internal: ${INTERNAL_LOCKS:-0})"
 
-  if [ "${LOCKS_HELD:-0}" -gt 150 ]; then
-    echo "ERROR: update transaction locked ${LOCKS_HELD} relations, exceeding the limit of 150"
+  if [ "${LOCKS_HELD:-0}" -gt 200 ]; then
+    echo "ERROR: update transaction locked ${LOCKS_HELD} relations, exceeding the limit of 200"
     exit 1
   fi
   if [ "${INTERNAL_LOCKS:-0}" -gt 50 ]; then

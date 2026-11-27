@@ -27,6 +27,8 @@ Indexes:
     "chunk_hypertable_id_idx" btree (hypertable_id)
     "chunk_osm_chunk_idx" btree (osm_chunk, hypertable_id)
     "chunk_relid_key" UNIQUE CONSTRAINT, btree (relid)
+Check constraints:
+    "chunk_check" CHECK (_timescaledb_functions.chunk_validate(relid, hypertable_id))
 Foreign-key constraints:
     "chunk_hypertable_id_fkey" FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id)
 Referenced by:

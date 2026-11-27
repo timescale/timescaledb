@@ -8,6 +8,7 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_add_column.sql
+    cagg_catalog_check.sql
     cagg_ddl.sql
     cagg_direct_compress.sql
     cagg_errors.sql
