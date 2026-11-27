@@ -306,7 +306,7 @@ typedef struct ValidateContext
 	Index uncompressed_scanrelid;
 	Index compressed_scanrelid;
 	CompressionSettings *settings;
-	Plan *leaf_plan;
+	Plan *compressed_scan;
 	List *custom_scan_tlist;
 	List *output_map;
 	AttrNumber next_resno;
@@ -375,7 +375,8 @@ validate_entries_walker(Node *node, void *context)
 			return true;
 		}
 
-		AttrNumber child_resno = find_resno_by_compressed_attno(ctx->leaf_plan, compressed_attno);
+		AttrNumber child_resno =
+			find_resno_by_compressed_attno(ctx->compressed_scan, compressed_attno);
 		if (child_resno == InvalidAttrNumber)
 		{
 			return true;
@@ -411,7 +412,7 @@ validate_entries_walker(Node *node, void *context)
 			}
 
 			AttrNumber child_resno =
-				find_resno_by_compressed_attno(ctx->leaf_plan, meta_count_attno);
+				find_resno_by_compressed_attno(ctx->compressed_scan, meta_count_attno);
 			if (child_resno == InvalidAttrNumber)
 			{
 				return true;
@@ -495,7 +496,7 @@ validate_entries_walker(Node *node, void *context)
 				}
 
 				AttrNumber value_child_resno =
-					find_resno_by_compressed_attno(ctx->leaf_plan, value_meta_attno);
+					find_resno_by_compressed_attno(ctx->compressed_scan, value_meta_attno);
 				if (value_child_resno == InvalidAttrNumber)
 				{
 					return true;
@@ -514,7 +515,7 @@ validate_entries_walker(Node *node, void *context)
 				}
 
 				AttrNumber orderby_child_resno =
-					find_resno_by_compressed_attno(ctx->leaf_plan, orderby_meta_attno);
+					find_resno_by_compressed_attno(ctx->compressed_scan, orderby_meta_attno);
 				if (orderby_child_resno == InvalidAttrNumber)
 				{
 					return true;
@@ -565,7 +566,8 @@ validate_entries_walker(Node *node, void *context)
 					return true;
 				}
 
-				AttrNumber child_resno = find_resno_by_compressed_attno(ctx->leaf_plan, meta_attno);
+				AttrNumber child_resno =
+					find_resno_by_compressed_attno(ctx->compressed_scan, meta_attno);
 				if (child_resno == InvalidAttrNumber)
 				{
 					return true;
@@ -768,21 +770,30 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
  * supported — the walker/mutator handles Var and Aggref nodes at any depth.
  */
 static Plan *
-columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
+columnar_index_scan_plan_create(Agg *agg, CustomScan *columnar_scan, List *rtable)
 {
-	Plan *compressed_scan_subtree = linitial(cscan->custom_plans);
+	Plan *compressed_subplan = linitial(columnar_scan->custom_plans);
 
-	Plan *leaf_plan = compressed_scan_subtree;
-	if (IsA(leaf_plan, Sort))
+	Scan *compressed_scan = NULL;
+	Sort *compressed_sort = NULL;
+	if (IsA(compressed_subplan, Sort))
 	{
-		leaf_plan = leaf_plan->lefttree;
+		compressed_sort = castNode(Sort, compressed_subplan);
+		compressed_scan = (Scan *) compressed_subplan->lefttree;
 	}
+	else
+	{
+		compressed_sort = NULL;
+		compressed_scan = (Scan *) compressed_subplan;
+	}
+	Assert(nodeTag(compressed_scan) == T_SeqScan || nodeTag(compressed_scan) == T_IndexScan ||
+		   nodeTag(compressed_scan) == T_BitmapHeapScan ||
+		   nodeTag(compressed_scan) == T_IndexOnlyScan);
 
-	Scan *compressed_scan = (Scan *) leaf_plan;
 	RangeTblEntry *compressed_rte = rt_fetch(compressed_scan->scanrelid, rtable);
 	Oid compressed_relid = compressed_rte->relid;
 
-	Oid uncompressed_relid = rt_fetch(cscan->scan.scanrelid, rtable)->relid;
+	Oid uncompressed_relid = rt_fetch(columnar_scan->scan.scanrelid, rtable)->relid;
 	CompressionSettings *settings = ts_compression_settings_get(uncompressed_relid);
 
 	/*
@@ -793,26 +804,27 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
 	ValidateContext validate_ctx = {
 		.uncompressed_relid = uncompressed_relid,
 		.compressed_relid = compressed_relid,
-		.uncompressed_scanrelid = cscan->scan.scanrelid,
+		.uncompressed_scanrelid = columnar_scan->scan.scanrelid,
 		.compressed_scanrelid = compressed_scan->scanrelid,
 		.settings = settings,
-		.leaf_plan = leaf_plan,
+		.compressed_scan = &compressed_scan->plan,
 		.custom_scan_tlist = NIL,
 		.output_map = NIL,
 		.next_resno = 1,
 	};
 
-	Plan *childplan = agg->plan.lefttree;
-	Node *resolved_targetlist =
-		ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, childplan);
-	if (validate_entries_walker(resolved_targetlist, &validate_ctx))
+	Plan *agg_input_plan = agg->plan.lefttree;
+	Node *resolved_agg_targetlist =
+		ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, agg_input_plan);
+	if (validate_entries_walker(resolved_agg_targetlist, &validate_ctx))
 	{
 		return NULL;
 	}
 
 	if (agg->plan.qual)
 	{
-		Node *resolved_qual = ts_resolve_outer_special_vars((Node *) agg->plan.qual, childplan);
+		Node *resolved_qual =
+			ts_resolve_outer_special_vars((Node *) agg->plan.qual, agg_input_plan);
 		if (validate_entries_walker(resolved_qual, &validate_ctx))
 		{
 			return NULL;
@@ -856,35 +868,156 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
 
 	/* Build ColumnarIndexScan CustomScan */
 	CustomScan *columnar_index_scan = (CustomScan *) makeNode(CustomScan);
-	columnar_index_scan->custom_plans = list_make1(compressed_scan_subtree);
+	columnar_index_scan->custom_plans = list_make1(compressed_subplan);
 	columnar_index_scan->methods = &columnar_index_scan_plan_methods;
 
-	columnar_index_scan->scan.scanrelid = cscan->scan.scanrelid;
+	columnar_index_scan->scan.scanrelid = columnar_scan->scan.scanrelid;
 
 	columnar_index_scan->custom_scan_tlist = custom_scan_tlist;
 	columnar_index_scan->scan.plan.targetlist =
 		ts_build_trivial_custom_output_targetlist(custom_scan_tlist);
 
 	/* Copy cost/parallel/param fields from the ColumnarScan */
-	columnar_index_scan->scan.plan.plan_rows = cscan->scan.plan.plan_rows;
-	columnar_index_scan->scan.plan.plan_width = cscan->scan.plan.plan_width;
-	columnar_index_scan->scan.plan.startup_cost = cscan->scan.plan.startup_cost;
-	columnar_index_scan->scan.plan.total_cost = cscan->scan.plan.total_cost;
+	columnar_index_scan->scan.plan.plan_rows = columnar_scan->scan.plan.plan_rows;
+	columnar_index_scan->scan.plan.plan_width = columnar_scan->scan.plan.plan_width;
+	columnar_index_scan->scan.plan.startup_cost = columnar_scan->scan.plan.startup_cost;
+	columnar_index_scan->scan.plan.total_cost = columnar_scan->scan.plan.total_cost;
 
 	columnar_index_scan->scan.plan.parallel_aware = false;
-	columnar_index_scan->scan.plan.parallel_safe = cscan->scan.plan.parallel_safe;
+	columnar_index_scan->scan.plan.parallel_safe = columnar_scan->scan.plan.parallel_safe;
 	columnar_index_scan->scan.plan.async_capable = false;
 
-	columnar_index_scan->scan.plan.plan_node_id = cscan->scan.plan.plan_node_id;
+	columnar_index_scan->scan.plan.plan_node_id = columnar_scan->scan.plan.plan_node_id;
 
-	columnar_index_scan->scan.plan.initPlan = cscan->scan.plan.initPlan;
-	columnar_index_scan->scan.plan.extParam = bms_copy(cscan->scan.plan.extParam);
-	columnar_index_scan->scan.plan.allParam = bms_copy(cscan->scan.plan.allParam);
+	columnar_index_scan->scan.plan.initPlan = columnar_scan->scan.plan.initPlan;
+	columnar_index_scan->scan.plan.extParam = bms_copy(columnar_scan->scan.plan.extParam);
+	columnar_index_scan->scan.plan.allParam = bms_copy(columnar_scan->scan.plan.allParam);
 
 	columnar_index_scan->custom_private = list_make1(output_map);
 
 	/* Set ColumnarIndexScan as the Agg's child */
 	agg->plan.lefttree = (Plan *) columnar_index_scan;
+
+	int *old_resno_to_new_resno = palloc0(sizeof(*old_resno_to_new_resno) *
+										  (1 + list_length(compressed_scan->plan.targetlist)));
+
+	ListCell *output_cell;
+	(void) output_cell;
+	List *rewritten_compressed_scan_targetlist = NIL;
+	int resno = 1;
+	(void) resno;
+	for (int i = 0; i < list_length(output_map); i++)
+	{
+		const int needed_varattno = intVal(list_nth(output_map, i));
+
+		if (needed_varattno < 0)
+		{
+			/*
+			 * FIXME tableoid should be constified here (diff oid on compressed vs uncompressed
+			 * scan) remember to inherit resjunk (e.g. when ORDER BY tableoid but's not in SELECT
+			 * list).
+			 */
+			TargetEntry const *custom_scan_tlist_entry =
+				list_nth_node(TargetEntry, custom_scan_tlist, i);
+			TargetEntry *new_entry = (TargetEntry *) copyObject(custom_scan_tlist_entry);
+			new_entry->expr = (Expr *) makeConst(OIDOID,
+												 -1,
+												 InvalidOid,
+												 sizeof(Oid),
+												 ObjectIdGetDatum(uncompressed_relid),
+												 false,
+												 true);
+			rewritten_compressed_scan_targetlist =
+				lappend(rewritten_compressed_scan_targetlist, new_entry);
+			continue;
+		}
+
+		//		fprintf(stderr, "needed varattno %d\n", needed_varattno);
+		TargetEntry const *compressed_scan_entry = NULL;
+		ListCell *targetlist_cell;
+		foreach (targetlist_cell, compressed_scan->plan.targetlist)
+		//		foreach(targetlist_cell, (List *) resolved_agg_targetlist)
+		{
+			TargetEntry *entry = lfirst_node(TargetEntry, targetlist_cell);
+			if (!IsA(entry->expr, Var))
+			{
+				//				fprintf(stderr, "%d\n", __LINE__);
+				continue;
+			}
+
+			Var *scan_var = castNode(Var, entry->expr);
+			if (scan_var->varattno != needed_varattno)
+			{
+				//				fprintf(stderr, "%d\n", __LINE__);
+				continue;
+			}
+
+			compressed_scan_entry = entry;
+			break;
+		}
+		Ensure(compressed_scan_entry != NULL,
+			   "compressed scan entry not found for requested output varattno %d in columnar index "
+			   "scan plan creation",
+			   needed_varattno);
+
+		TargetEntry *new_entry = (TargetEntry *) copyObject(compressed_scan_entry);
+
+		TargetEntry const *columnar_index_scan_entry =
+			list_nth_node(TargetEntry, columnar_index_scan->scan.plan.targetlist, i);
+		new_entry->resno = columnar_index_scan_entry->resno;
+
+		old_resno_to_new_resno[compressed_scan_entry->resno] = new_entry->resno;
+
+		// TargetEntry *original_entry = list_nth_node(TargetEntry,
+		// compressed_scan_subtree->targetlist, original_entry_index); Var *var =
+		// makeVar(compressed_scan->scanrelid,
+
+		// TargetEntry *new_entry = makeTargetEntry((
+		rewritten_compressed_scan_targetlist =
+			lappend(rewritten_compressed_scan_targetlist, new_entry);
+	}
+
+	//	compressed_subplan->targetlist = rewritten_compressed_scan_targetlist;
+	compressed_scan->plan.targetlist = rewritten_compressed_scan_targetlist;
+	if (compressed_sort != NULL)
+	{
+		/*
+		 * Projection goes below sort, and the sort returns the colums of the
+		 * underlying plan, so its targetlist entries have varno == OUTER_VAR
+		 * with varattno == column index in compressed scan output.
+		 */
+		List *compressed_sort_targetlist = NIL;
+		ListCell *lc;
+		foreach (lc, rewritten_compressed_scan_targetlist)
+		{
+			TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
+
+			Var *var = makeVar(OUTER_VAR,
+							   scan_entry->resno,
+							   exprType((Node *) scan_entry->expr),
+							   exprTypmod((Node *) scan_entry->expr),
+							   exprCollation((Node *) scan_entry->expr),
+							   /* varlevelsup = */ 0);
+
+			TargetEntry *output_entry = makeTargetEntry((Expr *) var,
+														scan_entry->resno,
+														scan_entry->resname,
+														scan_entry->resjunk);
+
+			compressed_sort_targetlist = lappend(compressed_sort_targetlist, output_entry);
+		}
+
+		compressed_sort->plan.targetlist = compressed_sort_targetlist;
+
+		for (int sort_column_index = 0; sort_column_index < compressed_sort->numCols;
+			 sort_column_index++)
+		{
+			compressed_sort->sortColIdx[sort_column_index] =
+				old_resno_to_new_resno[compressed_sort->sortColIdx[sort_column_index]];
+		}
+	}
+
+	agg->plan.lefttree = compressed_subplan;
 
 	return (Plan *) agg;
 }
@@ -932,7 +1065,7 @@ insert_columnar_index_scan(Plan *plan, void *context)
 		return plan;
 	}
 
-	CustomScan *cscan = castNode(CustomScan, childplan);
+	CustomScan *columnar_scan = castNode(CustomScan, childplan);
 
 	/*
 	 * Any qual still on plan.qual at this point was not pushed down to the
@@ -947,7 +1080,7 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	/*
 	 * No vectorized quals on the ColumnarScan.
 	 */
-	if (!columnar_scan_has_no_vector_quals(cscan))
+	if (!columnar_scan_has_no_vector_quals(columnar_scan))
 	{
 		return plan;
 	}
@@ -965,7 +1098,7 @@ insert_columnar_index_scan(Plan *plan, void *context)
 		}
 	}
 
-	Plan *result = columnar_index_scan_plan_create(agg, cscan, rtable);
+	Plan *result = columnar_index_scan_plan_create(agg, columnar_scan, rtable);
 	if (result == NULL)
 	{
 		return plan;
