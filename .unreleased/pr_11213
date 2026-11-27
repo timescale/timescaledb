@@ -1,0 +1,1 @@
+Fixes: #11213 Block background jobs owned by a superuser when the database owner is not a superuser
