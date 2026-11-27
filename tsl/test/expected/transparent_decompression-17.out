@@ -2689,8 +2689,9 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                      Rows Removed by Filter: 336
                      ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
-               ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1.00 loops=7)
-                     Index Cond: ("time" = g."time")
+               ->  Seq Scan on _hyper_1_2_chunk m1_2 (actual rows=1.00 loops=7)
+                     Filter: ("time" = g."time")
+                     Rows Removed by Filter: 320
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk m1_3 (actual rows=1.00 loops=7)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 160
@@ -2719,9 +2720,9 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                      Rows Removed by Filter: 336
                      ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
-               ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1.00 loops=7)
-                     Index Cond: ("time" = g."time")
-                     Filter: (device_id = 1)
+               ->  Seq Scan on _hyper_1_2_chunk m1_2 (actual rows=1.00 loops=7)
+                     Filter: (("time" = g."time") AND (device_id = 1))
+                     Rows Removed by Filter: 320
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk m1_3 (actual rows=1.00 loops=7)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 160
@@ -2741,10 +2742,9 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                      ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 1
-               ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1.00 loops=7)
-                     Index Cond: ("time" = g."time")
-                     Filter: (device_id = 2)
-                     Rows Removed by Filter: 1
+               ->  Seq Scan on _hyper_1_2_chunk m1_2 (actual rows=1.00 loops=7)
+                     Filter: (("time" = g."time") AND (device_id = 2))
+                     Rows Removed by Filter: 992
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk m1_3 (actual rows=1.00 loops=7)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 160
@@ -6938,12 +6938,13 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                      Filter: ("time" = g."time")
                      ->  Seq Scan on _hyper_2_6_chunk_compressed (never executed)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
-               ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk m1_4 (actual rows=1.00 loops=7)
-                     Index Cond: ("time" = g."time")
-               ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk m1_5 (never executed)
-                     Index Cond: ("time" = g."time")
-               ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk m1_6 (never executed)
-                     Index Cond: ("time" = g."time")
+               ->  Seq Scan on _hyper_2_7_chunk m1_4 (actual rows=1.00 loops=7)
+                     Filter: ("time" = g."time")
+                     Rows Removed by Filter: 320
+               ->  Seq Scan on _hyper_2_8_chunk m1_5 (never executed)
+                     Filter: ("time" = g."time")
+               ->  Seq Scan on _hyper_2_9_chunk m1_6 (never executed)
+                     Filter: ("time" = g."time")
                ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk m1_7 (actual rows=1.00 loops=7)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 160
@@ -6953,8 +6954,8 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                      Filter: ("time" = g."time")
                      ->  Seq Scan on _hyper_2_11_chunk_compressed (never executed)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
-               ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk m1_9 (never executed)
-                     Index Cond: ("time" = g."time")
+               ->  Seq Scan on _hyper_2_12_chunk m1_9 (never executed)
+                     Filter: ("time" = g."time")
 
 -- test prepared statement with params pushdown
 PREPARE param_prep (int) AS
@@ -6978,8 +6979,9 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                      Rows Removed by Filter: 336
                      ->  Seq Scan on _hyper_2_4_chunk_compressed (actual rows=1.00 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
-               ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m1_2 (actual rows=1.00 loops=7)
-                     Index Cond: ((device_id = 1) AND ("time" = g."time"))
+               ->  Seq Scan on _hyper_2_7_chunk m1_2 (actual rows=1.00 loops=7)
+                     Filter: (("time" = g."time") AND (device_id = 1))
+                     Rows Removed by Filter: 320
                ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk m1_3 (actual rows=1.00 loops=7)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 160
@@ -6998,8 +7000,9 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                      Rows Removed by Filter: 336
                      ->  Seq Scan on _hyper_2_5_chunk_compressed (actual rows=1.00 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
-               ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk m1_2 (actual rows=1.00 loops=7)
-                     Index Cond: ((device_id = 2) AND ("time" = g."time"))
+               ->  Seq Scan on _hyper_2_8_chunk m1_2 (actual rows=1.00 loops=7)
+                     Filter: (("time" = g."time") AND (device_id = 2))
+                     Rows Removed by Filter: 320
                ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk m1_3 (actual rows=1.00 loops=7)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 160
