@@ -533,6 +533,7 @@ tsl_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext 
 		case BOOLOID:
 			return tsl_bool_dictionary_decompress_all(compressed, element_type, dest_mctx);
 		case TEXTOID:
+		case BYTEAOID:
 			return tsl_text_dictionary_decompress_all(compressed, element_type, dest_mctx);
 		case UUIDOID:
 			return tsl_uuid_dictionary_decompress_all(compressed, element_type, dest_mctx);
@@ -721,7 +722,7 @@ tsl_uuid_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 static ArrowArray *
 tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 {
-	Assert(element_type == TEXTOID);
+	Assert(element_type == TEXTOID || element_type == BYTEAOID);
 
 	compressed = PointerGetDatum(PG_DETOAST_DATUM(compressed));
 
@@ -731,7 +732,7 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
-	CheckCompressedData(header->element_type == TEXTOID);
+	CheckCompressedData(header->element_type == element_type);
 
 	Simple8bRleSerialized *indices_serialized = bytes_deserialize_simple8b_and_advance(&si);
 
