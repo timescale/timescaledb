@@ -1,0 +1,16 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\pset tuples_only on
+
+CREATE TABLE vector_qual_empty_all(ts int, v int);
+SELECT create_hypertable('vector_qual_empty_all', 'ts') AS hypertable \gset
+ALTER TABLE vector_qual_empty_all SET (timescaledb.compress);
+INSERT INTO vector_qual_empty_all VALUES (1, 1), (2, NULL), (3, 3);
+SELECT count(compress_chunk(x, true)) FROM show_chunks('vector_qual_empty_all') x \gset
+SET timescaledb.debug_require_vector_qual TO require;
+SELECT count(*) FROM vector_qual_empty_all WHERE v = ALL (ARRAY[]::int[]);
+SELECT count(*) FROM vector_qual_empty_all WHERE v = ANY (ARRAY[]::int[]);
+RESET timescaledb.debug_require_vector_qual;
+DROP TABLE vector_qual_empty_all;

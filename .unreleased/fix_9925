@@ -1,0 +1,1 @@
+Fixes: #9925 Preserve vacuous ALL results for empty arrays in vectorized filters
