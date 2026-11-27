@@ -259,6 +259,9 @@ group by b, host order by b, host limit 3;
 select date_bin('6 hours', ts, '2000-01-01 00:00:00+00') b, count(*), min(v)
 from onechunkbucket group by b order by b;
 
+select sum(case when ts < now() then 1 end) from onechunkbucket;
+select count(*) from onechunkbucket group by case when ts < now() then 1 end order by 1;
+
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
