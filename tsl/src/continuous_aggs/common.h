@@ -102,7 +102,9 @@ typedef struct ContinuousAggRefreshExecutionState
 	int32 number_of_batches;
 	bool batched;					 /* split windows are already bucket-aligned */
 	bool ht_invalidations_processed; /* only once per invocation */
-	bool tenant_tracking_flushed;	 /* only once per invocation */
+	bool tenant_flush_decided;		 /* first batch that reaches txn2 */
+	bool tenant_tracking_flushed;	 /* a tracker generation was rotated */
+	int64 refresh_window_start;
 } ContinuousAggRefreshExecutionState;
 
 /*
