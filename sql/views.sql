@@ -91,7 +91,12 @@ FROM _timescaledb_catalog.bgw_job j
     ht.table_name;
 
 -- view for background worker jobs
-CREATE OR REPLACE VIEW timescaledb_information.jobs AS
+--
+-- The job config can contain sensitive information
+-- so jobs are only shown to members of the job
+-- owner role or the database owner role.
+CREATE OR REPLACE VIEW timescaledb_information.jobs
+WITH (security_barrier = true) AS
 SELECT j.id AS job_id,
   j.application_name,
   j.schedule_interval,
@@ -113,7 +118,13 @@ SELECT j.id AS job_id,
 FROM _timescaledb_catalog.bgw_job j
   LEFT JOIN _timescaledb_catalog.hypertable ht ON ht.id = j.hypertable_id
   LEFT JOIN _timescaledb_internal.bgw_job_stat js ON js.job_id = j.id
-  LEFT JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = j.hypertable_id;
+  LEFT JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = j.hypertable_id
+WHERE (pg_catalog.pg_has_role(current_user,
+			   (SELECT pg_catalog.pg_get_userbyid(datdba)
+			      FROM pg_catalog.pg_database
+			     WHERE datname = current_database()),
+			   'MEMBER') IS TRUE
+    OR pg_catalog.pg_has_role(current_user, j.owner, 'MEMBER') IS TRUE);
 
 -- views for continuous aggregate queries ---
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates AS
