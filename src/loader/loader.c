@@ -588,10 +588,15 @@ timescaledb_shmem_request_hook(void)
  * Stop or restart the scheduler of a database before a command that needs
  * the database to be unused. Runs from ProcessUtility so that the message
  * is only sent for commands PostgreSQL will accept.
+ *
+ * Returns the database whose scheduler must be restarted after the command,
+ * or InvalidOid.
  */
-static void
+static Oid
 notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
 {
+	Oid restart_db_oid = InvalidOid;
+
 	switch (nodeTag(stmt))
 	{
 		case T_AlterDatabaseStmt:
@@ -668,10 +673,17 @@ notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
 			{
 				Oid db_oid = get_database_oid(rename->subname, rename->missing_ok);
 
-				/* The database keeps its OID, so the scheduler can reconnect */
+				/*
+				 * Stop the scheduler now and start it again after the
+				 * rename. A scheduler restarted before the rename connects to
+				 * the database and then waits for our transaction, so the
+				 * rename sees the database in use and fails. The database
+				 * keeps its OID, so the scheduler can reconnect afterwards.
+				 */
 				if (is_db_owner(db_oid) && have_createdb_privilege())
 				{
-					ts_bgw_message_send_and_wait(RESTART, db_oid);
+					ts_bgw_message_send_and_wait(STOP, db_oid);
+					restart_db_oid = db_oid;
 				}
 			}
 			break;
@@ -679,6 +691,8 @@ notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
 		default:
 			break;
 	}
+
+	return restart_db_oid;
 }
 
 /*
@@ -693,8 +707,9 @@ loader_process_utility(PlannedStmt *pstmt, const char *queryString, bool readOnl
 					   QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
 {
 	ProcessUtility_hook_type hook;
+	volatile Oid restart_db_oid;
 
-	notify_bg_workers_of_database_command(pstmt->utilityStmt, context);
+	restart_db_oid = notify_bg_workers_of_database_command(pstmt->utilityStmt, context);
 
 	if (versioned_ProcessUtility_hook != NULL)
 	{
@@ -709,7 +724,27 @@ loader_process_utility(PlannedStmt *pstmt, const char *queryString, bool readOnl
 		hook = standard_ProcessUtility;
 	}
 
-	hook(pstmt, queryString, readOnlyTree, context, params, queryEnv, dest, qc);
+	if (!OidIsValid(restart_db_oid))
+	{
+		hook(pstmt, queryString, readOnlyTree, context, params, queryEnv, dest, qc);
+		return;
+	}
+
+	PG_TRY();
+	{
+		hook(pstmt, queryString, readOnlyTree, context, params, queryEnv, dest, qc);
+	}
+	PG_FINALLY();
+	{
+		/*
+		 * Start the scheduler again, also when the command failed. Hold
+		 * interrupts so a cancel cannot skip the restart.
+		 */
+		HOLD_INTERRUPTS();
+		ts_bgw_message_send_and_wait(RESTART, restart_db_oid);
+		RESUME_INTERRUPTS();
+	}
+	PG_END_TRY();
 }
 
 static void
