@@ -125,14 +125,7 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        fetch-depth: 200
-
-    - name: Fetch base branch
-      if: github.event_name == 'pull_request'
-      run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=200
-
-    - name: Fetch main branch
-      run: git fetch origin main --depth=200
+        fetch-depth: 0
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -257,7 +250,7 @@ jobs:
         ANTHROPIC_API_KEY: ""
         EVENT_WHAT: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
         EVENT_BRANCH: ${{ github.head_ref || github.ref_name }}
-        EVENT_BASE: ${{ github.base_ref || format('{0}~', github.ref_name) }}
+        EVENT_BASE: ${{ github.base_ref || '<find out from history>' }}
         EVENT_NAME: ${{ github.event_name }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         ORACLE_NAME: ${{ matrix.oracle }}
