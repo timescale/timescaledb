@@ -87,18 +87,25 @@ ALTER TABLE metrics SET (
     timescaledb.cagg_granular_refresh_start_offset = '2 months 30 days',
     timescaledb.cagg_granular_refresh_end_offset = '-5 days'
 );
--- Error: NULL is not a valid offset value.
-ALTER TABLE metrics SET (
-    timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.cagg_granular_refresh_column = 'device_id',
-    timescaledb.cagg_granular_refresh_start_offset = NULL,
-    timescaledb.cagg_granular_refresh_end_offset = '5 days'
-);
+-- Error: NULL is not a valid end offset. Only the start offset can be NULL.
 ALTER TABLE metrics SET (
     timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.cagg_granular_refresh_column = 'device_id',
     timescaledb.cagg_granular_refresh_start_offset = '2 months 30 days',
     timescaledb.cagg_granular_refresh_end_offset = NULL
+);
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = NULL
+);
+-- Error: a NULL start offset does not relax the checks on the end offset.
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = '-5 days'
 );
 -- Error: timescaledb options only apply to hypertables.
 CREATE TABLE plain_table (time timestamptz NOT NULL, device_id integer);
@@ -188,6 +195,52 @@ ALTER TABLE metrics SET (
 -- None of the failed attempts changed anything.
 :GRC 'metrics';
 
+-- A NULL start offset leaves the late-arrival window unbounded below. Set on
+-- its own, the end offset keeps its stored value.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_start_offset = NULL);
+:GRC 'metrics';
+SELECT granular_refresh_start_offset IS NULL AS start_offset_is_null
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable_name = 'metrics';
+
+-- With no lower bound there is nothing for the end offset to cross, so an end
+-- offset larger than any earlier start offset is accepted.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = '10 years');
+:GRC 'metrics';
+
+-- Restore the end offset the tests below expect.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = '2 days');
+:GRC 'metrics';
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+-- Error: the end offset is still validated while the start offset is NULL.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = '-1 day');
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_end_offset = NULL);
+-- Error: a start offset replacing NULL is checked against the stored end
+-- offset again.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_start_offset = '1 day');
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- The failed attempts left the NULL start offset in place.
+:GRC 'metrics';
+
+-- Back to a bounded window.
+ALTER TABLE metrics SET (timescaledb.cagg_granular_refresh_start_offset = '25 days');
+:GRC 'metrics';
+
+-- Granular refresh can be enabled with a NULL start offset right away.
+CREATE TABLE metrics_unbounded (time timestamptz NOT NULL, device_id integer, value float8);
+SELECT create_hypertable('metrics_unbounded', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE metrics_unbounded SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'device_id',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = '5 days'
+);
+:GRC 'metrics_unbounded';
+DROP TABLE metrics_unbounded;
+
 -- Error: once configured, ALTER subcommands on the tracking column
 -- are restricted: ALTER...TYPE, RENAME, and DROP are blocked.
 -- Unlike a column referenced by an existing continuous aggregate's view,
@@ -220,13 +273,7 @@ ALTER TABLE metrics_int SET (
     timescaledb.cagg_granular_refresh_start_offset = 50000,
     timescaledb.cagg_granular_refresh_end_offset = -1000
 );
--- Error: NULL is not a valid offset value.
-ALTER TABLE metrics_int SET (
-    timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.cagg_granular_refresh_column = 'sensor',
-    timescaledb.cagg_granular_refresh_start_offset = NULL,
-    timescaledb.cagg_granular_refresh_end_offset = 1000
-);
+-- Error: NULL is not a valid end offset. Only the start offset can be NULL.
 ALTER TABLE metrics_int SET (
     timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.cagg_granular_refresh_column = 'sensor',
@@ -248,6 +295,30 @@ ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = 40
 :GRC 'metrics_int';
 -- Error: checked against the stored end offset, which is now 2000.
 ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = 1000);
+:GRC 'metrics_int';
+
+-- A NULL start offset works for integer offsets too, and lifts the bound on
+-- the end offset.
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = NULL);
+:GRC 'metrics_int';
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_end_offset = 90000);
+:GRC 'metrics_int';
+-- Error: a start offset replacing NULL is checked against the stored end
+-- offset, which is now 90000.
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = 40000);
+ALTER TABLE metrics_int SET (timescaledb.cagg_granular_refresh_start_offset = 95000);
+:GRC 'metrics_int';
+
+DROP TABLE metrics_int;
+-- Enabling an integer-time hypertable with a NULL start offset.
+CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
+SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
+ALTER TABLE metrics_int SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor',
+    timescaledb.cagg_granular_refresh_start_offset = NULL,
+    timescaledb.cagg_granular_refresh_end_offset = 1000
+);
 :GRC 'metrics_int';
 
 DROP TABLE metrics_int;

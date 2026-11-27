@@ -79,17 +79,23 @@ hypertable_cagg_settings_formdata_fill(FormData_hypertable_cagg_settings *fd, co
 	namestrcpy(&fd->granular_refresh_column,
 			   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(
 				   Anum_hypertable_cagg_settings_granular_refresh_column)])));
-	/* The offsets are nullable in the catalog but every writer sets them, so a
-	 * NULL means the row was tampered with rather than written by ALTER TABLE. */
+	/* A NULL start offset means the tracking window has no lower bound. The end
+	 * offset is always set by ALTER TABLE, so a NULL there means the row was
+	 * tampered with. */
 	Ensure(!nulls[AttrNumberGetAttrOffset(
-			   Anum_hypertable_cagg_settings_granular_refresh_start_offset)] &&
-			   !nulls[AttrNumberGetAttrOffset(
-				   Anum_hypertable_cagg_settings_granular_refresh_end_offset)],
-		   "granular refresh offsets for hypertable %d are null",
+			   Anum_hypertable_cagg_settings_granular_refresh_end_offset)],
+		   "granular refresh end offset for hypertable %d is null",
 		   fd->hypertable_id);
 
-	fd->granular_refresh_start_offset = DatumGetTextPCopy(values[AttrNumberGetAttrOffset(
-		Anum_hypertable_cagg_settings_granular_refresh_start_offset)]);
+	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_cagg_settings_granular_refresh_start_offset)])
+	{
+		fd->granular_refresh_start_offset = NULL;
+	}
+	else
+	{
+		fd->granular_refresh_start_offset = DatumGetTextPCopy(values[AttrNumberGetAttrOffset(
+			Anum_hypertable_cagg_settings_granular_refresh_start_offset)]);
+	}
 	fd->granular_refresh_end_offset = DatumGetTextPCopy(
 		values[AttrNumberGetAttrOffset(Anum_hypertable_cagg_settings_granular_refresh_end_offset)]);
 
@@ -110,8 +116,17 @@ hypertable_cagg_settings_formdata_make_tuple(const FormData_hypertable_cagg_sett
 		Int32GetDatum(fd->hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_cagg_settings_granular_refresh_column)] =
 		NameGetDatum(&fd->granular_refresh_column);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_cagg_settings_granular_refresh_start_offset)] =
-		PointerGetDatum(fd->granular_refresh_start_offset);
+	if (fd->granular_refresh_start_offset == NULL)
+	{
+		nulls[AttrNumberGetAttrOffset(
+			Anum_hypertable_cagg_settings_granular_refresh_start_offset)] = true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(
+			Anum_hypertable_cagg_settings_granular_refresh_start_offset)] =
+			PointerGetDatum(fd->granular_refresh_start_offset);
+	}
 	values[AttrNumberGetAttrOffset(Anum_hypertable_cagg_settings_granular_refresh_end_offset)] =
 		PointerGetDatum(fd->granular_refresh_end_offset);
 
@@ -239,7 +254,8 @@ ts_hypertable_cagg_settings_cast_offset(const text *offset, Oid dimtype)
 
 /*
  * Late-arrival window [*window_start, *window_end) to seed/flush the tracker.
- * window = [now - start_offset, now - end_offset). Integer dimensions with no
+ * window = [now - start_offset, now - end_offset); a NULL start offset leaves
+ * the window unbounded below. Integer dimensions with no
  * integer_now func are skipped (nothing tracked). Mirrors the offset->bound
  * conversion used by the refresh policies (get_time_from_interval).
  */
@@ -267,9 +283,12 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 	{
 		const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 		Oid dimtype = ts_dimension_get_partition_type(open_dim);
+		bool start_unbounded = settings.granular_refresh_start_offset == NULL;
 		Datum start_datum =
-			ts_hypertable_cagg_settings_cast_offset(settings.granular_refresh_start_offset,
-													dimtype);
+			start_unbounded ?
+				(Datum) 0 :
+				ts_hypertable_cagg_settings_cast_offset(settings.granular_refresh_start_offset,
+														dimtype);
 		Datum end_datum =
 			ts_hypertable_cagg_settings_cast_offset(settings.granular_refresh_end_offset, dimtype);
 
@@ -279,7 +298,6 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 
 			if (OidIsValid(now_func))
 			{
-				int64 start_offset = ts_interval_value_to_internal(start_datum, dimtype);
 				int64 end_offset = ts_interval_value_to_internal(end_datum, dimtype);
 
 				/* integer_now is a SQL/PLpgSQL function; executing it needs an
@@ -291,7 +309,10 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 					PushActiveSnapshot(GetTransactionSnapshot());
 				}
 				*window_start =
-					ts_subtract_integer_from_now_saturating(now_func, start_offset, dimtype);
+					start_unbounded ?
+						PG_INT64_MIN :
+						ts_subtract_integer_from_now_saturating(
+							now_func, ts_interval_value_to_internal(start_datum, dimtype), dimtype);
 				*window_end =
 					ts_subtract_integer_from_now_saturating(now_func, end_offset, dimtype);
 				if (pushed)
@@ -304,10 +325,12 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 		else if (IS_TIMESTAMP_TYPE(dimtype))
 		{
 			*window_start =
-				ts_time_value_to_internal(ts_subtract_interval_from_now(DatumGetIntervalP(
-																			start_datum),
-																		dimtype),
-										  dimtype);
+				start_unbounded ?
+					PG_INT64_MIN :
+					ts_time_value_to_internal(ts_subtract_interval_from_now(DatumGetIntervalP(
+																				start_datum),
+																			dimtype),
+											  dimtype);
 			*window_end = ts_time_value_to_internal(ts_subtract_interval_from_now(DatumGetIntervalP(
 																					  end_datum),
 																				  dimtype),
