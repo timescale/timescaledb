@@ -1,0 +1,92 @@
+# This file and its contents are licensed under the Apache License 2.0.
+# Please see the included NOTICE for copyright information and
+# LICENSE-APACHE for a copy of the license.
+
+setup
+{
+  CREATE ROLE acl_epq_missing;
+  CREATE ROLE acl_epq_stale;
+  CREATE ROLE acl_epq_concurrent;
+  DO $$ BEGIN
+    IF @INITIAL@ THEN
+      ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES
+        TO acl_epq_missing, acl_epq_stale, acl_epq_concurrent;
+    END IF;
+  END $$;
+  CREATE EXTENSION timescaledb VERSION '@FROM_VERSION@';
+  ALTER DEFAULT PRIVILEGES REVOKE SELECT ON SEQUENCES
+    FROM acl_epq_missing, acl_epq_stale, acl_epq_concurrent;
+  GRANT SELECT ON SEQUENCE _timescaledb_catalog.chunk_id_seq TO acl_epq_missing;
+  REVOKE SELECT ON SEQUENCE _timescaledb_catalog.chunk_id_seq FROM acl_epq_stale;
+
+  -- Model the ACL/dependency mismatch left by earlier update scripts.
+  DO $$ BEGIN
+    IF @INITIAL@ THEN
+      UPDATE pg_init_privs ip SET initprivs = ARRAY(
+        SELECT item FROM unnest(ip.initprivs) WITH ORDINALITY a(item, ord)
+        WHERE NOT EXISTS (SELECT FROM aclexplode(ARRAY[item]) x
+                          WHERE 'acl_epq_stale'::regrole IN (x.grantee, x.grantor))
+        ORDER BY ord)
+      WHERE ip.classoid = 'pg_class'::regclass AND ip.objsubid = 0
+        AND ip.objoid = '_timescaledb_catalog.chunk_id_seq'::regclass;
+    END IF;
+  END $$;
+  CREATE TABLE acl_epq_expected AS
+    SELECT cl.oid AS relid, cl.relacl, ip.initprivs, @INITIAL@ AS initial,
+           '@TO_VERSION@'::text AS target_version
+    FROM pg_class cl JOIN pg_init_privs ip ON ip.objoid = cl.oid
+      AND ip.classoid = 'pg_class'::regclass AND ip.objsubid = 0
+    WHERE cl.oid = '_timescaledb_catalog.chunk_id_seq'::regclass;
+  DO $$ BEGIN
+    IF NOT @INITIAL@ THEN
+      GRANT SELECT ON SEQUENCE _timescaledb_catalog.chunk_id_seq TO acl_epq_stale;
+      UPDATE pg_class SET relacl = (SELECT relacl FROM acl_epq_expected)
+        WHERE oid = '_timescaledb_catalog.chunk_id_seq'::regclass;
+    END IF;
+  END $$;
+  DELETE FROM pg_shdepend
+    WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+      AND classid = 'pg_class'::regclass AND objsubid = 0
+      AND objid = '_timescaledb_catalog.chunk_id_seq'::regclass
+      AND refclassid = 'pg_authid'::regclass
+      AND deptype = CASE WHEN @INITIAL@ THEN 'i'::"char" ELSE 'a'::"char" END
+      AND (refobjid = 'acl_epq_missing'::regrole
+           OR (NOT @STALE@ AND refobjid = 'acl_epq_stale'::regrole));
+
+  CREATE FUNCTION pause_acl_restore() RETURNS event_trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    IF EXISTS (SELECT FROM pg_event_trigger_ddl_commands() d
+               JOIN pg_proc p ON d.classid = 'pg_proc'::regclass AND d.objid = p.oid
+               WHERE p.pronamespace = '_timescaledb_functions'::regnamespace
+                 AND p.proname LIKE '_tmp_%relation_acl%') THEN
+      PERFORM pg_advisory_xact_lock(10951, 1);
+    END IF;
+  END $$;
+  CREATE EVENT TRIGGER pause_acl_restore ON ddl_command_end
+    WHEN TAG IN ('CREATE FUNCTION') EXECUTE FUNCTION pause_acl_restore();
+}
+
+session "gate"
+step "lock" { SELECT pg_advisory_lock(10951, 1); }
+step "unlock" { SELECT pg_advisory_unlock(10951, 1); }
+
+session "other"
+step "begin" { BEGIN; }
+step "change"
+{
+  DO $$ BEGIN
+    IF @INITIAL@ THEN
+      REASSIGN OWNED BY acl_epq_concurrent TO CURRENT_USER;
+    ELSE
+      GRANT UPDATE ON SEQUENCE _timescaledb_catalog.chunk_id_seq TO acl_epq_concurrent;
+    END IF;
+  END $$;
+}
+step "commit" { COMMIT; }
+
+session "upgrade"
+step "upgrade" { BEGIN ISOLATION LEVEL READ COMMITTED; ALTER EXTENSION timescaledb UPDATE TO '@TO_VERSION@'; COMMIT; }
+
+# First pause the update after saving ACLs. Then keep the conflicting catalog
+# change uncommitted until restoration waits for it, forcing EvalPlanQual.
+permutation "lock" "upgrade" "begin" "change" "unlock" "commit"
