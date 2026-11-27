@@ -897,3 +897,48 @@ SELECT indisunique FROM pg_index WHERE indexrelid::regclass::text LIKE '%ok_idx'
  t
 
 DROP TABLE i9720;
+-- Segmentby and orderby columns can be DOMAIN types, so block them from
+-- being dropped via DROP DOMAIN ... CASCADE
+CREATE DOMAIN segmentby_dom AS integer;
+CREATE DOMAIN orderby_dom AS integer;
+CREATE TABLE dom_compress(time timestamptz NOT NULL, device segmentby_dom, seq orderby_dom, value float)
+WITH (tsdb.hypertable, tsdb.segmentby = 'device', tsdb.orderby = 'seq, time');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO dom_compress VALUES ('2025-01-01', 1, 1, 1.0), ('2025-01-01', 2, 2, 2.0);
+SELECT count(compress_chunk(ch)) FROM show_chunks('dom_compress') ch;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+DROP DOMAIN segmentby_dom CASCADE;
+NOTICE:  drop cascades to 3 other objects
+ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
+DROP DOMAIN orderby_dom CASCADE;
+NOTICE:  drop cascades to 6 other objects
+ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
+\set ON_ERROR_STOP 1
+SELECT * FROM dom_compress ORDER BY device;
+             time             | device | seq | value 
+------------------------------+--------+-----+-------
+ Wed Jan 01 00:00:00 2025 PST |      1 |   1 |     1
+ Wed Jan 01 00:00:00 2025 PST |      2 |   2 |     2
+
+-- Existing compressed chunks keep their old settings, so the column is still
+-- blocked after removing it from the hypertable settings
+ALTER TABLE dom_compress SET (timescaledb.compress_segmentby = '');
+NOTICE:  updated compression settings will only apply to future compressions
+\set ON_ERROR_STOP 0
+DROP DOMAIN segmentby_dom CASCADE;
+NOTICE:  drop cascades to 3 other objects
+ERROR:  cannot drop orderby or segmentby column from a chunk with columnstore enabled
+\set ON_ERROR_STOP 1
+SELECT * FROM dom_compress ORDER BY device;
+             time             | device | seq | value 
+------------------------------+--------+-----+-------
+ Wed Jan 01 00:00:00 2025 PST |      1 |   1 |     1
+ Wed Jan 01 00:00:00 2025 PST |      2 |   2 |     2
+
+DROP TABLE dom_compress;
+DROP DOMAIN segmentby_dom;
+DROP DOMAIN orderby_dom;
