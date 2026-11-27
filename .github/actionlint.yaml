@@ -7,6 +7,7 @@ self-hosted-runner:
     - runs-on/fleet=linux-8cpu/env=ue1
     - runs-on/fleet=linux-2cpu-x64/env=ue1
     - runs-on/fleet=linux-8cpu-x64/env=ue1
+    - runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     - runs-on/fleet=linux-2cpu-ondemand/env=ue1
     - runs-on/fleet=linux-8cpu-x64-ondemand/env=ue1
 
