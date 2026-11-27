@@ -13,9 +13,11 @@
 #include <nodes/primnodes.h>
 #include <utils/lsyscache.h>
 
+#include "expression_utils.h"
+
 #include "debug_assert.h"
 #include "export.h"
-#include "expression_utils.h"
+#include "utils.h"
 
 /*
  * Remove any RelabelType from the expression to get at the underlying
