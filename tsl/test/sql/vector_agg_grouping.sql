@@ -21,12 +21,14 @@ insert into onechunk select 1;
 select count(compress_chunk(x)) from show_chunks('onechunk') x;
 
 set timescaledb.debug_require_vector_agg = 'require';
+set max_parallel_workers_per_gather = 0;
 
 \set ON_ERROR_STOP 0
 select t, count(*) from onechunk group by t order by t limit 1;
 \set ON_ERROR_STOP 1
 
 reset timescaledb.debug_require_vector_agg;
+reset max_parallel_workers_per_gather;
 
 drop table onechunk;
 

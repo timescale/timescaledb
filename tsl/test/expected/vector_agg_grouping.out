@@ -19,11 +19,13 @@ select count(compress_chunk(x)) from show_chunks('onechunk') x;
      1
 
 set timescaledb.debug_require_vector_agg = 'require';
+set max_parallel_workers_per_gather = 0;
 \set ON_ERROR_STOP 0
 select t, count(*) from onechunk group by t order by t limit 1;
 ERROR:  vectorized aggregation node not found when required by the debug_require_vector_agg GUC
 \set ON_ERROR_STOP 1
 reset timescaledb.debug_require_vector_agg;
+reset max_parallel_workers_per_gather;
 drop table onechunk;
 -- Prepare the table for main tests.
 \set CHUNKS 2::int
