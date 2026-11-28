@@ -1,1 +1,1 @@
-Fixes: #11210 Fix ALTER DATABASE RENAME failing because the database is in use by its scheduler
+Fixes: #11210 Fix ALTER DATABASE RENAME, ALTER DATABASE SET TABLESPACE and CREATE DATABASE TEMPLATE failing because the database is in use by its scheduler
