@@ -585,9 +585,12 @@ timescaledb_shmem_request_hook(void)
 }
 
 /*
- * Stop or restart the scheduler of a database before a command that needs
- * the database to be unused. Runs from ProcessUtility so that the message
- * is only sent for commands PostgreSQL will accept.
+ * Stop the scheduler of a database before a command that needs the database
+ * to be unused. Runs from ProcessUtility so that the message is only sent
+ * for commands PostgreSQL will accept.
+ *
+ * The scheduler is started again only after the command, since a running
+ * scheduler would make the command fail with the database in use.
  *
  * Returns the database whose scheduler must be restarted after the command,
  * or InvalidOid.
@@ -613,10 +616,8 @@ notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
 
 					if (is_db_owner(db_oid))
 					{
-						ts_bgw_message_send_and_wait(RESTART, db_oid);
-						ereport(WARNING,
-								(errmsg("you may need to manually restart any running "
-										"background workers after this command")));
+						ts_bgw_message_send_and_wait(STOP, db_oid);
+						restart_db_oid = db_oid;
 					}
 				}
 			}
@@ -639,7 +640,8 @@ notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
 					if (have_createdb_privilege() && OidIsValid(db_oid) &&
 						database_usable_as_template(db_oid))
 					{
-						ts_bgw_message_send_and_wait(RESTART, db_oid);
+						ts_bgw_message_send_and_wait(STOP, db_oid);
+						restart_db_oid = db_oid;
 					}
 				}
 			}
@@ -673,13 +675,7 @@ notify_bg_workers_of_database_command(Node *stmt, ProcessUtilityContext context)
 			{
 				Oid db_oid = get_database_oid(rename->subname, rename->missing_ok);
 
-				/*
-				 * Stop the scheduler now and start it again after the
-				 * rename. A scheduler restarted before the rename connects to
-				 * the database and then waits for our transaction, so the
-				 * rename sees the database in use and fails. The database
-				 * keeps its OID, so the scheduler can reconnect afterwards.
-				 */
+				/* The database keeps its OID, so the scheduler can reconnect */
 				if (is_db_owner(db_oid) && have_createdb_privilege())
 				{
 					ts_bgw_message_send_and_wait(STOP, db_oid);
